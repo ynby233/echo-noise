@@ -14,3 +14,9 @@ export const getConcealedVisibleWidth = (
   maximumWidth: number,
   gap: number,
 ) => Math.max(0, Math.min(maximumWidth, viewportRight - contentRight - gap))
+
+export const getEdgeControlDragOffset = (
+  deltaX: number,
+  revealed: boolean,
+  maximumOffset: number,
+) => Math.max(0, Math.min(maximumOffset, revealed ? deltaX : -deltaX))

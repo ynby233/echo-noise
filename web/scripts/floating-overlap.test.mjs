@@ -5,8 +5,8 @@ import { stripTypeScriptTypes } from 'node:module'
 
 const source = await readFile(fileURLToPath(new URL('../utils/floating-overlap.ts', import.meta.url)), 'utf8')
 const strippedSource = stripTypeScriptTypes(source).replaceAll('export const ', 'const ')
-const { rectanglesOverlap, getConcealedVisibleWidth } = Function(
-  `${strippedSource}; return { rectanglesOverlap, getConcealedVisibleWidth }`,
+const { rectanglesOverlap, getConcealedVisibleWidth, getEdgeControlDragOffset } = Function(
+  `${strippedSource}; return { rectanglesOverlap, getConcealedVisibleWidth, getEdgeControlDragOffset }`,
 )()
 
 const rect = (left, top, right, bottom) => ({ left, top, right, bottom })
@@ -17,5 +17,10 @@ assert.equal(rectanglesOverlap(rect(100, 100, 120, 120), rect(120, 100, 140, 120
 assert.equal(getConcealedVisibleWidth(1180, 1132, 20, 8), 20)
 assert.equal(getConcealedVisibleWidth(1180, 1160, 20, 8), 12)
 assert.equal(getConcealedVisibleWidth(1180, 1176, 20, 8), 0)
+assert.equal(getEdgeControlDragOffset(-24, false, 36), 24)
+assert.equal(getEdgeControlDragOffset(24, false, 36), 0)
+assert.equal(getEdgeControlDragOffset(24, true, 36), 24)
+assert.equal(getEdgeControlDragOffset(-24, true, 36), 0)
+assert.equal(getEdgeControlDragOffset(-50, false, 36), 36)
 
 console.log('floating overlap checks passed')

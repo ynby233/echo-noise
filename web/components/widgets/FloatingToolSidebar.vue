@@ -18,7 +18,7 @@
         :aria-label="toolbarCollapsed ? '展开工具栏' : '收纳工具栏'"
         @click="toggleCollapsed"
       >
-        <UIcon :name="toolbarCollapsed ? 'i-heroicons-squares-2x2' : 'i-heroicons-bars-arrow-up'" class="w-6 h-6" />
+        <UIcon :name="toolbarCollapsed ? 'i-heroicons-chevron-double-left' : 'i-heroicons-bars-arrow-up'" class="w-6 h-6" />
         <span class="btn-label">{{ toolbarCollapsed ? '展开' : '收纳' }}</span>
       </button>
       <button v-show="showTools" class="tool-btn btn-layout nw-action-btn" @click="$emit('toggle-layout')" :aria-label="layoutLabel || '布局'">
@@ -83,13 +83,15 @@
       @pointerup="handleAvoidancePointerUp"
       @pointercancel="handleAvoidancePointerCancel"
     >
-      <UIcon name="i-heroicons-squares-2x2" class="w-6 h-6" />
+      <UIcon name="i-heroicons-chevron-double-left" class="w-6 h-6" />
       <span class="btn-label">展开</span>
     </button>
   </Teleport>
 </template>
 
 <script setup lang="ts">
+import { getEdgeControlDragOffset } from '~/utils/floating-overlap'
+
 const props = defineProps<{ contentTheme?: string; layoutIcon?: string; layoutLabel?: string; showWriteNote?: boolean; writeNoteActive?: boolean; notificationUnreadCount?: number; announcementUnreadCount?: number; pwaEnabled?: boolean; avoidOverlap?: boolean; concealedWidth?: number }>()
 defineEmits<{
   (event: 'toggle-layout'): void
@@ -128,6 +130,7 @@ const isMobileViewport = ref(false)
 let mediaQueryList: MediaQueryList | null = null
 let avoidanceTimer: ReturnType<typeof setTimeout> | null = null
 let avoidanceHandleDragStartX = 0
+let avoidanceHandleDragStartedRevealed = false
 let suppressAvoidanceClick = false
 let avoidanceClickTimer: ReturnType<typeof setTimeout> | null = null
 const AUTO_CONCEAL_MS = 4000
@@ -162,35 +165,38 @@ const handleAvoidanceClick = (event: MouseEvent) => {
 const resetAvoidanceHandleDrag = () => {
   avoidanceHandleDragOffset.value = 0
   avoidanceHandlePointerId.value = null
+  avoidanceHandleDragStartedRevealed = false
 }
 
 const handleAvoidancePointerDown = (event: PointerEvent) => {
-  if (avoidanceHandleRevealed.value) return
+  clearAvoidanceTimer()
   avoidanceHandlePointerId.value = event.pointerId
   avoidanceHandleDragStartX = event.clientX
+  avoidanceHandleDragStartedRevealed = avoidanceHandleRevealed.value
   ;(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId)
 }
 
 const handleAvoidancePointerMove = (event: PointerEvent) => {
   if (avoidanceHandlePointerId.value !== event.pointerId) return
-  avoidanceHandleDragOffset.value = Math.min(
+  avoidanceHandleDragOffset.value = getEdgeControlDragOffset(
+    event.clientX - avoidanceHandleDragStartX,
+    avoidanceHandleDragStartedRevealed,
     avoidanceHandleConcealOffset.value,
-    Math.max(0, avoidanceHandleDragStartX - event.clientX),
   )
 }
 
 const finishAvoidanceHandlePointer = (event: PointerEvent, cancelled = false) => {
   if (avoidanceHandlePointerId.value !== event.pointerId) return
-  const reveal = !cancelled && avoidanceHandleDragOffset.value >= HANDLE_REVEAL_DRAG_PX
+  const moved = !cancelled && avoidanceHandleDragOffset.value >= HANDLE_REVEAL_DRAG_PX
   const button = event.currentTarget as HTMLElement
   if (button.hasPointerCapture(event.pointerId)) button.releasePointerCapture(event.pointerId)
-  if (reveal) {
-    avoidanceHandleRevealed.value = true
+  if (moved) {
+    avoidanceHandleRevealed.value = !avoidanceHandleDragStartedRevealed
     suppressAvoidanceClick = true
     if (avoidanceClickTimer) clearTimeout(avoidanceClickTimer)
     avoidanceClickTimer = setTimeout(() => { suppressAvoidanceClick = false }, 0)
-    scheduleAvoidanceConceal()
   }
+  if (avoidanceHandleRevealed.value) scheduleAvoidanceConceal()
   resetAvoidanceHandleDrag()
 }
 
@@ -270,7 +276,7 @@ watch(() => props.avoidOverlap, () => {
 .floating-sidebar { display:flex; flex-direction:column; gap:10px; padding:8px; border-radius:12px; background: transparent; box-shadow: none; pointer-events: auto; transition: transform .28s cubic-bezier(.22, 1, .36, 1), opacity .2s ease; }
 .floating-sidebar-shell.is-avoidance-concealed .floating-sidebar { transform: translateX(calc(100% + 16px)); opacity: 0; pointer-events: none; }
 .sidebar-avoidance-handle.tool-btn { position: fixed; right: 16px; top: 50%; z-index: 1000; transform: translate(calc(100% - var(--sidebar-visible-width) + 16px - var(--sidebar-drag-offset)), -50%); pointer-events: auto; touch-action: pan-y; transition: transform .28s cubic-bezier(.22, 1, .36, 1); }
-.sidebar-avoidance-handle.is-revealed { transform: translate(0, -50%); }
+.sidebar-avoidance-handle.is-revealed { transform: translate(var(--sidebar-drag-offset), -50%); }
 .sidebar-avoidance-handle.is-dragging { transition: none; }
 .sidebar-avoidance-handle.fs-light { background: rgba(241, 245, 249, .96) !important; border-color: rgba(15, 23, 42, .12) !important; color: #374151 !important; }
 .sidebar-avoidance-handle.fs-dark { background: rgba(51, 65, 85, .96) !important; border-color: rgba(148, 163, 184, .28) !important; color: #cbd5e1 !important; }

@@ -635,7 +635,7 @@ import { bindMediaFancybox, unbindMediaFancybox, createMediaFancyboxOptions } fr
 import { normalizeAdConfigs } from '~/utils/ad-config'
 import { getMessageIdFromRouteHash } from '~/utils/message-route-hash'
 import { getRequest, postRequest } from '~/utils/api'
-import { getConcealedVisibleWidth, rectanglesOverlap } from '~/utils/floating-overlap'
+import { getConcealedVisibleWidth, getEdgeControlDragOffset, rectanglesOverlap } from '~/utils/floating-overlap'
 
 import { useHomeGallery } from '~/composables/useHomeGallery'
 import HomeGallery from '~/components/index/HomeGallery.vue'
@@ -1279,6 +1279,7 @@ const scrollAvoidanceOpen = ref(false)
 const scrollDragOffset = ref(0)
 const scrollDragPointerId = ref<number | null>(null)
 let scrollDragStartX = 0
+let scrollDragStartedOpen = false
 let suppressScrollClick = false
 let scrollAvoidanceTimer: ReturnType<typeof setTimeout> | null = null
 let floatingOverlapFrame = 0
@@ -1288,6 +1289,7 @@ const FLOATING_CONTENT_GAP_PX = 8
 const SIDEBAR_HALF_BUTTON_PX = 20
 const SCROLL_HALF_BUTTON_PX = 18
 const SCROLL_CONCEAL_DRAG_PX = 18
+const SCROLL_BUTTON_PX = 36
 
 const clearScrollAvoidanceTimer = () => {
   if (scrollAvoidanceTimer) clearTimeout(scrollAvoidanceTimer)
@@ -1357,33 +1359,39 @@ const observeFloatingControlLayout = () => {
 const resetScrollDrag = () => {
   scrollDragOffset.value = 0
   scrollDragPointerId.value = null
+  scrollDragStartedOpen = false
 }
 
 const handleScrollPointerDown = (event: PointerEvent) => {
-  if (!scrollButtonOverlapsContent.value || !scrollAvoidanceOpen.value) return
+  if (!scrollButtonOverlapsContent.value) return
+  clearScrollAvoidanceTimer()
   scrollDragPointerId.value = event.pointerId
   scrollDragStartX = event.clientX
+  scrollDragStartedOpen = scrollAvoidanceOpen.value
   scrollDragOffset.value = 0
   ;(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId)
-  scheduleScrollAvoidanceConceal()
 }
 
 const handleScrollPointerMove = (event: PointerEvent) => {
   if (scrollDragPointerId.value !== event.pointerId) return
-  scrollDragOffset.value = Math.max(0, event.clientX - scrollDragStartX)
+  scrollDragOffset.value = getEdgeControlDragOffset(
+    event.clientX - scrollDragStartX,
+    scrollDragStartedOpen,
+    SCROLL_BUTTON_PX - scrollButtonVisibleWidth.value + 20,
+  )
 }
 
 const finishScrollPointer = (event: PointerEvent, cancelled = false) => {
   if (scrollDragPointerId.value !== event.pointerId) return
-  const conceal = !cancelled && scrollDragOffset.value >= SCROLL_CONCEAL_DRAG_PX
+  const moved = !cancelled && scrollDragOffset.value >= SCROLL_CONCEAL_DRAG_PX
   const button = event.currentTarget as HTMLElement
   if (button.hasPointerCapture(event.pointerId)) button.releasePointerCapture(event.pointerId)
-  if (conceal) {
-    scrollAvoidanceOpen.value = false
+  if (moved) {
+    scrollAvoidanceOpen.value = !scrollDragStartedOpen
     suppressScrollClick = true
-    setTimeout(() => { suppressScrollClick = false }, 500)
-    clearScrollAvoidanceTimer()
+    setTimeout(() => { suppressScrollClick = false }, 0)
   }
+  if (scrollAvoidanceOpen.value) scheduleScrollAvoidanceConceal()
   resetScrollDrag()
 }
 
@@ -3336,7 +3344,7 @@ white-space: nowrap;  /* 防止换行 */
   transition: transform .28s cubic-bezier(.22, 1, .36, 1), opacity .2s ease;
   touch-action: pan-y;
 }
-.scroll-buttons.is-overlap-concealed .scroll-button { transform: translateX(calc(100% - var(--scroll-visible-width) + 20px)); opacity: .82; }
+.scroll-buttons.is-overlap-concealed .scroll-button { transform: translateX(calc(100% - var(--scroll-visible-width) + 20px - var(--scroll-drag-x))); opacity: .82; }
 .scroll-buttons.is-dragging .scroll-button { transition: none; }
 .scroll-button-light {
   --nw-action-bg: rgba(241, 245, 249, .96);
