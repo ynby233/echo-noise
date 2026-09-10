@@ -122,6 +122,23 @@ node scripts/sticky-editor-toolbar.test.mjs
 
 跨域、真实浏览器加载失败、缓存或布局问题不能只靠源码文本测试。使用本地隔离服务和真实页面复现，记录冷/暖缓存、请求资源、控制台错误和目标交互；测试结束只停止自己启动的进程。完整回归再运行 `go test ./...`、`go vet ./...`、Linux amd64/arm64 编译及实际浏览器检查。`internal/services` 在当前项目可能运行超过一分钟，应给足超时；固定端口失败先查占用，不结束其他有效进程。
 
+### 交付前浏览器清单
+
+`npm test` 只运行 `.test.mjs`，不包含浏览器脚本，不能将它的通过结果称为完整浏览器验收。候选版本先在 `web` 执行 `npm run generate`，再执行下列检查（沿用已有 Playwright，必要时通过 `PLAYWRIGHT_MODULE` 指定模块路径、`CHROMIUM_PATH` 指定浏览器可执行文件）：
+
+```powershell
+node scripts/table-attachments.browser.cjs
+node scripts/home-lazy-loading.browser.cjs
+node scripts/async-feature-failures.browser.cjs
+node scripts/module-recovery.browser.cjs
+```
+
+表格脚本默认读取 `web/.output/public`，可用 `TEST_OUTPUT_ROOT` 指定本次构建目录。它使用本地静态服务、合成 API 和隔离草稿，检查长名称、相同缩略名、同名不同 URL、多附件顺序、换行、重复展开及主动删除不复活；断言最终自动保存的完整 Markdown，失败返回非零退出码。其他三项覆盖首页懒加载、草稿与失败恢复、模块恢复语义；各脚本前置条件仍以脚本中的环境变量为准。
+
+日常修改先跑相关测试；涉及运行行为的交付候选执行完整自动化及上述浏览器检查。源码文本断言保留结构约束，已出现的行为缺陷补真实调用或浏览器回归，不通过删除断言凑绿。纯注释变更核对准确性和相关检查即可，不重复整套长测。
+
+最终发布另做 R7 的独立备份恢复往返、30–60 分钟连续操作与资源增长观察、1440/768/390/320 宽度及明暗主题、NAS 候选与可用真机验证。这些不由上述脚本代替；结果分别记录本地、构建/工作流、实际部署和设备证据。
+
 ## 6. 已知平台边界
 
 - SQLite 的单连接和 prepared-statement 策略只适用于 SQLite；PostgreSQL/MySQL 使用各自连接池。
