@@ -16,8 +16,10 @@ const [dockerfile, dockerWorkflow, releaseWorkflow, sidecar, androidSetup, route
 
 const linkerTarget = 'github.com/rcy1314/echo-noise/internal/buildinfo.Identity'
 assert.ok(dockerfile.includes(linkerTarget), 'Docker server binary must embed the build identity')
-assert.match(dockerWorkflow, /formal_version[\s\S]*version="\$short_sha"/, 'Docker defaults to short SHA and accepts a formal version')
-assert.match(dockerWorkflow, /echo-noise:\$\{version\}-mcp/, 'formal Docker builds must also publish a vX.Y.Z image tag')
+assert.ok(dockerfile.includes('internal/buildinfo.Revision'), 'Docker server binary must embed the full revision')
+assert.ok(dockerfile.includes('internal/buildinfo.BuiltAt'), 'Docker server binary must embed the build time')
+assert.match(dockerWorkflow, /release_tag[\s\S]*resolve-release\.sh/, 'formal Docker builds must resolve an existing Release tag')
+assert.match(dockerWorkflow, /sha-\$\{REVISION\}-mcp/, 'Docker builds must retain a full-revision image tag')
 assert.ok(sidecar.includes(linkerTarget), 'desktop sidecars must embed the build identity')
 assert.ok(androidSetup.includes(linkerTarget), 'Android embedded backend must embed the build identity')
 assert.match(releaseWorkflow, /formal_release[\s\S]*BUILD_ID="\$\{GITHUB_SHA::12\}"/, 'native workflow must resolve short SHA unless explicitly formal')

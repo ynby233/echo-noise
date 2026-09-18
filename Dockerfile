@@ -49,10 +49,12 @@ COPY ./config ./config
 
 # 编译 Go 应用（使用缓存优化）
 ARG VERSION=dev
+ARG REVISION=
+ARG BUILD_TIME=
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     GOOS="${TARGETOS:-linux}" GOARCH="${TARGETARCH:-$(go env GOARCH)}" \
-    go build -trimpath -ldflags "-s -w -buildid= -X github.com/rcy1314/echo-noise/internal/buildinfo.Identity=${VERSION}" -o /app/noise ./cmd/server/main.go
+    go build -trimpath -ldflags "-s -w -buildid= -X github.com/rcy1314/echo-noise/internal/buildinfo.Identity=${VERSION} -X github.com/rcy1314/echo-noise/internal/buildinfo.Version=${VERSION} -X github.com/rcy1314/echo-noise/internal/buildinfo.Revision=${REVISION} -X github.com/rcy1314/echo-noise/internal/buildinfo.BuiltAt=${BUILD_TIME}" -o /app/noise ./cmd/server/main.go
 
 # 创建必要的目录并设置权限
 RUN mkdir -p /app/data /app/public && chmod -R 755 /app/data
@@ -128,9 +130,6 @@ COPY --from=backend-build /app/config /app/config
 COPY --from=backend-build /app/config /app/default-config
 COPY --from=backend-build /app/noise /app/noise
 
-# 复制docker-compose.yml文件到容器中，用于Docker更新
-COPY ./docker-compose.yml /app/docker-compose.yml
-
 # 运行时入口：支持从 /app/config/runtime.env 自动加载环境变量，便于 GUI 容器部署时文件化维护配置
 COPY ./docker-entrypoint.sh /app/docker-entrypoint.sh
 COPY ./docker-healthcheck.sh /app/docker-healthcheck.sh
@@ -186,8 +185,14 @@ RUN if [ "$USE_UPX" = "1" ]; then \
 
 # 版本只参与需要它的步骤，避免每次提交使依赖安装缓存失效。
 ARG VERSION=latest
+ARG REVISION=
+ARG BUILD_TIME=
 ENV APP_VERSION=$VERSION
-LABEL org.opencontainers.image.version=$VERSION
+ENV BUILD_REVISION=$REVISION
+ENV BUILD_TIME=$BUILD_TIME
+LABEL org.opencontainers.image.version=$VERSION \
+      org.opencontainers.image.revision=$REVISION \
+      org.opencontainers.image.created=$BUILD_TIME
 
 # 启动后端与 MCP（MCP 后台运行，Go 服务为主进程）
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 CMD ["/app/docker-healthcheck.sh"]

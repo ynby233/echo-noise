@@ -10,5 +10,7 @@ const [panel, version] = await Promise.all([
 assert.doesNotMatch(panel, /当前版本:\s*\{\{/, 'the sidebar must not render its old version footer')
 assert.match(version, /info\.currentVersion\s*=\s*String\(body\.data\?\.currentTag/, 'current version must use the repository tag')
 assert.match(version, /onMounted\(\(\)\s*=>\s*\{[^}]*loadReleaseInfo\(\)/, 'repository version info must load when the section opens')
+assert.match(version, /外部执行器尚未接入，不能从网页安装更新/, 'U1 must state that installation is unavailable')
+assert.doesNotMatch(version, /EventSource|\/version\/update/, 'U1 must not retain the old self-update trigger or fallback')
 
 console.log('version display contract passed')

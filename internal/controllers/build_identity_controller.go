@@ -12,8 +12,14 @@ import (
 func GetBuildIdentity(c *gin.Context) {
 	userID, ok := commentUint(c.GetUint("user_id"))
 	if !ok || userID != models.PrimaryAdminUserID {
-		c.JSON(http.StatusForbidden, dto.Fail[any]("仅 1 号管理员可读取构建身份"))
+		c.JSON(http.StatusForbidden, dto.Fail[any]("仅站长可读取构建身份"))
 		return
 	}
-	c.JSON(http.StatusOK, dto.OK(gin.H{"build_identity": buildinfo.Current()}, "构建身份读取成功"))
+	metadata := buildinfo.CurrentMetadata()
+	c.JSON(http.StatusOK, dto.OK(gin.H{
+		"build_identity": metadata.Identity,
+		"version":        metadata.Version,
+		"revision":       metadata.Revision,
+		"built_at":       metadata.BuiltAt,
+	}, "构建身份读取成功"))
 }

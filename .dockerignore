@@ -4,8 +4,7 @@
 README.md
 LICENSE
 Dockerfile*
-# 注意：Dockerfile 需要 docker-compose.yml 文件，因此不排除此文件
-# docker-compose*
+docker-compose*
 .dockerignore
 
 # 忽略开发环境文件

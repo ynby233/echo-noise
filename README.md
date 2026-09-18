@@ -285,11 +285,7 @@ docker run -d \
 noise233/echo-noise:latest
 ```
 
-手动执行升级
-- ```
-  docker pull noise233/echo-noise:latest
-  docker stop Ech0-Noise && docker rm Ech0-Noise
-  ```
+本 fork 的更新渠道和当前安装限制见下方“运行带 MCP 镜像包”；以上上游镜像示例不代表本 fork 的更新目标。
 
 有原数据库文件挂载时默认：
 
@@ -318,9 +314,6 @@ docker run -d \
   --log-opt max-file=3 \
   -v /opt/data:/app/data \
   -p 1314:1314 \
-  -v /var/run/docker.sock:/var/run/docker.sock \
-  -e CONTAINER_NAME=Ech0-Noise \
-  -e UPDATE_IMAGE=noise233/echo-noise:latest \
   -e TZ=Asia/Shanghai \
   -e HTTP_PORT=1314 \
   -e ACCESS_LOG=false \
@@ -330,13 +323,11 @@ docker run -d \
 
 > 说明：
 >
-> -v /var/run/docker.sock:/var/run/docker.sock ，确保容器内可访问宿主机 Docker 守护进程，从而让“更新升级”按钮能拉镜像、停旧容器、起新容器。
+> 旧版“应用容器直接控制 Docker 并替换自身”的更新方式已停用，不要把宿主机 Docker socket 挂入应用容器。当前版本可以检查 `stable-mcp` / `edge-mcp` 渠道，但在外部执行器接入前不会从网页安装更新。
 >
 > 可选但推荐： --restart unless-stopped 提升容器自恢复；不影响升级是否成功。
 >
 > 环境变量：
-> - CONTAINER_NAME 默认即 Ech0-Noise ，用于定位旧容器；
-> - UPDATE_IMAGE 指定升级目标镜像；
 > - HTTP_PORT 指定容器内服务端口映射到宿主机。
 > - ACCESS_LOG 默认生产建议 false，避免高频请求刷满容器日志。
 > - SESSION_SECRET 强烈建议显式设置，长度建议至少 32 位（6 位可用但不安全，不建议）。
@@ -387,7 +378,7 @@ docker run -d \
 
 运行带MCP 镜像包：
 
-本 fork 提供 GitHub Actions 手动构建与发布带 MCP 双架构镜像，可在需要用户测试的版本中发布到：`ghcr.io/ynby233/echo-noise:latest-mcp`。构建目标与原说明保持一致：`--platform linux/amd64,linux/arm64 --target final-mcp`。
+本 fork 的 `final-mcp` 镜像分为两个渠道：`ghcr.io/ynby233/echo-noise:stable-mcp` 对应已发布的正式 Release，`ghcr.io/ynby233/echo-noise:edge-mcp` 对应 main 的测试构建。尚无正式 Release 时 `stable-mcp` 不可用。首期渠道产物仅验收 `linux/amd64`；运行前应解析并固定实际 digest。旧 `latest-mcp` 不再发布，也不参与版本检查。
 
 提供 HTTP/SSE（对外暴露 1315，便于 curl /浏览器调用 MCP）：
 
@@ -402,7 +393,7 @@ docker run -d \
   -e NOTE_HTTP_PORT=1315 \
   -e ACCESS_LOG=false \
   -e SESSION_SECRET=请替换为至少32位随机字符串 \
-  noise233/echo-noise:latest-mcp
+  ghcr.io/ynby233/echo-noise:stable-mcp
 ```
 
 验证： curl http://<服务器IP>:1315/mcp/tools
@@ -419,7 +410,7 @@ docker run -d \
   -e NOTE_HTTP_PORT=0 \
   -e ACCESS_LOG=false \
   -e SESSION_SECRET=请替换为至少32位随机字符串 \
-  noise233/echo-noise:latest-mcp
+  ghcr.io/ynby233/echo-noise:stable-mcp
 ```
 
 ------
@@ -429,7 +420,7 @@ docker run -d \
 - 稳定双架构镜像版：latest 标签镜像  同时支持linux/amd64,linux/arm64，拉取时会系统会自动选择 默认带ffmpeg
 
 
-- 带MCP双架构镜像版：latest-mcp 标签镜像  同时支持linux/amd64,linux/arm64 默认带ffmpeg
+- 带 MCP 镜像版：`stable-mcp` 为正式渠道，`edge-mcp` 为测试渠道；首期均只验收 `linux/amd64`，默认带 ffmpeg
 
 
 - 精简单架构镜像版：last-amd64 标签镜像  仅支持linux/amd64默认不带ffmpeg
@@ -1723,17 +1714,7 @@ docker buildx build \
   --push .
 ```
 
-包含MCP镜像且包含ffmpeg：
-
-```
-docker buildx build \
-  --platform linux/amd64,linux/arm64 \
-  --target final-mcp \
-  --build-arg VERSION=v3.4 \
-  -t noise233/echo-noise:v3.4-mcp \
-  -t noise233/echo-noise:latest-mcp \
-  --push .
-```
+本 fork 的 MCP 渠道由 `.github/workflows/docker-publish.yml` 发布；本节其余上游镜像构建示例不用于 `stable-mcp` / `edge-mcp` 发布。
 
 精简主镜像单架构 amd64（不带 MCP 且不包含 ffmpeg）：
 

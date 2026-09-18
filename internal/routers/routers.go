@@ -283,6 +283,7 @@ func SetupRouter() *gin.Engine {
 	authRoutes := api.Group("")
 	authRoutes.Use(middleware.SessionAuthMiddleware())
 	authRoutes.GET("/version/build", controllers.GetBuildIdentity)
+	authRoutes.GET("/version/channels", controllers.GetUpdateChannels)
 	registerAdminAuthorizationRoutes(authRoutes)
 	registerRuntimePolicyRoutes(authRoutes)
 	registerNoteManagementRoutes(authRoutes)

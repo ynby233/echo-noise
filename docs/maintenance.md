@@ -92,6 +92,22 @@ Windows 开发环境可先执行 `. D:\ChatGPT\environments\echo-noise\env.ps1`�
 
 ## 5. 测试与本地复现
 
+### 服务端镜像渠道与版本发现
+
+`main` 的非纯文档提交自动构建 `ghcr.io/ynby233/echo-noise:edge-mcp`；已发布且非 draft/prerelease 的 `vX.Y.Z` Release 构建 `stable-mcp`。工作流先发布唯一候选并通过健康检查，再移动渠道标签；完整 Git revision、构建时间和显示版本同时写入二进制及 OCI 元数据。`latest-mcp` 已退役，不再发布或参与发现。
+
+`GET /api/version/check` 只返回不含 revision/digest 的公开状态；登录后的 ID 1 站长可通过 `GET /api/version/channels` 查看两个渠道的固定目标。U1 仅实现发现：旧安装入口明确返回不可用，不会因发现新版本自动替换容器。正式 Release 和现有 NAS 替换仍需单独授权。
+
+发布策略本地检查：
+
+```powershell
+. D:\ChatGPT\environments\echo-noise\env.ps1
+$env:Path = 'D:\ChatGPT\environments\echo-noise\mingit-2.54.0\usr\bin;D:\ChatGPT\environments\echo-noise\mingit-2.54.0\cmd;' + $env:Path
+dash scripts/release/test-release-policy.sh
+Set-Location web
+node scripts/docker-channel-workflow.test.mjs
+```
+
 先加载项目工具链，再按改动范围运行最小检查：
 
 ```powershell

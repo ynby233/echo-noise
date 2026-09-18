@@ -1,18 +1,26 @@
 name: Build MCP Docker Image
 
 on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
+      - 'LICENSE*'
+  release:
+    types: [published]
   workflow_dispatch:
     inputs:
-      platforms:
-        description: 'Target platforms: amd64 for testing; select both for multi-platform releases'
+      channel:
+        description: Channel to rebuild
         required: true
         type: choice
-        default: linux/amd64
+        default: edge
         options:
-          - linux/amd64
-          - linux/amd64,linux/arm64
-      formal_version:
-        description: 'Formal release version (for example v4.0.6); leave empty to use short SHA'
+          - edge
+          - stable
+      release_tag:
+        description: Existing published vX.Y.Z Release tag; required for stable
         required: false
         type: string
         default: ''
@@ -22,87 +30,234 @@ permissions:
   packages: write
 
 concurrency:
-  group: docker-publish-${{ github.ref }}
-  cancel-in-progress: true
+  group: docker-publish-${{ github.event_name == 'release' && 'stable' || (github.event_name == 'workflow_dispatch' && inputs.channel || 'edge') }}
+  queue: max
+  cancel-in-progress: false
 
 jobs:
   build-mcp-image:
     name: Build and publish final-mcp image
+    if: github.event_name != 'release' || (!github.event.release.draft && !github.event.release.prerelease)
     runs-on: ubuntu-latest
+    env:
+      IMAGE: ghcr.io/ynby233/echo-noise
+      EDGE_TAG: edge-mcp
+      STABLE_TAG: stable-mcp
 
     steps:
-      - name: Checkout
+      - name: Checkout complete history
         uses: actions/checkout@v5
+        with:
+          ref: main
+          fetch-depth: 0
 
-      - name: Set image metadata
+      - name: Resolve channel target
         id: meta
         shell: bash
         env:
-          FORMAL_VERSION: ${{ inputs.formal_version }}
+          GH_TOKEN: ${{ github.token }}
+          DISPATCH_CHANNEL: ${{ inputs.channel }}
+          DISPATCH_RELEASE_TAG: ${{ inputs.release_tag }}
+          EVENT_RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
-          owner="${GITHUB_REPOSITORY_OWNER,,}"
-          image="ghcr.io/${owner}/echo-noise"
-          short_sha="${GITHUB_SHA::12}"
-          raw_version="$FORMAL_VERSION"
-          if [ -n "$raw_version" ]; then
-            version="$(echo "$raw_version" | sed -E 's/^[vV][[:space:]]*//')"
-            if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-              echo "ERROR: formal_version must use vX.Y.Z or X.Y.Z"
+          set -euo pipefail
+          git fetch --force --tags origin main
+
+          channel=edge
+          release_tag=
+          case "$GITHUB_EVENT_NAME" in
+            release)
+              channel=stable
+              release_tag="$EVENT_RELEASE_TAG"
+              ;;
+            workflow_dispatch)
+              channel="${DISPATCH_CHANNEL:-edge}"
+              release_tag="$DISPATCH_RELEASE_TAG"
+              ;;
+          esac
+
+          if [[ "$channel" == stable ]]; then
+            if [[ -z "$release_tag" ]]; then
+              echo "ERROR: stable rebuilds require an existing published Release tag"
               exit 1
             fi
-            version="v${version}"
+            if [[ "$GITHUB_EVENT_NAME" == workflow_dispatch ]]; then
+              release="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${release_tag}")"
+              if [[ "$(jq -r '.draft or .prerelease' <<<"$release")" != false || "$(jq -r '.published_at // empty' <<<"$release")" == '' ]]; then
+                echo "ERROR: stable target must be a published, non-prerelease Release"
+                exit 1
+              fi
+            fi
+            resolved="$(sh scripts/release/resolve-release.sh "$release_tag" origin/main)"
+            version="$(awk -F= '$1 == "VERSION" { print $2 }' <<<"$resolved")"
+            revision="$(awk -F= '$1 == "REVISION" { print $2 }' <<<"$resolved")"
           else
-            version="$short_sha"
+            revision="$(git rev-parse --verify "${GITHUB_SHA}^{commit}")"
+            if ! git merge-base --is-ancestor "$revision" origin/main; then
+              echo "ERROR: edge target must belong to main"
+              exit 1
+            fi
+            version="${revision:0:12}"
           fi
 
-          echo "image=${image}" >> "$GITHUB_OUTPUT"
-          echo "short_sha=${short_sha}" >> "$GITHUB_OUTPUT"
-          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          build_time="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           {
-            echo "tags<<EOF"
-            echo "${image}:latest-mcp"
-            echo "${image}:sha-${short_sha}-mcp"
-            echo "EOF"
+            echo "channel=$channel"
+            if [[ "$channel" == stable ]]; then
+              echo "channel_tag=$STABLE_TAG"
+            else
+              echo "channel_tag=$EDGE_TAG"
+            fi
+            echo "candidate_tag=build-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-mcp"
+            echo "revision=$revision"
+            echo "short_sha=${revision:0:12}"
+            echo "version=$version"
+            echo "build_time=$build_time"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Set up QEMU binfmt
-        if: contains(inputs.platforms, 'arm64')
-        shell: bash
-        run: |
-          docker run --privileged --rm tonistiigi/binfmt --install arm64
+      - name: Checkout exact target source
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ steps.meta.outputs.revision }}
+          path: source
 
       - name: Set up Docker Buildx
-        shell: bash
-        run: |
-          docker buildx create --name echo-noise-builder --driver docker-container --use
-          docker buildx inspect --bootstrap
+        uses: docker/setup-buildx-action@v3
 
       - name: Log in to GHCR
-        shell: bash
-        env:
-          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          echo "$GHCR_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push final-mcp image
+      - name: Build candidate image
+        uses: docker/build-push-action@v6
+        with:
+          context: source
+          target: final-mcp
+          platforms: linux/amd64
+          push: true
+          tags: ${{ env.IMAGE }}:${{ steps.meta.outputs.candidate_tag }}
+          build-args: |
+            VERSION=${{ steps.meta.outputs.version }}
+            REVISION=${{ steps.meta.outputs.revision }}
+            BUILD_TIME=${{ steps.meta.outputs.build_time }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ steps.meta.outputs.revision }}
+            org.opencontainers.image.created=${{ steps.meta.outputs.build_time }}
+            org.opencontainers.image.version=${{ steps.meta.outputs.version }}
+          annotations: |
+            index:org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            index:org.opencontainers.image.revision=${{ steps.meta.outputs.revision }}
+            index:org.opencontainers.image.created=${{ steps.meta.outputs.build_time }}
+            index:org.opencontainers.image.version=${{ steps.meta.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test candidate
         shell: bash
         env:
-          TARGET_PLATFORMS: ${{ inputs.platforms }}
+          CANDIDATE: ${{ env.IMAGE }}:${{ steps.meta.outputs.candidate_tag }}
+          EXPECTED_REVISION: ${{ steps.meta.outputs.revision }}
         run: |
-          tags=(
-            --tag "ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/echo-noise:latest-mcp"
-            --tag "ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/echo-noise:sha-${{ steps.meta.outputs.short_sha }}-mcp"
-          )
-          version="${{ steps.meta.outputs.version }}"
-          if [[ "$version" == v* ]]; then
-            tags+=(--tag "ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/echo-noise:${version}-mcp")
+          set -euo pipefail
+          name="echo-noise-smoke-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          cleanup() { docker rm -f "$name" >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+          docker pull "$CANDIDATE"
+          test "$(docker image inspect "$CANDIDATE" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')" = "$EXPECTED_REVISION"
+          docker run -d --name "$name" -e ACCESS_LOG=false "$CANDIDATE"
+          for _ in $(seq 1 60); do
+            status="$(docker inspect "$name" --format '{{.State.Health.Status}}')"
+            [[ "$status" == healthy ]] && exit 0
+            [[ "$status" == unhealthy ]] && break
+            sleep 2
+          done
+          docker logs "$name"
+          exit 1
+
+      - name: Publish immutable target
+        id: target
+        shell: bash
+        env:
+          CHANNEL: ${{ steps.meta.outputs.channel }}
+          CANDIDATE: ${{ env.IMAGE }}:${{ steps.meta.outputs.candidate_tag }}
+          REVISION: ${{ steps.meta.outputs.revision }}
+          VERSION: ${{ steps.meta.outputs.version }}
+          BUILT_AT: ${{ steps.meta.outputs.build_time }}
+        run: |
+          set -euo pipefail
+          publish_tag() {
+            docker buildx imagetools create \
+              --annotation "index:org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
+              --annotation "index:org.opencontainers.image.revision=${REVISION}" \
+              --annotation "index:org.opencontainers.image.created=${BUILT_AT}" \
+              --annotation "index:org.opencontainers.image.version=${VERSION}" \
+              --tag "$1" "$2"
+          }
+
+          if [[ "$CHANNEL" == stable ]]; then
+            target="${IMAGE}:${VERSION}-mcp"
+            metadata="$(sh scripts/release/image-metadata.sh "$target")"
+            state="$(awk -F= '$1 == "STATE" { print $2 }' <<<"$metadata")"
+            existing_revision="$(awk -F= '$1 == "REVISION" { print $2 }' <<<"$metadata")"
+            existing_version="$(awk -F= '$1 == "VERSION" { print $2 }' <<<"$metadata")"
+            if [[ "$state" == exists ]]; then
+              if [[ "$existing_revision" != "$REVISION" || "$existing_version" != "$VERSION" ]]; then
+                echo "ERROR: formal tag already exists with different content"
+                exit 1
+              fi
+            else
+              publish_tag "$target" "$CANDIDATE"
+            fi
+          else
+            target="${IMAGE}:sha-${REVISION}-mcp"
+            metadata="$(sh scripts/release/image-metadata.sh "$target")"
+            state="$(awk -F= '$1 == "STATE" { print $2 }' <<<"$metadata")"
+            existing_revision="$(awk -F= '$1 == "REVISION" { print $2 }' <<<"$metadata")"
+            existing_version="$(awk -F= '$1 == "VERSION" { print $2 }' <<<"$metadata")"
+            if [[ "$state" == exists && ( "$existing_revision" != "$REVISION" || "$existing_version" != "$VERSION" ) ]]; then
+              echo "ERROR: commit tag already exists with different content"
+              exit 1
+            elif [[ "$state" == missing ]]; then
+              publish_tag "$target" "$CANDIDATE"
+            fi
           fi
-          docker buildx build \
-            --platform "$TARGET_PLATFORMS" \
-            --target final-mcp \
-            --build-arg VERSION=${{ steps.meta.outputs.version }} \
-            "${tags[@]}" \
-            --cache-from type=gha \
-            --cache-to type=gha,mode=max \
-            --push \
-            .
+          echo "ref=$target" >> "$GITHUB_OUTPUT"
+
+      - name: Move channel tag
+        shell: bash
+        env:
+          CHANNEL: ${{ steps.meta.outputs.channel }}
+          CHANNEL_REF: ${{ env.IMAGE }}:${{ steps.meta.outputs.channel_tag }}
+          TARGET_REF: ${{ steps.target.outputs.ref }}
+          TARGET_REVISION: ${{ steps.meta.outputs.revision }}
+          TARGET_VERSION: ${{ steps.meta.outputs.version }}
+          BUILT_AT: ${{ steps.meta.outputs.build_time }}
+        run: |
+          set -euo pipefail
+          metadata="$(sh scripts/release/image-metadata.sh "$CHANNEL_REF")"
+          state="$(awk -F= '$1 == "STATE" { print $2 }' <<<"$metadata")"
+          current_revision="$(awk -F= '$1 == "REVISION" { print $2 }' <<<"$metadata")"
+          current_version="$(awk -F= '$1 == "VERSION" { print $2 }' <<<"$metadata")"
+          if [[ "$state" == exists && ( -z "$current_revision" || -z "$current_version" ) ]]; then
+            echo "ERROR: existing channel is missing release metadata"
+            exit 1
+          fi
+          if [[ "$CHANNEL" == stable && "$state" == exists && ! "$current_version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "ERROR: existing stable channel is missing a formal version"
+            exit 1
+          fi
+          policy="$(sh scripts/release/channel-policy.sh "$current_revision" "$TARGET_REVISION" "$current_version" "$TARGET_VERSION")"
+          if [[ "$policy" == keep ]]; then
+            echo "Channel already points to the same or a newer target; leaving it unchanged."
+            exit 0
+          fi
+          docker buildx imagetools create \
+            --annotation "index:org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
+            --annotation "index:org.opencontainers.image.revision=${TARGET_REVISION}" \
+            --annotation "index:org.opencontainers.image.created=${BUILT_AT}" \
+            --annotation "index:org.opencontainers.image.version=${TARGET_VERSION}" \
+            --tag "$CHANNEL_REF" "$TARGET_REF"

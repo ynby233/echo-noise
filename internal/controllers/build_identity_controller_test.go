@@ -13,9 +13,14 @@ import (
 
 func TestGetBuildIdentityRequiresPrimaryAdministrator(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	original := buildinfo.Identity
+	original, originalRevision, originalBuiltAt, originalVersion := buildinfo.Identity, buildinfo.Revision, buildinfo.BuiltAt, buildinfo.Version
 	buildinfo.Identity = "8a5ed7759b123200d8200bbb9ab2e2386977ad38"
-	t.Cleanup(func() { buildinfo.Identity = original })
+	buildinfo.Revision = "8a5ed7759b123200d8200bbb9ab2e2386977ad38"
+	buildinfo.BuiltAt = "2026-09-11T08:30:00Z"
+	buildinfo.Version = "v4.0.6"
+	t.Cleanup(func() {
+		buildinfo.Identity, buildinfo.Revision, buildinfo.BuiltAt, buildinfo.Version = original, originalRevision, originalBuiltAt, originalVersion
+	})
 
 	for _, test := range []struct {
 		name   string
@@ -37,6 +42,9 @@ func TestGetBuildIdentityRequiresPrimaryAdministrator(t *testing.T) {
 				t.Fatalf("status=%d body=%s, want %d", recorder.Code, recorder.Body.String(), test.status)
 			}
 			if test.status == http.StatusOK && !bytes.Contains(recorder.Body.Bytes(), []byte(`"build_identity":"8a5ed7759b12"`)) {
+				t.Fatalf("body=%s", recorder.Body.String())
+			}
+			if test.status == http.StatusOK && !bytes.Contains(recorder.Body.Bytes(), []byte(`"revision":"8a5ed7759b123200d8200bbb9ab2e2386977ad38"`)) {
 				t.Fatalf("body=%s", recorder.Body.String())
 			}
 		})
