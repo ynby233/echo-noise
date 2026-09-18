@@ -102,7 +102,7 @@ stable 按其自身 OCI version 对应的 `/releases/tags/{version}` 和解引�
 
 `/app/noise --build-info` 为本地只读命令，只输出二进制内嵌身份，不加载 runtime.env、不启动数据库/迁移/worker。旧二进制不支持或身份不足时，发布 smoke 明确失败（身份命令最多等待 20 秒），不能用外层 label 或环境变量补成“已验证”。候选和最终选中的固定产物都运行 `scripts/release/smoke-image.sh`，验证 revision/version/build time 与标签一致并通过健康检查；重跑复用旧固定产物时保留其真实构建时间，不覆盖正式标签。
 
-身份行为回归：`node web/scripts/docker-runtime-identity.test.mjs`，对候选和既有固定目标分别覆盖正确/错误/缺失身份。独立 Docker 引擎可运行 `sh scripts/release/test-runtime-identity-docker.sh IMAGE FULL_REVISION VERSION` 复现“正确标签、健康、错误二进制”并验证拒绝。工作流还构建 runner 本地的 `echo-noise-u1-test:v0.0.0` 正式身份样例并 smoke，`push: false`，不创建 Release、不触碰 stable 渠道；这不等于生产正式发版已实战验收。
+身份行为回归：`node web/scripts/docker-runtime-identity.test.mjs`，对候选和既有固定目标分别覆盖正确/错误/缺失身份。独立 Docker 引擎可运行 `sh scripts/release/test-runtime-identity-docker.sh IMAGE FULL_REVISION VERSION` 复现“正确标签、健康、错误二进制”并验证拒绝。U1 验收曾在运行 `35351554173` 构建并 smoke runner 本地、不推送的 `v0.0.0` 正式身份样例；该一次性证据不在普通 edge 构建中重复，实际 stable 候选仍经过同一二进制身份与最终固定产物 smoke。
 
 发布策略本地检查：
 

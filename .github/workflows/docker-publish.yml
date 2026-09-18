@@ -176,29 +176,6 @@ jobs:
           VERSION: ${{ steps.meta.outputs.version }}
         run: sh scripts/release/test-runtime-identity-docker.sh "$CANDIDATE" "$REVISION" "$VERSION"
 
-      - name: Build isolated formal identity test image (never published)
-        uses: docker/build-push-action@v6
-        with:
-          context: source
-          target: final-mcp
-          platforms: linux/amd64
-          load: true
-          push: false
-          tags: echo-noise-u1-test:v0.0.0
-          build-args: |
-            VERSION=v0.0.0
-            REVISION=${{ steps.meta.outputs.revision }}
-            BUILD_TIME=${{ steps.meta.outputs.build_time }}
-          cache-from: type=gha
-
-      - name: Smoke isolated formal identity (no Release or channel changes)
-        shell: bash
-        env:
-          SMOKE_LOCAL_IMAGE: '1'
-          REVISION: ${{ steps.meta.outputs.revision }}
-          BUILT_AT: ${{ steps.meta.outputs.build_time }}
-        run: sh scripts/release/smoke-image.sh echo-noise-u1-test:v0.0.0 "$REVISION" v0.0.0 "$BUILT_AT"
-
       - name: Publish immutable target
         id: target
         shell: bash
