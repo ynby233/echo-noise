@@ -107,15 +107,13 @@ func TestPublicCandidateCheckFailureDoesNotClaimLatest(t *testing.T) {
 	}
 }
 
-func TestLegacyUpdateHandlersAreExplicitlyUnavailable(t *testing.T) {
+func TestLegacyUpdateStreamIsExplicitlyUnavailable(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	for _, handler := range []gin.HandlerFunc{UpdateVersion, UpdateVersionStream} {
-		recorder := httptest.NewRecorder()
-		ctx, _ := gin.CreateTestContext(recorder)
-		handler(ctx)
-		if recorder.Code != http.StatusNotImplemented || !strings.Contains(recorder.Body.String(), "仅支持检查更新") {
-			t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
-		}
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	UpdateVersionStream(ctx)
+	if recorder.Code != http.StatusGone || !strings.Contains(recorder.Body.String(), "已退役") {
+		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
 }
 

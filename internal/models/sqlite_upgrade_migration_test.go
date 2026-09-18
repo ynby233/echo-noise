@@ -92,3 +92,36 @@ func TestMigrateDBUpgradesPopulatedLegacyRegistrationApplicationsOnSQLite(t *tes
 		t.Fatalf("repeat migrated SQLite startup: %v", err)
 	}
 }
+
+func TestMigrateDBCreatesUpdateStateAndRemovesOnlyDelegatedUpdateGrant(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := MigrateDB(db); err != nil {
+		t.Fatal(err)
+	}
+	grants := []AdminCapabilityGrant{
+		{UserID: 2, Capability: "version.view", GrantedByUserID: PrimaryAdminUserID},
+		{UserID: 2, Capability: "version.update", GrantedByUserID: PrimaryAdminUserID},
+		{UserID: 2, Capability: "notes.view", GrantedByUserID: PrimaryAdminUserID},
+	}
+	if err := db.Create(&grants).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := MigrateDB(db); err != nil {
+		t.Fatal(err)
+	}
+	var remaining []AdminCapabilityGrant
+	if err := db.Order("capability").Find(&remaining).Error; err != nil {
+		t.Fatal(err)
+	}
+	if len(remaining) != 2 || remaining[0].Capability != "notes.view" || remaining[1].Capability != "version.view" {
+		t.Fatalf("remaining grants=%#v", remaining)
+	}
+	for _, model := range []any{&UpdatePreference{}, &UpdateExecutorCredential{}, &UpdateTask{}, &UpdateTaskEvent{}} {
+		if !db.Migrator().HasTable(model) {
+			t.Fatalf("missing update table for %T", model)
+		}
+	}
+}

@@ -96,7 +96,20 @@ Windows 开发环境可先执行 `. D:\ChatGPT\environments\echo-noise\env.ps1`�
 
 `main` 的非纯文档提交自动构建 `ghcr.io/ynby233/echo-noise:edge-mcp`；已发布且非 draft/prerelease 的 `vX.Y.Z` Release 构建 `stable-mcp`。工作流先发布唯一候选并通过健康检查，再移动渠道标签；完整 Git revision、构建时间和显示版本同时写入二进制及 OCI 元数据。`latest-mcp` 已退役，不再发布或参与发现。
 
-`GET /api/version/check` 只返回不含 revision/digest 的公开状态；登录后的 ID 1 站长可通过 `GET /api/version/channels` 查看两个渠道的固定目标。U1 仅实现发现：旧安装入口明确返回不可用，不会因发现新版本自动替换容器。正式 Release 和现有 NAS 替换仍需单独授权。
+`GET /api/version/check` 只返回不含 revision/digest 的公开状态；登录后的 ID 1 站长可通过 `GET /api/version/channels` 查看两个渠道的固定目标。U2 已加入持久化任务协调，但尚未包含 U3/U4 的宿主替换与备份执行器，因此任务 API 可独立测试，不能据此宣称容器已经能够安全替换。正式 Release 和现有 NAS 替换仍需单独授权。
+
+### 更新任务与执行器接口
+
+`GET /api/updates` 和 `GET /api/updates/tasks/:id` 是只读查询；受托管理员即使持有 `version.view`，也不会得到完整 revision、digest、执行器信息或宿主错误摘要。`PUT /api/updates/channel` 只修改后续跟随偏好，不创建任务。协调服务内的任务创建仅接受固定 ID 1 站长选择的、服务端发现的 `stable`/`edge` 后代目标；目标 digest/revision 在创建时固定，连续提交返回同一条活动任务。U2 尚无 U3/U4 的宿主执行/备份核验，生产 `POST /api/updates/tasks` 与旧 `POST /api/version/update` 均明确返回 501，不会创建任务；U3/U4 接入并完成安全验证后才开放创建。历史 `GET /api/version/update/stream` 已退役且无副作用。
+
+执行器凭据由站长在 `/api/updates/executor/credential` 创建、查看状态或撤销，明文只在创建响应中出现一次，数据库只存验证值。创建时生成持久的实例 ID；站长在 `/api/updates` 可见，宿主需在首次配对时人工核对，并从受限 `/api/updates/executor/runtime` 再次核对。执行器必须以 `Authorization: Bearer ...` 调用 `/api/updates/executor/claim`、`/api/updates/executor/tasks/:id/events` 和 `/api/updates/executor/runtime`；用户登录、普通管理员 token 与执行器 token 不互通。轮换后旧凭据只可完成已领取任务，明确撤销则立即失效。claim 响应丢失后，同一执行器再次领取会得到原任务；任务不会因心跳超时分配给另一执行器，状态只能按真实阶段前进或进入 `failed`/`needs_attention`。服务端不保存执行器回报的自由文本，避免将宿主路径或凭据写入任务/审计；详情查宿主日志。
+
+U2 聚焦回归：
+
+```powershell
+. D:\ChatGPT\environments\echo-noise\env.ps1
+go test ./internal/updates ./internal/controllers ./internal/middleware ./internal/authorization ./internal/models ./internal/routers -count=1
+```
 
 stable 按其自身 OCI version 对应的 `/releases/tags/{version}` 和解引用提交校验，不与 `/releases/latest` 强制绑定。`latest_release` 单独描述最新正式发行候选；旧 stable 在新候选构建中、失败或取消时保持有效。候选只接受匹配提交、正式事件/明确 stable 手动运行名称、发行后的运行证据，按最新活动处理重跑；仅查询最近 100 条，窗口外或身份无法证实时保持 pending，不把 main push 当正式发布。公开响应只保留正式版本与状态，完整 revision/digest 仍限站长。
 

@@ -424,7 +424,7 @@ func TestProtectedAdminRouteMatrixRejectsDelegatedAdministratorWithoutRequiredGr
 		t.Fatalf("open database: %v", err)
 	}
 	if err := db.AutoMigrate(
-		&models.User{}, &models.Setting{}, &models.SiteConfig{}, &models.SecurityConfig{}, &models.AdminCapabilityGrant{}, &models.AdminAuditLog{}, &models.AdminAuditConfig{},
+		&models.User{}, &models.Setting{}, &models.SiteConfig{}, &models.SecurityConfig{}, &models.AdminCapabilityGrant{}, &models.AdminAuditLog{}, &models.AdminAuditConfig{}, &models.UpdateTask{},
 	); err != nil {
 		t.Fatalf("migrate route matrix database: %v", err)
 	}
@@ -465,6 +465,20 @@ func TestProtectedAdminRouteMatrixRejectsDelegatedAdministratorWithoutRequiredGr
 		t.Fatalf("seed delegated session status=%d body=%s", seed.Code, seed.Body.String())
 	}
 	cookies := seed.Result().Cookies()
+	for _, path := range []string{"/api/updates/tasks", "/api/version/update"} {
+		request := httptest.NewRequest(http.MethodPost, path, bytes.NewBufferString(`{"channel":"edge"}`))
+		request.Header.Set("Content-Type", "application/json")
+		request.Header.Set("Authorization", "Bearer "+primary.Token)
+		response := httptest.NewRecorder()
+		r.ServeHTTP(response, request)
+		if response.Code != http.StatusNotImplemented {
+			t.Fatalf("U2 installation route %s status=%d body=%s", path, response.Code, response.Body.String())
+		}
+	}
+	var updateTaskCount int64
+	if err := db.Model(&models.UpdateTask{}).Count(&updateTaskCount).Error; err != nil || updateTaskCount != 0 {
+		t.Fatalf("U2 installation routes created %d tasks: %v", updateTaskCount, err)
+	}
 
 	type routeCase struct {
 		name       string
@@ -480,6 +494,13 @@ func TestProtectedAdminRouteMatrixRejectsDelegatedAdministratorWithoutRequiredGr
 		{name: "attachment zip bearer", method: http.MethodPost, path: "/api/attachments/download-zip", capability: authorization.CapabilityAttachmentsDownload, token: true},
 		{name: "attachment reference delete", method: http.MethodDelete, path: "/api/attachments/references/not-real", capability: authorization.CapabilityAttachmentsDeleteReference},
 		{name: "attachment blob purge bearer", method: http.MethodPost, path: "/api/attachments/references/batch-purge", capability: authorization.CapabilityAttachmentsPurgeBlob, token: true},
+		{name: "updates view", method: http.MethodGet, path: "/api/updates", capability: authorization.CapabilityVersionView},
+		{name: "update task view", method: http.MethodGet, path: "/api/updates/tasks/not-real", capability: authorization.CapabilityVersionView},
+		{name: "update channel", method: http.MethodPut, path: "/api/updates/channel", capability: authorization.CapabilityVersionUpdate},
+		{name: "update task create", method: http.MethodPost, path: "/api/updates/tasks", capability: authorization.CapabilityVersionUpdate},
+		{name: "executor credential view", method: http.MethodGet, path: "/api/updates/executor/credential", capability: authorization.CapabilityVersionUpdate},
+		{name: "executor credential create", method: http.MethodPost, path: "/api/updates/executor/credential", capability: authorization.CapabilityVersionUpdate},
+		{name: "executor credential revoke", method: http.MethodDelete, path: "/api/updates/executor/credential", capability: authorization.CapabilityVersionUpdate},
 		{name: "version update", method: http.MethodPost, path: "/api/version/update", capability: authorization.CapabilityVersionUpdate},
 		{name: "session settings", method: http.MethodPut, path: "/api/settings", capability: authorization.CapabilitySiteSettingsManage},
 		{name: "token settings", method: http.MethodPut, path: "/api/token/settings", capability: authorization.CapabilitySiteSettingsManage, token: true},

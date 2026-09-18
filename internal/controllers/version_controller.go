@@ -98,10 +98,8 @@ func GetVersion(c *gin.Context) {
 	})
 }
 
-func UpdateVersion(c *gin.Context) {
-	c.JSON(http.StatusNotImplemented, dto.Fail[any]("自动安装执行器尚未接入；当前阶段仅支持检查更新"))
-}
+func UpdateVersion(c *gin.Context) { UpdateTaskInstallationUnavailable(c) }
 
 func UpdateVersionStream(c *gin.Context) {
-	c.JSON(http.StatusNotImplemented, dto.Fail[any]("自动安装执行器尚未接入；当前阶段仅支持检查更新"))
+	c.JSON(http.StatusGone, dto.Fail[any]("旧更新流已退役；请创建一次更新任务并只读查询进度"))
 }

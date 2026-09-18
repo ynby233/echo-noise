@@ -1,6 +1,10 @@
 package middleware
 
 import (
+	"net/http"
+	"strings"
+	"time"
+
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 	"github.com/rcy1314/echo-noise/internal/authorization"
@@ -8,10 +12,8 @@ import (
 	"github.com/rcy1314/echo-noise/internal/dto"
 	"github.com/rcy1314/echo-noise/internal/models"
 	"github.com/rcy1314/echo-noise/internal/services"
+	"github.com/rcy1314/echo-noise/internal/updates"
 	"github.com/rcy1314/echo-noise/pkg"
-	"net/http"
-	"strings"
-	"time"
 )
 
 func SessionAuthMiddleware() gin.HandlerFunc {
@@ -320,6 +322,41 @@ func TokenAuthMiddleware() gin.HandlerFunc {
 		c.Set("username", user.Username)
 		c.Set("is_admin", user.IsAdmin)
 		c.Set("auth_via", "token")
+		c.Next()
+	}
+}
+
+// UpdateExecutorAuthMiddleware accepts the dedicated executor credential only
+// on the executor route group. User sessions and administrator bearer tokens
+// are deliberately not valid here.
+func UpdateExecutorAuthMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		authorizationHeader := strings.TrimSpace(c.GetHeader("Authorization"))
+		if !strings.HasPrefix(authorizationHeader, "Bearer ") {
+			c.JSON(http.StatusUnauthorized, dto.Fail[any]("执行器凭据无效"))
+			c.Abort()
+			return
+		}
+		token := strings.TrimSpace(strings.TrimPrefix(authorizationHeader, "Bearer "))
+		if token == "" {
+			c.JSON(http.StatusUnauthorized, dto.Fail[any]("执行器凭据无效"))
+			c.Abort()
+			return
+		}
+		db, err := database.GetDB()
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, dto.Fail[any]("执行器凭据无效"))
+			c.Abort()
+			return
+		}
+		credential, err := updates.NewTaskService(db).Authenticate(token)
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, dto.Fail[any]("执行器凭据无效"))
+			c.Abort()
+			return
+		}
+		c.Set("executor_credential_id", credential.ID)
+		c.Set("auth_via", "executor")
 		c.Next()
 	}
 }
