@@ -12,6 +12,7 @@ if docker buildx imagetools inspect --raw "$ref" >"$work/manifest.json" 2>"$work
     console.log("STATE=exists")
     console.log("REVISION=" + (annotations["org.opencontainers.image.revision"] || ""))
     console.log("VERSION=" + (annotations["org.opencontainers.image.version"] || ""))
+    console.log("BUILT_AT=" + (annotations["org.opencontainers.image.created"] || ""))
   ' "$work/manifest.json"
 elif grep -Eqi '(^|: )not found$|manifest unknown|name_unknown|manifest_unknown' "$work/error"; then
   echo STATE=missing

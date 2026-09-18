@@ -98,6 +98,12 @@ Windows 开发环境可先执行 `. D:\ChatGPT\environments\echo-noise\env.ps1`�
 
 `GET /api/version/check` 只返回不含 revision/digest 的公开状态；登录后的 ID 1 站长可通过 `GET /api/version/channels` 查看两个渠道的固定目标。U1 仅实现发现：旧安装入口明确返回不可用，不会因发现新版本自动替换容器。正式 Release 和现有 NAS 替换仍需单独授权。
 
+stable 按其自身 OCI version 对应的 `/releases/tags/{version}` 和解引用提交校验，不与 `/releases/latest` 强制绑定。`latest_release` 单独描述最新正式发行候选；旧 stable 在新候选构建中、失败或取消时保持有效。候选只接受匹配提交、正式事件/明确 stable 手动运行名称、发行后的运行证据，按最新活动处理重跑；仅查询最近 100 条，窗口外或身份无法证实时保持 pending，不把 main push 当正式发布。公开响应只保留正式版本与状态，完整 revision/digest 仍限站长。
+
+`/app/noise --build-info` 为本地只读命令，只输出二进制内嵌身份，不加载 runtime.env、不启动数据库/迁移/worker。旧二进制不支持或身份不足时，发布 smoke 明确失败（身份命令最多等待 20 秒），不能用外层 label 或环境变量补成“已验证”。候选和最终选中的固定产物都运行 `scripts/release/smoke-image.sh`，验证 revision/version/build time 与标签一致并通过健康检查；重跑复用旧固定产物时保留其真实构建时间，不覆盖正式标签。
+
+身份行为回归：`node web/scripts/docker-runtime-identity.test.mjs`，对候选和既有固定目标分别覆盖正确/错误/缺失身份。独立 Docker 引擎可运行 `sh scripts/release/test-runtime-identity-docker.sh IMAGE FULL_REVISION VERSION` 复现“正确标签、健康、错误二进制”并验证拒绝。工作流还构建 runner 本地的 `echo-noise-u1-test:v0.0.0` 正式身份样例并 smoke，`push: false`，不创建 Release、不触碰 stable 渠道；这不等于生产正式发版已实战验收。
+
 发布策略本地检查：
 
 ```powershell

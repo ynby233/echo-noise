@@ -2,6 +2,23 @@ package buildinfo
 
 import "testing"
 
+func TestCompiledMetadataDoesNotTrustImageEnvironment(t *testing.T) {
+	oldIdentity, oldVersion, oldRevision, oldBuiltAt := Identity, Version, Revision, BuiltAt
+	t.Cleanup(func() { Identity, Version, Revision, BuiltAt = oldIdentity, oldVersion, oldRevision, oldBuiltAt })
+	Identity, Version, Revision, BuiltAt = "dev", "dev", "", ""
+	t.Setenv("BUILD_REVISION", "2222222222222222222222222222222222222222")
+	t.Setenv("BUILD_TIME", "2026-09-18T08:00:00Z")
+	t.Setenv("APP_VERSION", "v2.0.0")
+	if _, err := CompiledMetadata(); err == nil {
+		t.Fatal("environment cannot supply compiled identity")
+	}
+	Identity, Version, Revision, BuiltAt = "v2.0.0", "v2.0.0", "2222222222222222222222222222222222222222", "2026-09-18T08:00:00Z"
+	metadata, err := CompiledMetadata()
+	if err != nil || metadata.Revision != Revision || metadata.Version != "v2.0.0" || metadata.BuiltAt != BuiltAt {
+		t.Fatalf("metadata=%#v error=%v", metadata, err)
+	}
+}
+
 func TestCurrentMetadataKeepsFullRevision(t *testing.T) {
 	originalIdentity, originalRevision, originalBuiltAt, originalVersion := Identity, Revision, BuiltAt, Version
 	t.Cleanup(func() {

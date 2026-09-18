@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -16,6 +17,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/rcy1314/echo-noise/config"
 	backupservice "github.com/rcy1314/echo-noise/internal/backup"
+	"github.com/rcy1314/echo-noise/internal/buildinfo"
 	"github.com/rcy1314/echo-noise/internal/database"
 	"github.com/rcy1314/echo-noise/internal/middleware"
 	"github.com/rcy1314/echo-noise/internal/models"
@@ -26,6 +28,9 @@ import (
 )
 
 func init() {
+	if len(os.Args) == 2 && os.Args[1] == "--build-info" {
+		return
+	}
 	// 确保必要的目录存在
 	dirs := []string{
 		"data",
@@ -75,6 +80,17 @@ func closeDatabaseWithTimeout(timeout time.Duration) error {
 }
 
 func main() {
+	if len(os.Args) == 2 && os.Args[1] == "--build-info" {
+		metadata, err := buildinfo.CompiledMetadata()
+		if err == nil {
+			err = json.NewEncoder(os.Stdout).Encode(metadata)
+		}
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
 	stageStarted := time.Now()
 	logLifecycleStage("startup", "config_load", "begin", stageStarted)
 	// 加载配置

@@ -1,6 +1,7 @@
 package buildinfo
 
 import (
+	"fmt"
 	"os"
 	"regexp"
 	"strings"
@@ -59,6 +60,16 @@ type Metadata struct {
 	Version  string `json:"version"`
 	Revision string `json:"revision"`
 	BuiltAt  string `json:"built_at"`
+}
+
+// CompiledMetadata deliberately ignores runtime environment overrides. Image
+// smoke must prove the executable supports the supplied build arguments.
+func CompiledMetadata() (Metadata, error) {
+	metadata := Metadata{Identity: NormalizeIdentity(Identity), Version: NormalizeIdentity(Version), Revision: normalizeRevision(Revision), BuiltAt: normalizeBuildTime(BuiltAt)}
+	if metadata.Identity == "unknown" || metadata.Identity != metadata.Version || metadata.Revision == "" || metadata.BuiltAt == "" {
+		return metadata, fmt.Errorf("executable lacks complete compiled build identity")
+	}
+	return metadata, nil
 }
 
 func CurrentMetadata() Metadata {

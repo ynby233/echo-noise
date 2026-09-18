@@ -42,6 +42,14 @@ func CheckVersion(c *gin.Context) {
 		c.JSON(http.StatusBadGateway, dto.Fail[any]("版本检查失败，请稍后重试"))
 		return
 	}
+	if report.Release.Status == updates.StatusCheckFailed {
+		c.JSON(http.StatusBadGateway, dto.Fail[any]("正式发行检查失败，请稍后重试"))
+		return
+	}
+	publicRelease := gin.H{"status": report.Release.Status}
+	if strings.HasPrefix(report.Release.Version, "v") && buildinfo.NormalizeIdentity(report.Release.Version) == report.Release.Version {
+		publicRelease["version"] = report.Release.Version
+	}
 
 	stable := report.Channel("stable")
 	channels := make([]gin.H, 0, len(report.Channels))
@@ -66,6 +74,7 @@ func CheckVersion(c *gin.Context) {
 			"lastUpdateTime":     stable.BuiltAt,
 			"currentTag":         stable.Version,
 			"latestSourceStatus": report.Source.Status,
+			"latestRelease":      publicRelease,
 			"channels":           channels,
 		},
 	})

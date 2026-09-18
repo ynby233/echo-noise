@@ -8,7 +8,9 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"sort"
 	"strings"
+	"time"
 )
 
 type Status string
@@ -61,9 +63,17 @@ type Channel struct {
 }
 
 type Report struct {
-	Installed Installed `json:"installed"`
-	Source    Source    `json:"latest_source"`
-	Channels  []Channel `json:"channels"`
+	Installed Installed     `json:"installed"`
+	Source    Source        `json:"latest_source"`
+	Release   SourceRelease `json:"latest_release"`
+	Channels  []Channel     `json:"channels"`
+}
+
+type SourceRelease struct {
+	Version  string `json:"version,omitempty"`
+	Revision string `json:"revision,omitempty"`
+	Status   Status `json:"status"`
+	Error    string `json:"error,omitempty"`
 }
 
 type Source struct {
@@ -99,11 +109,17 @@ func NewDiscovery(client *http.Client, githubBase, registryBase, tokenURL string
 
 func (d *Discovery) Discover(ctx context.Context, installed Installed, platform Platform) Report {
 	edge := d.discoverImageChannel(ctx, "edge", "edge-mcp", installed, platform)
+	stable := d.discoverStable(ctx, installed, platform)
+	latest := d.discoverLatestRelease(ctx, stable)
+	if stable.Status == StatusNoRelease && latest.Version != "" {
+		stable.Status = StatusReleasePending
+	}
 	return Report{
 		Installed: installed,
 		Source:    d.discoverSource(ctx, edge.Revision),
+		Release:   latest,
 		Channels: []Channel{
-			d.discoverStable(ctx, installed, platform),
+			stable,
 			edge,
 		},
 	}
@@ -173,39 +189,140 @@ func (d *Discovery) discoverSource(ctx context.Context, edgeRevision string) Sou
 }
 
 func (d *Discovery) discoverStable(ctx context.Context, installed Installed, platform Platform) Channel {
-	channel := Channel{Name: "stable", Image: "ghcr.io/ynby233/echo-noise", Tag: "stable-mcp"}
-	var release struct {
-		TagName     string `json:"tag_name"`
-		Draft       bool   `json:"draft"`
-		Prerelease  bool   `json:"prerelease"`
-		PublishedAt string `json:"published_at"`
+	channel := d.discoverImageChannel(ctx, "stable", "stable-mcp", installed, platform)
+	if channel.Status == StatusMissing {
+		channel.Status = StatusNoRelease
+		return channel
 	}
-	if err := d.getJSON(ctx, d.githubBase+"/releases/latest", &release); err != nil {
+	if channel.Status == StatusCheckFailed || channel.Status == StatusInvalidTarget {
+		return channel
+	}
+	var release releaseInfo
+	if err := d.getJSON(ctx, d.githubBase+"/releases/tags/"+url.PathEscape(channel.Version), &release); err != nil {
+		channel.Installable, channel.HasUpdate = false, false
 		if errors.Is(err, errNotFound) {
-			channel.Status = StatusNoRelease
+			channel.Status = StatusInvalidTarget
 			return channel
 		}
 		channel.Status, channel.Error = StatusCheckFailed, err.Error()
 		return channel
 	}
-	if release.Draft || release.Prerelease || release.PublishedAt == "" || !semverPattern.MatchString(release.TagName) {
-		channel.Status = StatusNoRelease
+	if !release.valid() || release.TagName != channel.Version {
+		channel.Status, channel.Installable, channel.HasUpdate = StatusInvalidTarget, false, false
 		return channel
 	}
 	revision, err := d.resolveTag(ctx, release.TagName)
 	if err != nil {
 		channel.Status, channel.Error = StatusCheckFailed, err.Error()
-		return channel
-	}
-	channel = d.discoverImageChannel(ctx, "stable", "stable-mcp", installed, platform)
-	if channel.Status == StatusMissing {
-		channel.Status = StatusReleasePending
+		channel.Installable, channel.HasUpdate = false, false
 		return channel
 	}
 	if channel.Revision != revision || channel.Version != normalizeVersion(release.TagName) {
 		channel.Status, channel.Installable, channel.HasUpdate = StatusInvalidTarget, false, false
 	}
 	return channel
+}
+
+type releaseInfo struct {
+	TagName     string `json:"tag_name"`
+	Draft       bool   `json:"draft"`
+	Prerelease  bool   `json:"prerelease"`
+	PublishedAt string `json:"published_at"`
+}
+
+func (r releaseInfo) valid() bool {
+	return !r.Draft && !r.Prerelease && r.PublishedAt != "" && semverPattern.MatchString(r.TagName)
+}
+
+func (d *Discovery) discoverLatestRelease(ctx context.Context, stable Channel) SourceRelease {
+	var release releaseInfo
+	if err := d.getJSON(ctx, d.githubBase+"/releases/latest", &release); err != nil {
+		if errors.Is(err, errNotFound) {
+			return SourceRelease{Status: StatusNoRelease}
+		}
+		return SourceRelease{Status: StatusCheckFailed, Error: err.Error()}
+	}
+	if !release.valid() {
+		return SourceRelease{Status: StatusInvalidTarget}
+	}
+	latest := SourceRelease{Version: release.TagName, Status: StatusReleasePending}
+	revision, err := d.resolveTag(ctx, release.TagName)
+	if err != nil {
+		latest.Status, latest.Error = StatusCheckFailed, err.Error()
+		return latest
+	}
+	latest.Revision = revision
+	if stable.Installable && stable.Version == latest.Version && stable.Revision == revision {
+		latest.Status = StatusSourceReady
+		return latest
+	}
+	if stable.Installable && stable.Revision != revision {
+		status, _, message := d.compare(ctx, stable.Revision, revision)
+		if status == StatusChannelBehind || status == StatusDiverged || status == StatusCheckFailed {
+			latest.Status, latest.Error = status, message
+			return latest
+		}
+	}
+	var runs struct {
+		WorkflowRuns []struct {
+			HeadSHA      string `json:"head_sha"`
+			HeadBranch   string `json:"head_branch"`
+			Event        string `json:"event"`
+			Status       string `json:"status"`
+			Conclusion   string `json:"conclusion"`
+			CreatedAt    string `json:"created_at"`
+			UpdatedAt    string `json:"updated_at"`
+			DisplayTitle string `json:"display_title"`
+		} `json:"workflow_runs"`
+	}
+	// Outside the 100-run window, or without event/tag identity, remain pending.
+	// Stable dispatches carry the explicit run-name; arbitrary push runs cannot
+	// describe a formal build. Prefer latest activity when an older run is rerun.
+	if err := d.getJSON(ctx, d.githubBase+"/actions/workflows/docker-publish.yml/runs?head_sha="+revision+"&per_page=100", &runs); err != nil {
+		latest.Status, latest.Error = StatusCheckFailed, err.Error()
+		return latest
+	}
+	sort.SliceStable(runs.WorkflowRuns, func(i, j int) bool {
+		a, b := runs.WorkflowRuns[i], runs.WorkflowRuns[j]
+		if a.UpdatedAt == "" {
+			a.UpdatedAt = a.CreatedAt
+		}
+		if b.UpdatedAt == "" {
+			b.UpdatedAt = b.CreatedAt
+		}
+		at, _ := time.Parse(time.RFC3339, a.UpdatedAt)
+		bt, _ := time.Parse(time.RFC3339, b.UpdatedAt)
+		return at.After(bt)
+	})
+	published, parseErr := time.Parse(time.RFC3339, release.PublishedAt)
+	if parseErr != nil {
+		latest.Status, latest.Error = StatusCheckFailed, "Release 发布时间无效"
+		return latest
+	}
+	for _, run := range runs.WorkflowRuns {
+		created, err := time.Parse(time.RFC3339, run.CreatedAt)
+		tagMatch := run.DisplayTitle == "stable "+release.TagName || (run.Event == "release" && run.HeadBranch == release.TagName)
+		if (run.Event != "release" && run.Event != "workflow_dispatch") || run.HeadSHA != revision || !tagMatch || err != nil || created.Before(published) {
+			continue
+		}
+		switch run.Status {
+		case "queued", "pending", "waiting", "requested":
+			latest.Status = StatusBuildPending
+		case "completed":
+			switch run.Conclusion {
+			case "success":
+				latest.Status = StatusPublishing
+			case "cancelled", "skipped":
+				latest.Status = StatusBuildCancelled
+			default:
+				latest.Status = StatusBuildFailed
+			}
+		default:
+			latest.Status = StatusBuilding
+		}
+		break
+	}
+	return latest
 }
 
 func (d *Discovery) discoverImageChannel(ctx context.Context, name, tag string, installed Installed, platform Platform) Channel {
@@ -242,6 +359,9 @@ func (d *Discovery) discoverImageChannel(ctx context.Context, name, tag string, 
 		return channel
 	}
 	channel.Status, channel.HasUpdate, channel.Error = d.compare(ctx, installed.Revision, channel.Revision)
+	if channel.Status == StatusCheckFailed {
+		channel.Installable = false
+	}
 	return channel
 }
 

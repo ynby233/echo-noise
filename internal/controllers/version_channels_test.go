@@ -41,7 +41,8 @@ func TestPublicVersionCheckDoesNotExposeRevisionOrDigest(t *testing.T) {
 	original := discoverUpdates
 	discoverUpdates = func(*gin.Context) updates.Report {
 		return updates.Report{
-			Source: updates.Source{Revision: targetRevisionForController, Status: updates.StatusSourceReady},
+			Release: updates.SourceRelease{Version: "v2.0.0", Revision: targetRevisionForController, Status: updates.StatusBuildFailed},
+			Source:  updates.Source{Revision: targetRevisionForController, Status: updates.StatusSourceReady},
 			Channels: []updates.Channel{
 				{Name: "stable", Version: "v1.2.3", BuiltAt: "2026-09-11T08:10:00Z", Status: updates.StatusUpdateAvailable, Installable: true, HasUpdate: true, Digest: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", Revision: targetRevisionForController},
 				{Name: "edge", Version: targetRevisionForController[:12], Status: updates.StatusCurrent, Installable: true, Digest: "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", Revision: targetRevisionForController},
@@ -64,6 +65,45 @@ func TestPublicVersionCheckDoesNotExposeRevisionOrDigest(t *testing.T) {
 	}
 	if !strings.Contains(body, `"currentTag":"v1.2.3"`) || !strings.Contains(body, `"hasUpdate":true`) {
 		t.Fatalf("public response lost safe release status: %s", body)
+	}
+	if !strings.Contains(body, `"latestRelease":{"status":"build_failed","version":"v2.0.0"}`) {
+		t.Fatalf("candidate status missing: %s", body)
+	}
+}
+
+func TestPrimaryAdministratorReceivesCandidateRevisionWithoutPublicLeak(t *testing.T) {
+	original := discoverUpdates
+	discoverUpdates = func(*gin.Context) updates.Report {
+		return updates.Report{Release: updates.SourceRelease{Version: targetRevisionForController[:12], Revision: targetRevisionForController, Status: updates.StatusInvalidTarget}}
+	}
+	t.Cleanup(func() { discoverUpdates = original })
+	for _, primary := range []bool{false, true} {
+		recorder := httptest.NewRecorder()
+		ctx, _ := gin.CreateTestContext(recorder)
+		if primary {
+			ctx.Set("user_id", models.PrimaryAdminUserID)
+			GetUpdateChannels(ctx)
+		} else {
+			CheckVersion(ctx)
+		}
+		body := recorder.Body.String()
+		if strings.Contains(body, targetRevisionForController) != primary || strings.Contains(body, targetRevisionForController[:12]) != primary {
+			t.Fatalf("primary=%t body=%s", primary, body)
+		}
+	}
+}
+
+func TestPublicCandidateCheckFailureDoesNotClaimLatest(t *testing.T) {
+	original := discoverUpdates
+	discoverUpdates = func(*gin.Context) updates.Report {
+		return updates.Report{Release: updates.SourceRelease{Status: updates.StatusCheckFailed}}
+	}
+	t.Cleanup(func() { discoverUpdates = original })
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	CheckVersion(ctx)
+	if recorder.Code != http.StatusBadGateway {
+		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
 }
 
