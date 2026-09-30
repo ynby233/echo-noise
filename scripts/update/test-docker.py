@@ -174,6 +174,9 @@ def test_docker_preflight(ex, args, cid, cfg, old_ref):
         changed = list(args)
         changed[changed.index("--name") + 1] = name
         changed[changed.index("--mount") + 1] = "type=bind,source=" + str(directory) + ",target=/data"
+        if index != 2:
+            changed[changed.index("--publish") + 1] = "127.0.0.1::1314"
+            cfg2["docker"]["ports"] = ["127.0.0.1::1314"]
         if index == 2:
             # Host networking requires no published ports.
             del changed[changed.index("--publish"):changed.index("--publish") + 2]
@@ -230,7 +233,7 @@ def test_compose_preflight(ex, model, compose, cid, other_id):
         changed = copy.deepcopy(model)
         changed["services"]["app"].update(settings)
         executor.atomic_write(compose, json.dumps(changed))
-        ex.compose("up", "-d", "--no-deps", "--scale", "app=1", "--pull", "never", "app")
+        ex.compose("up", "-d", "--no-deps", "--no-recreate", "--scale", "app=1", "--pull", "never", "app")
         before = current_id(ex)
         rejected(ex.preflight, "compose_requires_single_replica")
         assert current_id(ex) == before == cid
