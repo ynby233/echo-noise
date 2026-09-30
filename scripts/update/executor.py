@@ -324,6 +324,12 @@ class Executor:
             controls.append(Path(self.cfg["docker"]["env_file"]))
         sockets = self.docker_sockets() if current["Mounts"] else []
         for mount in current["Mounts"]:
+            if mount["Type"] == "volume":
+                volumes = json.loads(command(["docker", "volume", "inspect", mount["Name"]]))
+                require(len(volumes) == 1 and volumes[0]["Name"] == mount["Name"], "named_volume_identity_mismatch")
+                require(volumes[0]["Driver"] == "local", "named_volume_driver_unsupported")
+                # Local driver options can hide bind/NFS mappings behind the volume's _data path.
+                require(not volumes[0].get("Options"), "named_volume_options_unsupported")
             source = Path(mount["Source"]).resolve()
             require(all(not p.is_relative_to(source) and not os.path.samefile(source, p) for p in sockets),
                     "docker_socket_in_application")
@@ -332,6 +338,7 @@ class Executor:
 
     def preflight(self):
         require(shutil.which("docker") and shutil.which("curl"), "install_docker_cli_and_curl")
+        self.docker_sockets()  # Reject unsupported Engines before inspecting or changing a deployment.
         require(command(["docker", "info", "--format", "{{.OSType}}/{{.Architecture}}"] ).strip() in
                 (self.cfg["platform"], self.cfg["platform"].replace("amd64", "x86_64").replace("arm64", "aarch64")), "host_platform_mismatch")
         private(self.cfg["image_file"])
@@ -376,6 +383,9 @@ class Executor:
                 require(current["Config"].get("Hostname") == default_hostname and
                         current["Config"].get("Domainname", "") == configured["Config"].get("Domainname", ""),
                         "docker_hostname_or_domain_not_represented")
+                require((current["Config"].get("MacAddress") or "") ==
+                        (configured["Config"].get("MacAddress") or ""),
+                        "docker_mac_address_not_represented")
                 for key in ("Env", "Cmd", "Entrypoint", "User", "WorkingDir", "Healthcheck", "Labels", "Volumes", "ExposedPorts", "StopSignal"):
                     actual = current["Config"].get(key)
                     desired = configured["Config"].get(key)

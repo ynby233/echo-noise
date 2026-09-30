@@ -164,7 +164,8 @@ def test_docker_preflight(ex, args, cid, cfg, old_ref):
     rejected(ex.preflight, "docker_networks_not_represented")
     assert current_id(ex) == cid and ex.inspect(cid)["State"]["Running"]
     docker("network", "disconnect", network, cid)
-    for index, extra in enumerate((["--hostname", "custom"], ["--domainname", "custom.test"], ["--network", "host"])):
+    for index, extra in enumerate((["--hostname", "custom"], ["--domainname", "custom.test"], ["--network", "host"],
+                                   ["--mac-address", "02:42:ac:11:00:77"])):
         cfg2 = copy.deepcopy(cfg)
         name = prefix + "-config-" + str(index)
         cfg2["container"] = name
@@ -188,6 +189,9 @@ def test_docker_preflight(ex, args, cid, cfg, old_ref):
         checked = new_executor(cfg2)
         if index == 2:
             checked.preflight()
+        elif index == 3:
+            assert checked.inspect(other)["Config"].get("MacAddress") == "02:42:ac:11:00:77"
+            rejected(checked.preflight, "docker_mac_address_not_represented")
         else:
             rejected(checked.preflight, "docker_hostname_or_domain_not_represented")
         assert checked.inspect(other)["State"]["Running"]
@@ -225,7 +229,50 @@ def test_docker_preflight(ex, args, cid, cfg, old_ref):
     assert ex.inspect(running)["State"]["Running"]
     docker("rm", "--force", running)  # Only fixture code cleans its deliberate running probe.
     assert current_id(ex) == cid and ex.inspect(cid)["State"]["Running"]
-    print("F1/F5: extra network/custom identity rejected; host passes; killed/lost probe recovered; foreign/running preserved", flush=True)
+    print("F1/F5/MAC: extra network/custom identity/fixed MAC rejected; host passes; killed/lost probe recovered; foreign/running preserved", flush=True)
+
+
+def test_engine_and_volumes(ex, old_ref):
+    original = copy.deepcopy(ex.cfg["mounts"])
+    cid = current_id(ex)
+    remote_context = prefix + "-remote-" + ex.cfg["mode"]
+    docker("context", "create", remote_context, "--docker", "host=tcp://127.0.0.1:1")
+    try:
+        ex.cfg["mounts"] = []
+        for environment in ({"DOCKER_HOST": "tcp://127.0.0.1:1", "DOCKER_CONTEXT": ""},
+                            {"DOCKER_CONTEXT": remote_context, "DOCKER_HOST": "unix:///ignored.sock"}):
+            with unittest_patch.dict(os.environ, environment):
+                rejected(ex.preflight, "local_unix_docker_endpoint_required")
+    finally:
+        ex.cfg["mounts"] = original
+        docker("context", "rm", remote_context)
+    endpoint = ex.docker_sockets()[0]
+    for advanced in (False, True):
+        name = prefix + "-volume-" + ex.cfg["mode"] + "-" + str(advanced).lower()
+        options = ["--opt", "type=none", "--opt", "o=bind", "--opt", "device=" + str(endpoint.parent)] if advanced else []
+        docker("volume", "create", *options, name)
+        volumes.append(name)
+        directory = root / name
+        directory.mkdir()
+        other = docker("run", "-d", "--name", name, "--mount", "type=bind,source=" + str(directory) + ",target=/data",
+                       "--mount", "type=volume,source=" + name + ",target=/host/volume,readonly", old_ref)
+        containers.append(other)
+        actual = ex.inspect(other)
+        try:
+            ex.cfg["mounts"] = [{"type": "bind", "source": str(directory), "target": "/data"},
+                                {"type": "volume", "source": name, "target": "/host/volume", "read_only": True}]
+            if advanced:
+                mounted = next(m for m in actual["Mounts"] if m["Type"] == "volume")
+                assert os.path.samefile(Path(mounted["Source"]) / endpoint.name, endpoint)
+                rejected(lambda: ex.check_mounts(actual), "named_volume_options_unsupported")
+            else:
+                ex.check_mounts(actual)
+            assert ex.inspect(other)["State"]["Running"]
+        finally:
+            ex.cfg["mounts"] = original
+            docker("rm", "--force", other)
+    assert current_id(ex) == cid and ex.inspect(cid)["State"]["Running"]
+    print(ex.cfg["mode"] + ": no-mount remote host/context rejected; real socket hidden by local volume options rejected; ordinary named volume passes", flush=True)
 
 
 def test_compose_preflight(ex, model, compose, cid, other_id):
@@ -328,6 +375,7 @@ def test_mode(mode, old_ref, new_ref, new_digest, attention=False):
     ex = new_executor(cfg)
     ex.preflight()
     if not attention:
+        test_engine_and_volumes(ex, old_ref)
         if mode == "docker":
             test_paths(ex)
             test_docker_preflight(ex, args, cid, cfg, old_ref)
@@ -441,6 +489,7 @@ if __name__ == "__main__":
     containers = []
     compose_cleanup = []
     networks = []
+    volumes = []
     with tempfile.TemporaryDirectory(prefix=prefix) as tmp:
         root = Path(tmp)
         try:
@@ -486,3 +535,6 @@ if __name__ == "__main__":
             for network in networks:
                 with contextlib.suppress(executor.Stop):
                     docker("network", "rm", network)
+            for volume in volumes:
+                with contextlib.suppress(executor.Stop):
+                    docker("volume", "rm", volume)

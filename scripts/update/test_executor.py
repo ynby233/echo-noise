@@ -351,7 +351,9 @@ class RecoveryTests(unittest.TestCase):
         for kind in ("bind", "volume"):
             self.ex.cfg["mounts"] = [{"type": kind, "source": str(source) if kind == "bind" else "data", "target": "/data"}]
             with patch.dict(executor.os.environ, {"DOCKER_HOST": "unix://" + str(endpoint)}, clear=True), \
-                    patch.object(executor.stat, "S_ISSOCK", return_value=True):
+                    patch.object(executor.stat, "S_ISSOCK", return_value=True), \
+                    patch.object(executor, "command", return_value=json.dumps([
+                        {"Name": "data", "Driver": "local", "Options": None}])):
                 self.ex.check_mounts({"Mounts": [{"Type": kind, "Name": "data", "Source": str(source),
                                                 "Destination": "/data", "RW": True}]})
 
@@ -376,6 +378,9 @@ class PreflightTests(unittest.TestCase):
         self.commands = []
         self.ex.inspect = lambda ref: self.probe if ref in ("d" * 64, self.cfg["container"] + "-update-check") else self.current
         self.addCleanup(patch.stopall)
+        (self.root / "socket").touch()
+        patch.dict(executor.os.environ, {"DOCKER_HOST": "", "DOCKER_CONTEXT": ""}).start()
+        patch.object(executor.stat, "S_ISSOCK", return_value=True).start()
         patch.object(executor, "command", side_effect=self.command).start()
         patch.object(executor.shutil, "which", return_value="present").start()
 
@@ -440,6 +445,55 @@ class PreflightTests(unittest.TestCase):
         self.assertEqual(self.ex.preflight()["Id"], self.current["Id"])
         self.assertFalse(self.probe_present)
 
+    def test_no_mounts_remote_engine_is_rejected_before_deployment_operations(self):
+        for environment in ({"DOCKER_HOST": "tcp://remote-host:2375"},
+                            {"DOCKER_CONTEXT": "remote", "DOCKER_HOST": "unix:///ignored.sock"}):
+            with self.subTest(environment=environment), patch.dict(executor.os.environ, environment, clear=True):
+                before = len(self.commands)
+                command = self.command
+                def remote_context(args, **kwargs):
+                    if args[1:3] == ["context", "inspect"]:
+                        self.commands.append(args)
+                        return json.dumps("tcp://remote-host:2375")
+                    return command(args, **kwargs)
+                with patch.object(executor, "command", side_effect=remote_context):
+                    with self.assertRaisesRegex(executor.Stop, "local_unix_docker_endpoint_required"):
+                        self.ex.preflight()
+                self.assertFalse(self.probe_present)
+                self.assertFalse(any(a[1] in ("info", "create", "rm", "inspect")
+                                     for a in self.commands[before:]))
+
+    def test_named_volume_options_are_rejected_in_both_deployment_modes(self):
+        source = self.root / "volume-data"
+        source.mkdir()
+        mount = {"Type": "volume", "Name": "app-data", "Source": str(source),
+                 "Destination": "/data", "RW": True, "Driver": "local"}
+        self.current["Mounts"] = [mount]
+        self.probe["Mounts"] = [copy.deepcopy(mount)]
+        self.ex.cfg["mounts"] = [{"type": "volume", "source": "app-data", "target": "/data"}]
+        compose_file = self.root / "compose.json"
+        compose_file.write_text('${UPDATE_IMAGE}')
+        compose_file.chmod(0o600)
+        self.ex.cfg.update(service="app", compose_file=str(compose_file))
+        self.ex.check_compose_image_source = lambda: {"services": {"app": {"image": "old"}}}
+        self.ex.compose = lambda *a, **k: self.current["Id"]
+        for mode in ("docker", "compose"):
+            for options in ({"type": "none", "o": "bind", "device": "/run"},
+                            {"type": "nfs", "device": ":/data"}):
+                with self.subTest(mode=mode, options=options):
+                    self.ex.cfg["mode"] = mode
+                    command = self.command
+                    def volume_info(args, **kwargs):
+                        if args[1:3] == ["volume", "inspect"]:
+                            return json.dumps([{"Name": "app-data", "Driver": "local", "Options": options}])
+                        return command(args, **kwargs)
+                    before = len(self.commands)
+                    with patch.object(executor, "command", side_effect=volume_info):
+                        with self.assertRaisesRegex(executor.Stop, "named_volume_options_unsupported"):
+                            self.ex.preflight()
+                    self.assertFalse(any(a[1] in ("create", "stop", "rename", "start")
+                                         for a in self.commands[before:]))
+
     def test_foreign_and_running_probe_are_never_removed(self):
         for own, running in ((False, False), (True, True)):
             with self.subTest(own=own, running=running):
@@ -452,11 +506,21 @@ class PreflightTests(unittest.TestCase):
                 self.assertFalse(any(a[1] == "rm" for a in self.commands[before:]))
                 self.assertTrue(self.probe_present)
 
+    def test_explicit_mac_address_is_rejected_without_stopping_current_container(self):
+        self.current["Config"]["MacAddress"] = "02:42:ac:11:00:77"
+        with self.assertRaisesRegex(executor.Stop, "docker_mac_address_not_represented"):
+            self.ex.preflight()
+        self.assertFalse(self.probe_present)
+        self.assertTrue(self.current["State"]["Running"])
+        self.assertFalse(any(a[1] in ("stop", "rename", "start") for a in self.commands))
+
     def test_default_and_host_network_pass_and_clean_probe(self):
         for network in ("appnet", "host"):
             self.current["HostConfig"]["NetworkMode"] = self.probe["HostConfig"]["NetworkMode"] = network
-            self.current["NetworkSettings"]["Networks"] = {network: {"IPAddress": "dynamic", "EndpointID": "old"}}
-            self.probe["NetworkSettings"]["Networks"] = {network: {"IPAddress": "", "EndpointID": ""}}
+            self.current["Config"]["MacAddress"] = ""
+            self.probe["Config"]["MacAddress"] = None
+            self.current["NetworkSettings"]["Networks"] = {network: {"IPAddress": "dynamic", "EndpointID": "old", "MacAddress": "dynamic"}}
+            self.probe["NetworkSettings"]["Networks"] = {network: {"IPAddress": "", "EndpointID": "", "MacAddress": ""}}
             self.assertEqual(self.ex.preflight()["Id"], self.current["Id"])
             self.assertFalse(self.probe_present)
 
