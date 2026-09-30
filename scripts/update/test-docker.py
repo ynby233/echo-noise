@@ -31,9 +31,9 @@ class IsolatedExecutor(executor.Executor):
     def preflight(self):
         try:
             return super().preflight()
-        except executor.Stop:
+        except executor.Stop as error:
             # Fixture-only diagnostics: no personal env, credentials or production input.
-            if hasattr(self, "probe"):
+            if str(error).startswith("docker_parameters_not_represented:") and hasattr(self, "probe"):
                 current = self.inspect(self.container_id())["HostConfig"]
                 expected = self.probe["HostConfig"]
                 print("fixture HostConfig differences: " + json.dumps({k: [current.get(k), expected.get(k)] for k in current.keys() | expected.keys() if current.get(k) != expected.get(k) and k not in ("Binds", "Mounts")}), flush=True)
