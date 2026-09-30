@@ -279,3 +279,88 @@ func TestExecutorEventSummaryRedactsCredentials(t *testing.T) {
 		t.Fatalf("unsafe event summary=%q", event.Summary)
 	}
 }
+
+func TestUpdateTaskNeedsAttentionBlocksReplacementUntilResolved(t *testing.T) {
+	service := NewTaskService(openTaskTestDB(t, ":memory:"))
+	credential, token, err := service.CreateCredential(1, "host")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Authenticate(token); err != nil {
+		t.Fatal(err)
+	}
+	target := Target{Channel: "edge", Image: officialUpdateImage, Digest: "sha256:" + strings.Repeat("a", 64), Revision: strings.Repeat("1", 40)}
+	task, _, err := service.Create(1, target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Claim(credential.ID); err != nil {
+		t.Fatal(err)
+	}
+	for _, status := range []string{TaskDownloading, TaskStopping, TaskBackingUp, TaskReplacing, TaskNeedsAttention} {
+		if err := service.RecordEvent(credential.ID, task.PublicID, status, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	repeated, created, err := service.Create(1, target)
+	if err != nil || created || repeated.PublicID != task.PublicID {
+		t.Fatalf("unresolved task allowed a replacement: task=%#v created=%t err=%v", repeated, created, err)
+	}
+	recovered, err := service.Claim(credential.ID)
+	if err != nil || recovered.PublicID != task.PublicID || recovered.Status != TaskNeedsAttention {
+		t.Fatalf("cannot recover unresolved task: task=%#v err=%v", recovered, err)
+	}
+	if err := service.RecordEvent(credential.ID, task.PublicID, TaskReplacing, ""); !errors.Is(err, ErrInvalidTransition) {
+		t.Fatalf("unresolved task restarted installation: %v", err)
+	}
+	// The host must reconcile its journal and runtime before resuming verification.
+	for _, status := range []string{TaskVerifying, TaskSucceeded} {
+		if err := service.RecordEvent(credential.ID, task.PublicID, status, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if next, created, err := service.Create(1, target); err != nil || !created || next.PublicID == task.PublicID {
+		t.Fatalf("resolved task did not release its slot: task=%#v created=%t err=%v", next, created, err)
+	}
+}
+
+func TestUpdateTaskRejectsInvalidEventStatuses(t *testing.T) {
+	for _, final := range []string{TaskClaimed, TaskSucceeded, TaskFailed} {
+		t.Run(final, func(t *testing.T) {
+			service := NewTaskService(openTaskTestDB(t, ":memory:"))
+			credential, token, err := service.CreateCredential(1, "host")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := service.Authenticate(token); err != nil {
+				t.Fatal(err)
+			}
+			task, _, err := service.Create(1, Target{Channel: "edge", Image: officialUpdateImage, Digest: "sha256:" + strings.Repeat("a", 64), Revision: strings.Repeat("1", 40)})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := service.Claim(credential.ID); err != nil {
+				t.Fatal(err)
+			}
+			if final == TaskSucceeded {
+				for _, status := range []string{TaskDownloading, TaskStopping, TaskBackingUp, TaskReplacing, TaskVerifying, TaskSucceeded} {
+					if err := service.RecordEvent(credential.ID, task.PublicID, status, ""); err != nil {
+						t.Fatal(err)
+					}
+				}
+			} else if final == TaskFailed {
+				if err := service.RecordEvent(credential.ID, task.PublicID, TaskFailed, ""); err != nil {
+					t.Fatal(err)
+				}
+			}
+			for _, invalid := range []string{"", " \t", "unknown"} {
+				if err := service.RecordEvent(credential.ID, task.PublicID, invalid, ""); !errors.Is(err, ErrInvalidTransition) {
+					t.Errorf("status %q was accepted from %s: %v", invalid, final, err)
+				}
+			}
+			if saved, err := service.Get(task.PublicID); err != nil || saved.Status != final {
+				t.Fatalf("invalid event changed task: task=%#v err=%v", saved, err)
+			}
+		})
+	}
+}

@@ -47,8 +47,8 @@ func CheckVersion(c *gin.Context) {
 		return
 	}
 	publicRelease := gin.H{"status": report.Release.Status}
-	if strings.HasPrefix(report.Release.Version, "v") && buildinfo.NormalizeIdentity(report.Release.Version) == report.Release.Version {
-		publicRelease["version"] = report.Release.Version
+	if version := publicReleaseVersion(report.Release.Version); version != "" {
+		publicRelease["version"] = version
 	}
 
 	stable := report.Channel("stable")
@@ -78,6 +78,13 @@ func CheckVersion(c *gin.Context) {
 			"channels":           channels,
 		},
 	})
+}
+
+func publicReleaseVersion(version string) string {
+	if strings.HasPrefix(version, "v") && buildinfo.NormalizeIdentity(version) == version {
+		return version
+	}
+	return ""
 }
 
 func GetUpdateChannels(c *gin.Context) {

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -44,7 +45,7 @@ func setupUpdateControllerTest(t *testing.T) (*gorm.DB, *gin.Engine, string) {
 	discoverUpdates = func(*gin.Context) updates.Report {
 		return updates.Report{Channels: []updates.Channel{{
 			Name: "edge", Image: "ghcr.io/ynby233/echo-noise", Digest: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-			Revision: targetRevisionForController, Status: updates.StatusUpdateAvailable, Installable: true, HasUpdate: true,
+			Revision: targetRevisionForController, Version: targetRevisionForController[:12], Status: updates.StatusUpdateAvailable, Installable: true, HasUpdate: true,
 		}}}
 	}
 	t.Cleanup(func() { discoverUpdates = originalDiscovery })
@@ -62,6 +63,7 @@ func setupUpdateControllerTest(t *testing.T) (*gorm.DB, *gin.Engine, string) {
 		c.Next()
 	})
 	router.POST("/updates/tasks", CreateUpdateTask)
+	router.GET("/updates", GetUpdates)
 	router.GET("/updates/tasks/:id", GetUpdateTask)
 	router.GET("/version/update/stream", UpdateVersionStream)
 	return db, router, rawToken
@@ -124,7 +126,7 @@ func TestUpdateTaskReadRedactsSensitiveTargetOutsidePrimaryAdministrator(t *test
 		router.ServeHTTP(response, request)
 		return response
 	}
-	if response := read("delegated", payload.Data.PublicID); response.Code != http.StatusOK || bytes.Contains(response.Body.Bytes(), []byte("sha256:")) || bytes.Contains(response.Body.Bytes(), []byte(targetRevisionForController)) {
+	if response := read("delegated", payload.Data.PublicID); response.Code != http.StatusOK || bytes.Contains(response.Body.Bytes(), []byte("sha256:")) || bytes.Contains(response.Body.Bytes(), []byte(targetRevisionForController[:12])) {
 		t.Fatalf("delegated response leaked target: %d %s", response.Code, response.Body.String())
 	}
 	if response := read("primary", payload.Data.PublicID); response.Code != http.StatusOK || !bytes.Contains(response.Body.Bytes(), []byte("sha256:")) || !bytes.Contains(response.Body.Bytes(), []byte(targetRevisionForController)) {
@@ -132,6 +134,62 @@ func TestUpdateTaskReadRedactsSensitiveTargetOutsidePrimaryAdministrator(t *test
 	}
 	if response := read("primary", "1"); response.Code != http.StatusNotFound {
 		t.Fatalf("sequential task id was accepted: %d %s", response.Code, response.Body.String())
+	}
+}
+
+func TestUpdateOverviewRedactsBuildIdentityAndErrorsOutsidePrimary(t *testing.T) {
+	_, router, _ := setupUpdateControllerTest(t)
+	for _, releaseVersion := range []string{"v2.0.0", targetRevisionForController[:12]} {
+		t.Run(releaseVersion, func(t *testing.T) {
+			privateError := "Get https://example.test/compare/" + targetRevisionForController + "...target: timeout"
+			discoverUpdates = func(*gin.Context) updates.Report {
+				return updates.Report{
+					Installed: updates.Installed{Revision: targetRevisionForController, Digest: "sha256:private"},
+					Source:    updates.Source{Revision: targetRevisionForController, Status: updates.StatusCheckFailed, Error: privateError},
+					Release:   updates.SourceRelease{Version: releaseVersion, Revision: targetRevisionForController, Status: updates.StatusCheckFailed, Error: privateError},
+					Channels: []updates.Channel{
+						{Name: "stable", Version: "v1.2.3", Status: updates.StatusCurrent},
+						{Name: "edge", Version: targetRevisionForController[:12], Image: "ghcr.io/ynby233/echo-noise", Digest: "sha256:private", Revision: targetRevisionForController, Status: updates.StatusCheckFailed, Error: privateError},
+					},
+				}
+			}
+			for _, role := range []string{"delegated", "ordinary", "primary"} {
+				request := httptest.NewRequest(http.MethodGet, "/updates", nil)
+				request.Header.Set("X-Test-Role", role)
+				response := httptest.NewRecorder()
+				router.ServeHTTP(response, request)
+				if response.Code != http.StatusOK {
+					t.Fatalf("role=%s status=%d body=%s", role, response.Code, response.Body.String())
+				}
+				body := response.Body.String()
+				if role == "primary" {
+					if !strings.Contains(body, targetRevisionForController) || !strings.Contains(body, "example.test") {
+						t.Fatalf("primary lost diagnostic identity: %s", body)
+					}
+					continue
+				}
+				for _, private := range []string{targetRevisionForController[:12], "sha256:", "example.test", "ghcr.io"} {
+					if strings.Contains(body, private) {
+						t.Errorf("%s response leaked %q: %s", role, private, body)
+					}
+				}
+				var payload struct {
+					Data struct {
+						Report updates.Report `json:"report"`
+					} `json:"data"`
+				}
+				if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+					t.Fatal(err)
+				}
+				public := payload.Data.Report
+				if public.Source.Status != updates.StatusCheckFailed || public.Source.Error == "" || public.Channel("stable").Version != "v1.2.3" {
+					t.Fatalf("public status or release version lost: %#v", public)
+				}
+				if releaseVersion == "v2.0.0" && public.Release.Version != releaseVersion {
+					t.Fatalf("public formal version lost: %#v", public.Release)
+				}
+			}
+		})
 	}
 }
 

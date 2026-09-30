@@ -65,10 +65,25 @@ func GetUpdates(c *gin.Context) {
 	if actorID != models.PrimaryAdminUserID {
 		report.Installed.Revision, report.Installed.Digest = "", ""
 		report.Source.Revision, report.Release.Revision = "", ""
+		report.Release.Version = publicReleaseVersion(report.Release.Version)
+		if report.Source.Error != "" {
+			report.Source.Error = "版本检查失败，请稍后重试"
+		}
+		if report.Release.Error != "" {
+			report.Release.Error = "正式发行检查失败，请稍后重试"
+		}
 		for index := range report.Channels {
 			report.Channels[index].Image = ""
 			report.Channels[index].Digest = ""
 			report.Channels[index].Revision = ""
+			if report.Channels[index].Name == "stable" {
+				report.Channels[index].Version = publicReleaseVersion(report.Channels[index].Version)
+			} else {
+				report.Channels[index].Version = ""
+			}
+			if report.Channels[index].Error != "" {
+				report.Channels[index].Error = "更新渠道检查失败，请稍后重试"
+			}
 		}
 		credential = nil
 	}
@@ -168,6 +183,11 @@ func GetUpdateTask(c *gin.Context) {
 	}
 	if actorID != models.PrimaryAdminUserID {
 		task.TargetImage, task.TargetDigest, task.TargetRevision, task.ErrorSummary = "", "", "", ""
+		if task.Channel == "stable" {
+			task.TargetVersion = publicReleaseVersion(task.TargetVersion)
+		} else {
+			task.TargetVersion = ""
+		}
 	}
 	c.JSON(http.StatusOK, dto.OK(task, "更新任务读取成功"))
 }
@@ -263,7 +283,7 @@ func ClaimUpdateTask(c *gin.Context) {
 
 func RecordUpdateTaskEvent(c *gin.Context) {
 	var request struct {
-		Status  string `json:"status"`
+		Status  string `json:"status" binding:"required"`
 		Summary string `json:"summary"`
 	}
 	if err := c.ShouldBindJSON(&request); err != nil {

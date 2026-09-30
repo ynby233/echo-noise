@@ -349,7 +349,13 @@ func UpdateExecutorAuthMiddleware() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-		credential, err := updates.NewTaskService(db).Authenticate(token)
+		service := updates.NewTaskService(db)
+		var credential models.UpdateExecutorCredential
+		if c.Request.Method == http.MethodPost && c.FullPath() == "/api/updates/executor/tasks/:id/events" {
+			credential, err = service.AuthenticateTaskReport(token, c.Param("id"))
+		} else {
+			credential, err = service.Authenticate(token)
+		}
 		if err != nil {
 			c.JSON(http.StatusUnauthorized, dto.Fail[any]("执行器凭据无效"))
 			c.Abort()

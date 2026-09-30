@@ -143,6 +143,9 @@ func (s *TaskService) Claim(credentialID uint) (*models.UpdateTask, error) {
 
 func (s *TaskService) RecordEvent(credentialID uint, publicID, next, _ string) error {
 	next = strings.TrimSpace(next)
+	if next == "" {
+		return ErrInvalidTransition
+	}
 	return s.db.Transaction(func(tx *gorm.DB) error {
 		var task models.UpdateTask
 		if err := tx.Where("public_id = ?", strings.TrimSpace(publicID)).First(&task).Error; err != nil {
@@ -190,17 +193,16 @@ func (s *TaskService) RecordEvent(credentialID uint, publicID, next, _ string) e
 }
 
 func validTaskTransition(current, next string) bool {
-	if next == TaskFailed {
-		return current != TaskPending && !terminalTaskStatus(current)
+	if current == TaskNeedsAttention {
+		// Reconcile the host journal/runtime before verifying; never reinstall.
+		return next == TaskVerifying || next == TaskFailed
 	}
-	if next == TaskNeedsAttention {
-		return current != TaskPending && current != TaskClaimed && !terminalTaskStatus(current)
-	}
-	return map[string]string{TaskClaimed: TaskDownloading, TaskDownloading: TaskStopping, TaskStopping: TaskBackingUp, TaskBackingUp: TaskReplacing, TaskReplacing: TaskVerifying, TaskVerifying: TaskSucceeded}[current] == next
+	forward, ok := map[string]string{TaskClaimed: TaskDownloading, TaskDownloading: TaskStopping, TaskStopping: TaskBackingUp, TaskBackingUp: TaskReplacing, TaskReplacing: TaskVerifying, TaskVerifying: TaskSucceeded}[current]
+	return ok && (next == forward || next == TaskFailed || (next == TaskNeedsAttention && current != TaskClaimed))
 }
 
 func terminalTaskStatus(status string) bool {
-	return status == TaskSucceeded || status == TaskFailed || status == TaskNeedsAttention
+	return status == TaskSucceeded || status == TaskFailed
 }
 
 func (s *TaskService) CreateCredential(actorID uint, name string) (models.UpdateExecutorCredential, string, error) {
@@ -249,13 +251,23 @@ func (s *TaskService) CurrentCredential() (*models.UpdateExecutorCredential, err
 }
 
 func (s *TaskService) Authenticate(raw string) (models.UpdateExecutorCredential, error) {
+	return s.authenticate(raw, "")
+}
+
+// AuthenticateTaskReport lets a rotated credential retry only its own final
+// report after losing the response. It grants no new claim or runtime access.
+func (s *TaskService) AuthenticateTaskReport(raw, publicID string) (models.UpdateExecutorCredential, error) {
+	return s.authenticate(raw, strings.TrimSpace(publicID))
+}
+
+func (s *TaskService) authenticate(raw, reportTaskID string) (models.UpdateExecutorCredential, error) {
 	var credential models.UpdateExecutorCredential
 	if err := s.db.Where("token_hash = ? AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > ?)", HashExecutorToken(strings.TrimSpace(raw)), time.Now().UTC()).First(&credential).Error; err != nil {
 		return credential, ErrCredentialInvalid
 	}
 	if credential.SupersededAt != nil {
 		var assigned int64
-		if err := s.db.Model(&models.UpdateTask{}).Where("executor_credential_id = ? AND active_slot = ?", credential.ID, 1).Count(&assigned).Error; err != nil || assigned == 0 {
+		if err := s.db.Model(&models.UpdateTask{}).Where("executor_credential_id = ? AND (active_slot = ? OR (public_id = ? AND status IN ?))", credential.ID, 1, reportTaskID, []string{TaskSucceeded, TaskFailed}).Count(&assigned).Error; err != nil || assigned == 0 {
 			return credential, ErrCredentialInvalid
 		}
 	}

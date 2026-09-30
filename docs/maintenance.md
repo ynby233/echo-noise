@@ -102,7 +102,7 @@ Windows 开发环境可先执行 `. D:\ChatGPT\environments\echo-noise\env.ps1`�
 
 `GET /api/updates` 和 `GET /api/updates/tasks/:id` 是只读查询；受托管理员即使持有 `version.view`，也不会得到完整 revision、digest、执行器信息或宿主错误摘要。`PUT /api/updates/channel` 只修改后续跟随偏好，不创建任务。协调服务内的任务创建仅接受固定 ID 1 站长选择的、服务端发现的 `stable`/`edge` 后代目标；目标 digest/revision 在创建时固定，连续提交返回同一条活动任务。U2 尚无 U3/U4 的宿主执行/备份核验，生产 `POST /api/updates/tasks` 与旧 `POST /api/version/update` 均明确返回 501，不会创建任务；U3/U4 接入并完成安全验证后才开放创建。历史 `GET /api/version/update/stream` 已退役且无副作用。
 
-执行器凭据由站长在 `/api/updates/executor/credential` 创建、查看状态或撤销，明文只在创建响应中出现一次，数据库只存验证值。创建时生成持久的实例 ID；站长在 `/api/updates` 可见，宿主需在首次配对时人工核对，并从受限 `/api/updates/executor/runtime` 再次核对。执行器必须以 `Authorization: Bearer ...` 调用 `/api/updates/executor/claim`、`/api/updates/executor/tasks/:id/events` 和 `/api/updates/executor/runtime`；用户登录、普通管理员 token 与执行器 token 不互通。轮换后旧凭据只可完成已领取任务，明确撤销则立即失效。claim 响应丢失后，同一执行器再次领取会得到原任务；任务不会因心跳超时分配给另一执行器，状态只能按真实阶段前进或进入 `failed`/`needs_attention`。服务端不保存执行器回报的自由文本，避免将宿主路径或凭据写入任务/审计；详情查宿主日志。
+执行器凭据由站长在 `/api/updates/executor/credential` 创建、查看状态或撤销，明文只在创建响应中出现一次，数据库只存验证值。创建时生成持久的实例 ID；站长在 `/api/updates` 可见，宿主需在首次配对时人工核对，并从受限 `/api/updates/executor/runtime` 再次核对。执行器必须以 `Authorization: Bearer ...` 调用 `/api/updates/executor/claim`、`/api/updates/executor/tasks/:id/events` 和 `/api/updates/executor/runtime`；用户登录、普通管理员 token 与执行器 token 不互通。轮换后旧凭据只可完成已领取任务；任务结束后仅可重试该任务的最终回报，不能领取新任务或读取运行身份，过期或明确撤销仍立即失效。claim 响应丢失后，同一执行器再次领取会得到原任务；任务不会因心跳超时分配给另一执行器，状态只能按真实阶段前进或进入 `failed`/`needs_attention`。`needs_attention` 保留活动占位并可由原执行器取回；宿主核对本地记录和实际运行状态后只能继续 `verifying` 或确认 `failed`，不能退回替换阶段，结果明确前禁止创建第二个任务。空白及未知回报状态被拒绝。服务端不保存执行器回报的自由文本，避免将宿主路径或凭据写入任务/审计；详情查宿主日志。
 
 U2 聚焦回归：
 
