@@ -77,14 +77,21 @@ def private(path, directory=False):
                     "control_parent_writable")
 
 
-def command(args, *, input=None, timeout=300):
+def command(args, *, input=None, timeout=300, env=None):
     try:
-        result = subprocess.run(args, input=input, text=True, capture_output=True, timeout=timeout)
+        result = subprocess.run(args, input=input, text=True, capture_output=True, timeout=timeout, env=env)
     except (OSError, subprocess.TimeoutExpired):
         raise Stop("command_unavailable_or_timeout") from None
     # Never forward Docker output: it can contain env/config values and private paths.
     require(result.returncode == 0, "command_failed:" + Path(args[0]).name)
     return result.stdout
+
+
+def host_settings(config):
+    result = {k: v for k, v in config.items() if k not in ("Binds", "Mounts")}
+    # Engine startup normalizes an unset OOM flag to null; both keep OOM killing enabled.
+    result["OomKillDisable"] = bool(result.get("OomKillDisable"))
+    return result
 
 
 class Executor:
@@ -212,10 +219,24 @@ class Executor:
     def inspect(self, reference):
         return json.loads(command(["docker", "inspect", reference]))[0]
 
-    def compose(self, *args):
+    def compose(self, *args, image_override=None):
         cfg = self.cfg
+        environment = dict(os.environ)
+        environment.pop("UPDATE_IMAGE", None)
+        if image_override is not None:
+            environment["UPDATE_IMAGE"] = image_override
         return command(["docker", "compose", "--project-name", cfg["project"], "--env-file", cfg["image_file"],
-                        "--file", cfg["compose_file"], *args])
+                        "--file", cfg["compose_file"], *args], env=environment)
+
+    def check_compose_image_source(self):
+        original = json.loads(self.compose("config", "--format", "json"))
+        probe = IMAGE + "@sha256:" + "0" * 64
+        changed = json.loads(self.compose("config", "--format", "json", image_override=probe))
+        service = self.cfg["service"]
+        require(changed["services"][service]["image"] == probe, "compose_target_image_not_variable")
+        changed["services"][service]["image"] = original["services"][service]["image"]
+        require(changed == original, "compose_image_variable_affects_other_settings")
+        return original
 
     def container_id(self):
         if self.cfg["mode"] == "docker":
@@ -265,7 +286,7 @@ class Executor:
         private(self.cfg["image_file"])
         if self.cfg["mode"] == "compose":
             private(self.cfg["compose_file"])
-            model = json.loads(self.compose("config", "--format", "json"))
+            model = self.check_compose_image_source()
             service = model["services"][self.cfg["service"]]
             require("build" not in service and "image" in service, "compose_prebuilt_image_required")
             require(Path(self.cfg["compose_file"]).read_text().count("${UPDATE_IMAGE") == 1, "compose_single_image_setting_required")
@@ -285,8 +306,7 @@ class Executor:
                 self.check_mounts(configured)
                 for m in current["Mounts"]:
                     require(m.get("Propagation", "") in ("", "rprivate") and m.get("Driver", "local") == "local", "mount_option_unsupported")
-                host = lambda c: {k: v for k, v in c["HostConfig"].items() if k not in ("Binds", "Mounts")}
-                actual, desired = host(current), host(configured)
+                actual, desired = host_settings(current["HostConfig"]), host_settings(configured["HostConfig"])
                 differences = sorted(k for k in actual.keys() | desired.keys() if actual.get(k) != desired.get(k))
                 require(not differences, "docker_parameters_not_represented:" + ",".join(differences))
                 for key in ("Env", "Cmd", "Entrypoint", "User", "WorkingDir", "Healthcheck", "Labels", "Volumes", "ExposedPorts", "StopSignal"):

@@ -230,6 +230,18 @@ class RecoveryTests(unittest.TestCase):
             self.ex.stop_container()
         self.assertEqual(calls[0], ["docker", "update", "--restart=no", "old-container"])
 
+    def test_compose_variable_must_select_only_registered_service(self):
+        original = {"services": {"app": {"image": "old"}, "other": {"image": "old"}}}
+        changed = {"services": {"app": {"image": "old"}, "other": {"image": "target"}}}
+        self.ex.cfg["service"] = "app"
+        self.ex.compose = lambda *a, **k: json.dumps(changed if k else original)
+        with self.assertRaises(executor.Stop):
+            self.ex.check_compose_image_source()
+
+    def test_engine_normalized_oom_flag_keeps_true_distinct(self):
+        self.assertEqual(executor.host_settings({"OomKillDisable": None}), executor.host_settings({"OomKillDisable": False}))
+        self.assertNotEqual(executor.host_settings({"OomKillDisable": True}), executor.host_settings({"OomKillDisable": False}))
+
 
 if __name__ == "__main__":
     unittest.main()
