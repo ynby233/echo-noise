@@ -460,6 +460,12 @@ class PreflightTests(unittest.TestCase):
             self.assertEqual(self.ex.preflight()["Id"], self.current["Id"])
             self.assertFalse(self.probe_present)
 
+    def test_host_network_inherited_engine_hostname_is_preserved(self):
+        self.current["HostConfig"]["NetworkMode"] = self.probe["HostConfig"]["NetworkMode"] = "host"
+        self.current["NetworkSettings"]["Networks"] = self.probe["NetworkSettings"]["Networks"] = {"host": {}}
+        self.current["Config"]["Hostname"] = self.probe["Config"]["Hostname"] = "engine-host"
+        self.assertEqual(self.ex.preflight()["Id"], self.current["Id"])
+
     def test_compose_default_and_explicit_one_pass(self):
         path = self.root / "compose.json"
         path.write_text('${UPDATE_IMAGE}'); path.chmod(0o600)

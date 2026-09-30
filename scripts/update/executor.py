@@ -371,7 +371,9 @@ class Executor:
                     aliases = endpoint.get("Aliases") or []
                     require(all(a in (current["Id"][:12], current.get("Name", "").lstrip("/")) for a in aliases),
                             "docker_network_alias_not_represented")
-                require(current["Config"].get("Hostname") == current["Id"][:12] and
+                hostname = configured["Config"].get("Hostname")
+                default_hostname = current["Id"][:12] if hostname == configured["Id"][:12] else hostname
+                require(current["Config"].get("Hostname") == default_hostname and
                         current["Config"].get("Domainname", "") == configured["Config"].get("Domainname", ""),
                         "docker_hostname_or_domain_not_represented")
                 for key in ("Env", "Cmd", "Entrypoint", "User", "WorkingDir", "Healthcheck", "Labels", "Volumes", "ExposedPorts", "StopSignal"):
