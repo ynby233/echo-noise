@@ -32,7 +32,7 @@ python3 /etc/echo-noise-update/executor.py check /etc/echo-noise-update/executor
 
 `check` 核对配对、依赖、架构、实际容器、登记挂载、权限和最低磁盘余量。Docker 模式创建**不启动**的临时容器，用旧 image ID 比较固定启动参数，然后删除它；不执行迁移。无法表示的高级参数、额外网络、自定义配置会拒绝，可改用管理员 Compose，不能假装克隆任意 inspect。支持 Docker network、restart、env_file、devices、ports、log_driver/options、entrypoint、command、user；挂载支持显式 bind/现存 named volume，非默认传播/卷驱动不支持。`min_free_bytes` 默认 1 GiB，检查状态/备份及 Docker 根目录；不是备份容量保证，U4 必须按真实布局测量。
 
-实际网络集合必须与探测容器一致；静态 IPAM、额外 alias/Links/DriverOpts/网关优先级和显式自定义 hostname/domain 无法由本期参数表示，停机前拒绝。默认容器 ID 主机名和动态 IP/endpoint ID 不作为配置差异。应用挂载按宿主来源 realpath、同一文件与目录包含关系检查 Docker UNIX endpoint（支持本地 context/DOCKER_HOST，含 `/run`/`/var/run` 别名）；socket 改名、符号链接和整个父目录均拒绝。远程/TCP endpoint 或无法核实的本地 socket 不支持；普通数据 bind 和 named volume 仍核对登记关系。
+实际网络集合必须与探测容器一致；静态 IPAM、额外 alias/Links/DriverOpts/网关优先级和显式自定义 hostname/domain 无法由本期参数表示，停机前拒绝。默认容器 ID 主机名、host 网络继承的宿主主机名和动态 IP/endpoint ID 不作为配置差异。应用挂载按宿主来源 realpath、同一文件与目录包含关系检查 Docker UNIX endpoint（支持本地 context/DOCKER_HOST，含 `/run`/`/var/run` 别名）；socket 改名、符号链接和整个父目录均拒绝。远程/TCP endpoint 或无法核实的本地 socket 不支持；普通数据 bind 和 named volume 仍核对登记关系。
 
 固定 `<container>-update-check` 探测名带 instance/config/用途标签。下次预检以及 create 回执丢失后的清理只删除标签完全匹配、状态仍为 created 的自有容器，使用非 force rm。未标记的旧探测容器/同名他人容器返回 `probe_name_owned_by_other_remove_or_register_manually`，需管理员核对身份、用途、未运行事实后手工处理；执行器不按名称猜测归属。已运行/曾运行探测容器返回 `probe_has_run_requires_manual_reconciliation`，保留现场，不删业务容器、不随机换名、不 prune。
 
