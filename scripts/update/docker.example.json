@@ -1,0 +1,26 @@
+{
+  "url": "http://127.0.0.1:1314",
+  "instance_id": "REPLACE_WITH_PRIMARY_ADMIN_CONFIRMED_INSTANCE_ID",
+  "token_file": "/etc/echo-noise-update/executor-token",
+  "state_dir": "/var/lib/echo-noise-update/state",
+  "backup_dir": "/var/lib/echo-noise-update/backups",
+  "image_file": "/etc/echo-noise-update/image.env",
+  "platform": "linux/amd64",
+  "mode": "docker",
+  "container": "echo-noise",
+  "mounts": [
+    {"type": "bind", "source": "/srv/echo-noise/config", "target": "/app/config"},
+    {"type": "bind", "source": "/srv/echo-noise/data", "target": "/app/data"}
+  ],
+  "docker": {
+    "network": "host",
+    "restart": "no",
+    "env_file": "/etc/echo-noise-update/app.env",
+    "devices": ["/dev/fuse:/dev/fuse:rwm"],
+    "log_driver": "json-file",
+    "log_options": {"max-size": "100m", "max-file": "5"}
+  },
+  "min_free_bytes": 1073741824,
+  "stop_timeout": 60,
+  "health_timeout": 120
+}

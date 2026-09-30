@@ -1,0 +1,20 @@
+{
+  "url": "http://127.0.0.1:1314",
+  "instance_id": "REPLACE_WITH_PRIMARY_ADMIN_CONFIRMED_INSTANCE_ID",
+  "token_file": "/etc/echo-noise-update/executor-token",
+  "state_dir": "/var/lib/echo-noise-update/state",
+  "backup_dir": "/var/lib/echo-noise-update/backups",
+  "image_file": "/etc/echo-noise-update/image.env",
+  "platform": "linux/amd64",
+  "mode": "compose",
+  "compose_file": "/etc/echo-noise-update/compose.yml",
+  "project": "echo-noise",
+  "service": "app",
+  "mounts": [
+    {"type": "bind", "source": "/srv/echo-noise/config", "target": "/app/config"},
+    {"type": "bind", "source": "/srv/echo-noise/data", "target": "/app/data"}
+  ],
+  "min_free_bytes": 1073741824,
+  "stop_timeout": 60,
+  "health_timeout": 120
+}

@@ -176,6 +176,10 @@ node scripts/module-recovery.browser.cjs
 
 ## 6. 已知平台边界
 
+### U3 外部执行器
+
+通用 Docker/Compose 执行器、配置和恢复说明见 [scripts/update](../scripts/update/README.md)。迁移后加载 `D:\ChatGPT\app\environments\echo-noise\env.ps1`，显式切回 `D:\ChatGPT\app\projects\echo-noise`，避免脚本内旧路径误导。阶段检查为 Python 标准库测试、U2 相关 Go 测试、fixture 编译/vet 和 `Test external update executor` 真实隔离引擎测试；未改前端，不重复全部浏览器回归。生产任务创建仍 501，U4 一致备份就绪前 `run` 拒绝停换；不能将空数据 fixture 用于现有业务实例。实际 NAS 调度安装归 U6。
+
 - SQLite 的单连接和 prepared-statement 策略只适用于 SQLite；PostgreSQL/MySQL 使用各自连接池。
 - 恢复是“验证并暂存，重启前应用”，不是请求内热替换。恢复完成前保留旧数据回退路径；不能把 Git 回退当作数据回退。
 - 旧归档可能没有 Blob 或新媒体目录，只能作为不完整迁移；外置 `ATTACHMENT_BLOB_ROOT` 必须随布局解析。

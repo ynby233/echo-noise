@@ -1,0 +1,42 @@
+name: Test external update executor
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/update/**'
+      - 'internal/updates/**'
+      - 'internal/controllers/update_task_controller.go'
+      - 'internal/middleware/auth.go'
+      - 'internal/models/update.go'
+      - 'go.mod'
+      - 'go.sum'
+      - '.github/workflows/update-executor.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  isolated-docker-compose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: Recovery and protocol checks
+        run: |
+          python3 -m unittest discover -s scripts/update -p 'test_*.py' -v
+          go test ./internal/updates ./internal/controllers ./internal/middleware ./internal/routers -run 'Update|Executor|Task|Overview|Rotated' -count=1 -timeout=8m
+      - name: Compile two isolated coordinator builds
+        env:
+          CGO_ENABLED: '0'
+        run: |
+          for i in 1 2; do
+            revision=$(printf '%040d' 0 | tr 0 "$i")
+            go build -ldflags "-X github.com/rcy1314/echo-noise/internal/buildinfo.Revision=$revision" -o "coordinator-$i" ./scripts/update/fixture
+          done
+      - name: Real registry and Docker/Compose replacement
+        run: sudo -E python3 scripts/update/test-docker.py

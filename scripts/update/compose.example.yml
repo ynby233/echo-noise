@@ -1,0 +1,18 @@
+# Prebuilt final-mcp, single application service; do not add the development MCP service.
+services:
+  app:
+    image: ${UPDATE_IMAGE:?Set a pinned digest in the administrator image.env}
+    platform: linux/amd64
+    env_file:
+      - /etc/echo-noise-update/app.env
+    volumes:
+      - /srv/echo-noise/config:/app/config
+      - /srv/echo-noise/data:/app/data
+    ports:
+      - "127.0.0.1:1314:1314"
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "5"
+    restart: "no"
