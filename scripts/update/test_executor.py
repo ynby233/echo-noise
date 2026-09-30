@@ -210,6 +210,26 @@ class RecoveryTests(unittest.TestCase):
         self.assertEqual(result["manifest_digest"], platform_digest)
         self.assertEqual(result["image_id"], image_id)
 
+    def test_completion_intent_and_final_event_persist_together(self):
+        self.claim()
+        snapshots = []
+        self.ex.save = lambda: snapshots.append(copy.deepcopy(self.ex.record))
+        self.ex.phase("complete", "succeeded")
+        self.assertTrue(snapshots)
+        for snapshot in snapshots:
+            self.assertTrue(snapshot["confirmed"] == "succeeded" or "succeeded" in snapshot["pending"])
+
+    def test_compose_disables_old_restart_before_stop(self):
+        self.claim()
+        self.ex.cfg["mode"] = "compose"
+        self.ex.cfg["service"] = "app"
+        calls = []
+        self.ex.compose = lambda *args: calls.append(["compose", *args])
+        self.ex.inspect = lambda ref: {"State": {"Running": False}}
+        with patch.object(executor, "command", side_effect=lambda args: calls.append(args) or ""):
+            self.ex.stop_container()
+        self.assertEqual(calls[0], ["docker", "update", "--restart=no", "old-container"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -179,6 +179,7 @@ class Executor:
                        "token_file": self.cfg["token_file"], "task": task, "confirmed": task["status"],
                        "pending": [], "step": "claimed", "closed": False,
                        "old_container": old["Id"], "old_image": old["Image"],
+                       "old_restart_policy": old.get("HostConfig", {}).get("RestartPolicy"),
                        "old_image_setting": Path(self.cfg["image_file"]).read_text() if Path(self.cfg["image_file"]).exists() else None,
                        "backup_path": str(Path(self.cfg["backup_dir"]) / task["id"])}
         if task["status"] != "claimed":
@@ -204,9 +205,9 @@ class Executor:
 
     def phase(self, step, status=None):
         self.record["step"] = step
-        self.save()
         if status:
             self.queue(status)
+        self.save()
 
     def inspect(self, reference):
         return json.loads(command(["docker", "inspect", reference]))[0]
@@ -285,7 +286,9 @@ class Executor:
                 for m in current["Mounts"]:
                     require(m.get("Propagation", "") in ("", "rprivate") and m.get("Driver", "local") == "local", "mount_option_unsupported")
                 host = lambda c: {k: v for k, v in c["HostConfig"].items() if k not in ("Binds", "Mounts")}
-                require(host(current) == host(configured), "docker_parameters_not_represented")
+                actual, desired = host(current), host(configured)
+                differences = sorted(k for k in actual.keys() | desired.keys() if actual.get(k) != desired.get(k))
+                require(not differences, "docker_parameters_not_represented:" + ",".join(differences))
                 for key in ("Env", "Cmd", "Entrypoint", "User", "WorkingDir", "Healthcheck", "Labels", "Volumes", "ExposedPorts", "StopSignal"):
                     require(current["Config"].get(key) == configured["Config"].get(key), "docker_config_not_represented")
             finally:
@@ -329,9 +332,11 @@ class Executor:
         raise Stop("u4_backup_unavailable")
 
     def stop_container(self):
-        if self.cfg["mode"] == "docker":
-            command(["docker", "update", "--restart=no", self.record["old_container"]])
-        self.compose("stop", "--timeout", str(self.cfg.get("stop_timeout", 60)), self.cfg["service"]) if self.cfg["mode"] == "compose" else command(["docker", "stop", "--time", str(self.cfg.get("stop_timeout", 60)), self.record["old_container"]])
+        command(["docker", "update", "--restart=no", self.record["old_container"]])
+        if self.cfg["mode"] == "compose":
+            self.compose("stop", "--timeout", str(self.cfg.get("stop_timeout", 60)), self.cfg["service"])
+        else:
+            command(["docker", "stop", "--time", str(self.cfg.get("stop_timeout", 60)), self.record["old_container"]])
         require(not self.inspect(self.record["old_container"])["State"]["Running"], "old_writer_still_running")
 
     def replace(self):
@@ -388,6 +393,7 @@ class Executor:
         # Terminal retries use the pinned credential and no claim/runtime operation.
         self.flush()
         if self.record["step"] == "complete":
+            require(self.record["confirmed"] == "succeeded", "journal_terminal_unconfirmed")
             self.record["closed"] = True
             self.save()
             return

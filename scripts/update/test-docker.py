@@ -20,6 +20,23 @@ import executor
 
 
 class IsolatedExecutor(executor.Executor):
+    def inspect(self, reference):
+        result = super().inspect(reference)
+        if str(reference).endswith("-update-check") or result.get("Name", "").endswith("-update-check"):
+            self.probe = result
+        return result
+
+    def preflight(self):
+        try:
+            return super().preflight()
+        except executor.Stop:
+            # Fixture-only diagnostics: no personal env, credentials or production input.
+            if hasattr(self, "probe"):
+                current = self.inspect(self.container_id())["HostConfig"]
+                expected = self.probe["HostConfig"]
+                print("fixture HostConfig differences: " + json.dumps({k: [current.get(k), expected.get(k)] for k in current.keys() | expected.keys() if current.get(k) != expected.get(k) and k not in ("Binds", "Mounts")}), flush=True)
+            raise
+
     def reference(self):
         # Only the fixture maps the official TaskService repository to a loopback registry.
         return registry_image + "@" + self.record["task"]["target_digest"]
