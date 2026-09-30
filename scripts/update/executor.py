@@ -305,8 +305,10 @@ class Executor:
 
     def docker_sockets(self):
         # Docker context selection takes precedence over DOCKER_HOST.
-        endpoint = os.environ.get("DOCKER_HOST") if not os.environ.get("DOCKER_CONTEXT") else None
-        endpoint = endpoint or json.loads(command(["docker", "context", "inspect", "--format", "{{json .Endpoints.docker.Host}}"] ))
+        context = os.environ.get("DOCKER_CONTEXT")
+        endpoint = os.environ.get("DOCKER_HOST") if not context else None
+        endpoint = endpoint or json.loads(command(["docker", "context", "inspect", *([context] if context else []),
+                                                  "--format", "{{json .Endpoints.docker.Host}}"] ))
         require(endpoint.startswith("unix://") and Path(endpoint[7:]).is_absolute(), "local_unix_docker_endpoint_required")
         socket = Path(endpoint[7:]).resolve(strict=True)
         require(stat.S_ISSOCK(socket.stat().st_mode), "docker_endpoint_not_socket")

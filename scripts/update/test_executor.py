@@ -454,7 +454,9 @@ class PreflightTests(unittest.TestCase):
                 def remote_context(args, **kwargs):
                     if args[1:3] == ["context", "inspect"]:
                         self.commands.append(args)
-                        return json.dumps("tcp://remote-host:2375")
+                        # Context metadata must explicitly name the selected context.
+                        return json.dumps("tcp://remote-host:2375" if "remote" in args else
+                                          "unix://" + str(self.root / "socket"))
                     return command(args, **kwargs)
                 with patch.object(executor, "command", side_effect=remote_context):
                     with self.assertRaisesRegex(executor.Stop, "local_unix_docker_endpoint_required"):
