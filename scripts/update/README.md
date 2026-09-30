@@ -20,7 +20,7 @@ Linux 宿主执行器，更新一个管理员登记的 Docker 容器或 Compose 
 
 管理员核对目标名称、镜像、路径、网络、设备、日志和 restart 参数，复制 `docker.example.json` 或 `compose.example.json`，填写**明确登记部署**。不按标签或“第一个容器”猜目标。占位 instance_id/digest 会被拒绝。
 
-脚本、配置、token、image/env、状态和备份目录均在应用挂载之外，由 root/执行用户持有；建议目录 0700、配置与密钥 0600，父目录不能由其他用户写入。执行用户需 Docker 管理权限和状态/备份目录写权限，NAS 管理员身份不自动证明有 Docker 权限。
+脚本安装目录、配置、token、image/env、状态和备份目录均在应用挂载之外，由 root/执行用户持有；建议目录 0700、脚本 0700、配置与密钥 0600。控制文件及所有父目录检查 owner/mode，拒绝父目录符号链接、其他 UID 所有的目录和可写父目录；root 所有的 sticky 临时目录允许，但其子目录仍须可信。不要将脚本安装到其他用户可替换的位置。执行用户需 Docker 管理权限和状态/备份目录写权限，NAS 管理员身份不自动证明有 Docker 权限。
 
 ```sh
 install -d -m 700 /etc/echo-noise-update /var/lib/echo-noise-update/state /var/lib/echo-noise-update/backups
@@ -31,6 +31,10 @@ python3 /etc/echo-noise-update/executor.py check /etc/echo-noise-update/executor
 ```
 
 `check` 核对配对、依赖、架构、实际容器、登记挂载、权限和最低磁盘余量。Docker 模式创建**不启动**的临时容器，用旧 image ID 比较固定启动参数，然后删除它；不执行迁移。无法表示的高级参数、额外网络、自定义配置会拒绝，可改用管理员 Compose，不能假装克隆任意 inspect。支持 Docker network、restart、env_file、devices、ports、log_driver/options、entrypoint、command、user；挂载支持显式 bind/现存 named volume，非默认传播/卷驱动不支持。`min_free_bytes` 默认 1 GiB，检查状态/备份及 Docker 根目录；不是备份容量保证，U4 必须按真实布局测量。
+
+实际网络集合必须与探测容器一致；静态 IPAM、额外 alias/Links/DriverOpts/网关优先级和显式自定义 hostname/domain 无法由本期参数表示，停机前拒绝。默认容器 ID 主机名和动态 IP/endpoint ID 不作为配置差异。应用挂载按宿主来源 realpath、同一文件与目录包含关系检查 Docker UNIX endpoint（支持本地 context/DOCKER_HOST，含 `/run`/`/var/run` 别名）；socket 改名、符号链接和整个父目录均拒绝。远程/TCP endpoint 或无法核实的本地 socket 不支持；普通数据 bind 和 named volume 仍核对登记关系。
+
+固定 `<container>-update-check` 探测名带 instance/config/用途标签。下次预检以及 create 回执丢失后的清理只删除标签完全匹配、状态仍为 created 的自有容器，使用非 force rm。未标记的旧探测容器/同名他人容器返回 `probe_name_owned_by_other_remove_or_register_manually`，需管理员核对身份、用途、未运行事实后手工处理；执行器不按名称猜测归属。已运行/曾运行探测容器返回 `probe_has_run_requires_manual_reconciliation`，保留现场，不删业务容器、不随机换名、不 prune。
 
 ## 部署配置真源
 
@@ -52,6 +56,8 @@ docker compose --project-name echo-noise --env-file /etc/echo-noise-update/image
   --file /etc/echo-noise-update/compose.yml up -d --no-build
 ```
 
+解析后的 scale/deploy.replicas 仅允许缺省或 1，deploy.mode 仅允许缺省/replicated，start-first 更新不支持；即使当前通过 `--scale app=1` 仅启动一个容器，也拒绝多副本文件，不覆盖管理员配置。预检和替换前均核对。
+
 执行器只原子更新 image 文件唯一 `UPDATE_IMAGE` 字段，保留其他行，然后对指定服务 `up -d --no-deps --no-build --pull never`；不改整份 Compose、不重启依赖、不删卷。记录保留原 image 配置与旧 image ID，失败**不自动回退配置或业务库**。image 文件不要混入密码。目标来自任务确定的 digest；核对 registry 平台 descriptor、OCI revision、拉取结果，分别记录索引 digest、平台 manifest digest 和 image ID。健康及 runtime 的 instance_id/full revision 共同验证，不靠 IMAGE_DIGEST 环境变量自证成功。
 
 ## 调用与恢复
@@ -70,6 +76,8 @@ python3 executor.py run /absolute/executor.json     # 先恢复，再领取；U4
 最终 ACK 丢失保留 `step=complete` 和待报 `succeeded`，下次用原 token 引用补报，不先要求旧 token 调用 claim/runtime。轮换按 U2 范围接受自己最终回报；撤销/过期 401，记录保留、非零退出。已确认结束记录在下次领取前按任务 ID 归档；旧镜像/备份不全局 prune。
 
 `needs_attention` 保留服务端活动占位。保存日志、记录、新旧镜像、备份及数据库现场，由 U4 人工结案；U3 无强制清空/重装入口。禁止删除记录、改库或用新 token 冒认原执行器解除占位；失效凭据的受权结案工具属 U4。
+
+异常 step、有限错误码与待报 needs_attention 同一次原子写入。旧版 attention/pending=[] 记录在 run/report 通过原 token、原任务事件接口补报；需本地旧容器/image 证据及合法 downloading/stopping/backing_up/replacing/verifying 状态。服务端仍校验任务归属和状态转换，409/401/传输失败保留记录；无法证明合法来源返回 `attention_evidence_requires_reconciliation`，无本地证据的 claim 保持 `manual_reconciliation_required`。补报不会 stop/replace，不解除活动占位。
 
 ## 测试与 U4 接口
 
@@ -93,5 +101,7 @@ sudo -E python3 scripts/update/test-docker.py
 `.github/workflows/update-executor.yml` 自动在独立 runner 执行。fixture 使用临时 SQLite、真实 TaskService/Create/Claim、真实认证/控制器和不同内嵌 revision 的 coordinator，回环 registry、独立端口和临时卷；生产路由无开关。仅 fixture 子类将官方仓库映射到回环 registry，并模拟**无业务数据**停机备份；产品入口不导入它。
 
 真实检查覆盖 Docker/Compose 停旧替换、健康/runtime、OCI index/manifest/image ID、错误架构、flock、claim 丢失取回、409、停机积压事件、DB 提交后最终响应丢失、轮换/撤销、SIGKILL 后核对不重装、Compose 再 up 及其他服务身份/挂载。清理只处理自有项目/临时卷；fixture 的 `down --volumes` 只清理独立测试卷，不是产品执行器动作。
+
+F1–F6 补验包含真实 network connect、自定义 hostname/domain 拒绝及 host 成功、两种多副本文件加单副本覆盖启动、create 后 SIGKILL/回执丢失重试与他人/运行中探测保留、真实 UID/mode/链接与 UNIX/Engine socket 检查，以及异常首次写入 SIGKILL 后真实协调数据库 needs_attention/活动占位。均使用空数据隔离实例，不操作 NAS。
 
 这些不证明真实业务 WAL/Blob/外置附件一致备份恢复，也不证明 NAS scheduler 接入。U4 接入 `Executor.data_protection_available()`、`backup()`，完善 `stop_container()`：复用 `internal/backup`、增加不启动迁移的独立备份命令、实际验证空间/失败/迁移风险与人工结案后，才考虑开放安装。U5 接后台恢复及能力判断，U6 安装 NAS 任务计划。

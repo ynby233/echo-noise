@@ -6,6 +6,8 @@ No personal NAS settings, production data or production route switches.
 """
 import contextlib
 import json
+import copy
+import multiprocessing
 import os
 from pathlib import Path
 import shutil
@@ -93,9 +95,187 @@ def assert_status(task_id, status):
     assert request("/fixture/tasks/" + task_id, "GET")["data"]["status"] == status
 
 
-def test_mode(mode, old_ref, new_ref, new_digest):
+def rejected(action, code):
+    try:
+        action()
+        raise AssertionError("accepted: " + code)
+    except executor.Stop as error:
+        assert str(error).startswith(code), str(error)
+
+
+def killed_child(action):
+    child = multiprocessing.Process(target=action)
+    child.start()
+    child.join(180)
+    if child.is_alive():
+        child.kill()
+        child.join()
+        raise AssertionError("executor did not reach interruption")
+    assert child.exitcode == -signal.SIGKILL
+
+
+def test_paths(ex):
+    control = root / "permissions"
+    control.mkdir(mode=0o700)
+    token = control / "token"
+    executor.atomic_write(token, "fixture")
+    executor.private(token)
+    os.chown(control, 1001, 1001)
+    rejected(lambda: executor.private(token), "control_parent_owner")
+    control.chmod(0o1777)
+    rejected(lambda: executor.private(token), "control_parent_owner")
+    os.chown(control, 0, 0)
+    control.chmod(0o777)
+    rejected(lambda: executor.private(token), "control_parent_writable")
+    control.chmod(0o700)
+    link = root / "control-link"
+    link.symlink_to(control, target_is_directory=True)
+    rejected(lambda: executor.private(link / "token"), "control_parent_symlink")
+    link_file = root / "config-link"
+    link_file.symlink_to(ex.config_path)
+    rejected(lambda: executor.Executor(link_file), "missing_or_symlink_control_file")
+    executor.private(token)  # root-owned sticky /tmp remains supported.
+    sockets = ex.docker_sockets()
+    directory = root / "socket-test"
+    directory.mkdir()
+    with socket.socket(socket.AF_UNIX) as local:
+        local.bind(str(directory / "engine.sock"))
+        alias = root / "engine-link"
+        alias.symlink_to(directory / "engine.sock")
+        original = copy.deepcopy(ex.cfg["mounts"])
+        try:
+            # Real local Engine socket, its aliases/parents, and a nonstandard endpoint.
+            for endpoint in (sockets[0], directory / "engine.sock"):
+                for source in (endpoint, endpoint.parent, alias if endpoint.parent == directory else Path("/var/run/docker.sock")):
+                    ex.cfg["mounts"] = [{"type": "bind", "source": str(source), "target": "/host/renamed"}]
+                    with unittest_patch.dict(os.environ, {"DOCKER_HOST": "unix://" + str(endpoint), "DOCKER_CONTEXT": ""}):
+                        rejected(lambda: ex.check_mounts({"Mounts": [{"Type": "bind", "Source": str(source),
+                                     "Destination": "/host/renamed", "RW": True}]}), "docker_socket_in_application")
+        finally:
+            ex.cfg["mounts"] = original
+    print("F2/F6: real UID/mode/symlink and UNIX/Engine socket aliases/parents rejected", flush=True)
+
+
+def test_docker_preflight(ex, args, cid, cfg, old_ref):
+    network = prefix + "-extra"
+    docker("network", "create", network)
+    networks.append(network)
+    docker("network", "connect", network, cid)
+    rejected(ex.preflight, "docker_networks_not_represented")
+    assert current_id(ex) == cid and ex.inspect(cid)["State"]["Running"]
+    docker("network", "disconnect", network, cid)
+    for index, extra in enumerate((["--hostname", "custom"], ["--domainname", "custom.test"], ["--network", "host"])):
+        cfg2 = copy.deepcopy(cfg)
+        name = prefix + "-config-" + str(index)
+        cfg2["container"] = name
+        directory = root / ("config-" + str(index))
+        directory.mkdir()
+        cfg2["mounts"][0]["source"] = str(directory)
+        changed = list(args)
+        changed[changed.index("--name") + 1] = name
+        changed[changed.index("--mount") + 1] = "type=bind,source=" + str(directory) + ",target=/data"
+        if index == 2:
+            # Host networking requires no published ports.
+            del changed[changed.index("--publish"):changed.index("--publish") + 2]
+            cfg2["docker"].pop("ports")
+            cfg2["docker"]["network"] = "host"
+        other = docker(*changed[:-1], *extra, old_ref)
+        containers.append(other)
+        docker("start", other)
+        checked = new_executor(cfg2)
+        if index == 2:
+            checked.preflight()
+        else:
+            rejected(checked.preflight, "docker_hostname_or_domain_not_represented")
+        assert checked.inspect(other)["State"]["Running"]
+        docker("rm", "--force", other)
+    new_executor(cfg)  # Restore the original registered config file.
+    # Commit create, then kill before its result reaches the cleanup boundary.
+    def die_after_create():
+        create = ex.docker_create
+        def killed(*a, **k):
+            create(*a, **k)
+            os.kill(os.getpid(), signal.SIGKILL)
+        ex.docker_create = killed
+        ex.preflight()
+    killed_child(die_after_create)
+    probe = cfg["container"] + "-update-check"
+    assert ex.inspect(probe)["State"]["Status"] == "created"
+    ex.preflight()
+    assert not docker("ps", "-aq", "--filter", "name=^/" + probe + "$")
+    create = ex.docker_create
+    def lost(*a, **k):
+        create(*a, **k)
+        raise executor.Stop("command_unavailable_or_timeout")
+    with unittest_patch.object(ex, "docker_create", side_effect=lost):
+        rejected(ex.preflight, "command_unavailable_or_timeout")
+    ex.preflight()
+    foreign = docker("create", "--name", probe, old_ref)
+    rejected(ex.preflight, "probe_name_owned_by_other")
+    assert ex.inspect(probe)["Id"] == foreign
+    docker("rm", foreign)
+    directory = root / "running-probe"
+    directory.mkdir()
+    labels = [item for k, v in ex.probe_labels().items() for item in ("--label", k + "=" + v)]
+    running = docker("run", "-d", "--name", probe, *labels, "--mount", "type=bind,source=" + str(directory) + ",target=/data", old_ref)
+    rejected(ex.preflight, "probe_has_run_requires_manual_reconciliation")
+    assert ex.inspect(running)["State"]["Running"]
+    docker("rm", "--force", running)  # Only fixture code cleans its deliberate running probe.
+    assert current_id(ex) == cid and ex.inspect(cid)["State"]["Running"]
+    print("F1/F5: extra network/custom identity rejected; host passes; killed/lost probe recovered; foreign/running preserved", flush=True)
+
+
+def test_compose_preflight(ex, model, compose, cid, other_id):
+    for settings in ({"deploy": {"replicas": 2}}, {"scale": 2}):
+        changed = copy.deepcopy(model)
+        changed["services"]["app"].update(settings)
+        executor.atomic_write(compose, json.dumps(changed))
+        ex.compose("up", "-d", "--no-deps", "--scale", "app=1", "--pull", "never", "app")
+        before = current_id(ex)
+        rejected(ex.preflight, "compose_requires_single_replica")
+        assert current_id(ex) == before == cid
+        assert ex.compose("ps", "-q", "other").strip() == other_id
+        assert ex.inspect(cid)["State"]["Running"]
+    executor.atomic_write(compose, json.dumps(model))
+    ex.preflight()
+    print("F3: replicas=2/scale=2 overridden to one current container rejected; app/other IDs unchanged", flush=True)
+
+
+def test_attention(ex, task, cid):
+    ex.claim()
+    ex.phase("download_intent", "downloading")
+    ex.flush()
+    ex.phase("stop_intent", "stopping")
+    ex.flush()
+    def die_after_save():
+        save = ex.save
+        def killed():
+            save()
+            os.kill(os.getpid(), signal.SIGKILL)
+        ex.save = killed
+        ex.attention("interrupted_destructive_step")
+    killed_child(die_after_save)
+    ex.load_record()
+    assert ex.record["pending"] == ["needs_attention"] and ex.record["error_code"] == "interrupted_destructive_step"
+    rejected(ex.run, "manual_reconciliation_required")
+    assert_status(task["id"], "needs_attention")
+    # Emulate the old incomplete journal; idempotent owned reporting reconciles it.
+    ex.record.update(step="attention", confirmed="stopping", pending=[])
+    ex.save()
+    rejected(ex.run, "manual_reconciliation_required")
+    assert ex.record["confirmed"] == "needs_attention" and not ex.record["closed"]
+    assert current_id(ex) == cid and ex.inspect(cid)["State"]["Running"]
+    try:
+        seed(ex)
+        raise AssertionError("needs_attention lost active slot")
+    except urllib.error.HTTPError as error:
+        assert error.code == 409
+    print("F4: SIGKILL after first attention write recovered to real DB needs_attention; legacy reconciled; active slot retained", flush=True)
+
+
+def test_mode(mode, old_ref, new_ref, new_digest, attention=False):
     global data, url
-    case = root / mode
+    case = root / (mode + ("-attention" if attention else ""))
     data = case / "data"
     data.mkdir(parents=True, mode=0o700)
     (data / "sentinel").write_text("preserved")
@@ -115,7 +295,7 @@ def test_mode(mode, old_ref, new_ref, new_digest):
            "image_file": str(image_file), "min_free_bytes": 1024}
     # Config is created after the fixture emits its first one-time credential.
     if mode == "docker":
-        name = prefix + "-docker"
+        name = prefix + "-docker" + ("-attention" if attention else "")
         cfg.update(container=name, docker=opts)
         args = ["create", "--name", name, "--platform", "linux/amd64", "--restart", "no", "--env-file", str(case / "app.env"),
                 "--publish", publish, "--mount", "type=bind,source=" + str(data) + ",target=/data",
@@ -147,6 +327,12 @@ def test_mode(mode, old_ref, new_ref, new_digest):
     cfg["instance_id"] = (data / "instance").read_text()
     ex = new_executor(cfg)
     ex.preflight()
+    if not attention:
+        if mode == "docker":
+            test_paths(ex)
+            test_docker_preflight(ex, args, cid, cfg, old_ref)
+        else:
+            test_compose_preflight(ex, model, compose, cid, other_id)
     # Independent flock invocations cannot both enter the same registered deployment.
     import fcntl
     with open(ex.state / "executor.lock", "a") as lock:
@@ -154,6 +340,9 @@ def test_mode(mode, old_ref, new_ref, new_digest):
         blocked = subprocess.run(["python3", str(Path(__file__).with_name("executor.py")), "claim", str(ex.config_path)], capture_output=True, text=True)
         assert blocked.returncode != 0 and "executor_already_running" in blocked.stderr
     task = seed(ex)
+    if attention:
+        test_attention(ex, task, cid)
+        return
     # Lose a committed claim response, then retrieve precisely the same task.
     assigned = ex.api("POST", "/api/updates/executor/claim")
     assert assigned["id"] == task["id"]
@@ -246,9 +435,12 @@ def test_mode(mode, old_ref, new_ref, new_digest):
 
 
 if __name__ == "__main__":
+    from unittest import mock as unittest_patch
+    print("Engine " + docker("version", "--format", "{{.Server.Version}}") + "; " + docker("compose", "version", "--short"), flush=True)
     prefix = "echo-noise-u3-" + str(os.getpid())
     containers = []
     compose_cleanup = []
+    networks = []
     with tempfile.TemporaryDirectory(prefix=prefix) as tmp:
         root = Path(tmp)
         try:
@@ -281,6 +473,7 @@ if __name__ == "__main__":
             docker("pull", refs[1][0])
             test_mode("docker", refs[0][0], refs[1][0], refs[1][1])
             test_mode("compose", refs[0][0], refs[1][0], refs[1][1])
+            test_mode("docker", refs[0][0], refs[1][0], refs[1][1], attention=True)
         finally:
             for project, image_file, compose in compose_cleanup:
                 with contextlib.suppress(executor.Stop):
@@ -290,3 +483,6 @@ if __name__ == "__main__":
             for cid in ids:
                 with contextlib.suppress(executor.Stop):
                     docker("rm", "--force", cid)
+            for network in networks:
+                with contextlib.suppress(executor.Stop):
+                    docker("network", "rm", network)

@@ -4,6 +4,7 @@ import importlib.util
 import json
 from pathlib import Path
 import tempfile
+import types
 import unittest
 from unittest.mock import patch
 
@@ -241,6 +242,232 @@ class RecoveryTests(unittest.TestCase):
     def test_engine_normalized_oom_flag_keeps_true_distinct(self):
         self.assertEqual(executor.host_settings({"OomKillDisable": None}), executor.host_settings({"OomKillDisable": False}))
         self.assertNotEqual(executor.host_settings({"OomKillDisable": True}), executor.host_settings({"OomKillDisable": False}))
+
+    def test_attention_first_write_retains_event_and_error_on_restart(self):
+        self.claim()
+        self.ex.record.update(step="stop_intent", confirmed="stopping")
+        self.ex.save()
+        save = self.ex.save
+        def killed():
+            save()
+            raise KeyboardInterrupt()
+        with patch.object(self.ex, "save", side_effect=killed):
+            with self.assertRaises(KeyboardInterrupt):
+                self.ex.attention("interrupted_destructive_step")
+        self.ex.load_record()
+        self.assertEqual(self.ex.record.get("error_code"), "interrupted_destructive_step")
+        self.assertEqual(self.ex.record["pending"], ["needs_attention"])
+        with self.assertRaisesRegex(executor.Stop, "manual_reconciliation_required"):
+            self.ex.run()
+        self.assertEqual(self.ex.record["confirmed"], "needs_attention")
+
+    def test_legacy_attention_without_event_is_reported_without_host_mutation(self):
+        self.claim()
+        self.ex.record.update(step="attention", confirmed="stopping", pending=[])
+        self.ex.save()
+        self.ex.stop_container = self.ex.replace = lambda: self.fail("repeated host mutation")
+        with self.assertRaisesRegex(executor.Stop, "manual_reconciliation_required"):
+            self.ex.run()
+        self.assertEqual(self.ex.record["confirmed"], "needs_attention")
+
+    def test_attention_save_failure_before_and_after_commit_recovers_without_replacement(self):
+        self.claim()
+        save = self.ex.save
+        for after in (False, True):
+            with self.subTest(after=after):
+                self.ex.record.update(step="stop_intent", confirmed="stopping", pending=[])
+                save()
+                def failed():
+                    if after: save()
+                    raise OSError("injected journal failure")
+                with patch.object(self.ex, "save", side_effect=failed):
+                    with self.assertRaises(OSError):
+                        self.ex.attention("interrupted_destructive_step")
+                self.ex.load_record()
+                self.ex.stop_container = self.ex.replace = lambda: self.fail("repeated destructive operation")
+                with self.assertRaises(executor.Stop): self.ex.run()
+                self.assertEqual(self.ex.record["confirmed"], "needs_attention")
+                self.assertEqual(self.ex.record["task"]["id"], self.task["id"])
+
+    def test_attention_http_failures_retain_event_and_legacy_claimed_needs_reconciliation(self):
+        self.claim()
+        for error in ("http_401", "http_409", "http_transport"):
+            with self.subTest(error=error):
+                self.ex.record.update(step="attention", confirmed="stopping", pending=[])
+                self.ex.save()
+                self.ex.api = lambda *a, **k: (_ for _ in ()).throw(executor.Stop(error))
+                with self.assertRaisesRegex(executor.Stop, error): self.ex.run()
+                self.ex.load_record()
+                self.assertEqual(self.ex.record["pending"], ["needs_attention"])
+                self.assertFalse(self.ex.record["closed"])
+        self.ex.record.update(confirmed="claimed", pending=[])
+        self.ex.save()
+        with self.assertRaisesRegex(executor.Stop, "attention_evidence_requires_reconciliation"):
+            self.ex.flush()
+        self.assertEqual(self.ex.record["confirmed"], "claimed")
+
+    def test_untrusted_parent_owner_and_symlink_are_rejected(self):
+        class Metadata:
+            def __init__(self, uid, mode, parents=(), symlink=False):
+                self.parents, self.symlink = parents, symlink
+                self.info = types.SimpleNamespace(st_uid=uid, st_mode=mode)
+            def exists(self): return True
+            def is_symlink(self): return self.symlink
+            def stat(self): return self.info
+        for parent in (Metadata(1001, 0o40700), Metadata(1001, 0o41777),
+                       Metadata(0, 0o40755, symlink=True), Metadata(0, 0o40777)):
+            with self.subTest(info=parent.info, symlink=parent.symlink), \
+                    patch.object(executor, "Path", lambda p: p), \
+                    patch.object(executor.os, "name", "posix"), \
+                    patch.object(executor.os, "geteuid", return_value=0, create=True):
+                with self.assertRaises(executor.Stop):
+                    executor.private(Metadata(0, 0o100600, [parent]))
+        for uid, mode in ((0, 0o40755), (0, 0o41777), (1000, 0o40700)):
+            with patch.object(executor, "Path", lambda p: p), \
+                    patch.object(executor.os, "name", "posix"), \
+                    patch.object(executor.os, "geteuid", return_value=1000, create=True):
+                executor.private(Metadata(1000, 0o100600, [Metadata(uid, mode)]))
+
+    def test_socket_source_alias_and_directory_are_rejected(self):
+        directory = self.root / "engine"
+        directory.mkdir()
+        endpoint = directory / "docker.sock"
+        endpoint.touch()
+        for source in (endpoint, directory):
+            self.ex.cfg["mounts"] = [{"type": "bind", "source": str(source), "target": "/host/engine"}]
+            with self.subTest(source=source), \
+                    patch.dict(executor.os.environ, {"DOCKER_HOST": "unix://" + str(endpoint)}, clear=True), \
+                    patch.object(executor, "command", return_value=json.dumps("unix://" + str(endpoint))), \
+                    patch.object(executor.stat, "S_ISSOCK", return_value=True):
+                with self.assertRaisesRegex(executor.Stop, "docker_socket_in_application"):
+                    self.ex.check_mounts({"Mounts": [{"Type": "bind", "Source": str(source),
+                        "Destination": "/host/engine", "RW": True}]})
+
+    def test_normal_bind_and_named_volume_do_not_expose_socket(self):
+        endpoint = self.root / "docker.sock"
+        endpoint.touch()
+        source = self.root / "application"
+        source.mkdir()
+        for kind in ("bind", "volume"):
+            self.ex.cfg["mounts"] = [{"type": kind, "source": str(source) if kind == "bind" else "data", "target": "/data"}]
+            with patch.dict(executor.os.environ, {"DOCKER_HOST": "unix://" + str(endpoint)}, clear=True), \
+                    patch.object(executor.stat, "S_ISSOCK", return_value=True):
+                self.ex.check_mounts({"Mounts": [{"Type": kind, "Name": "data", "Source": str(source),
+                                                "Destination": "/data", "RW": True}]})
+
+
+class PreflightTests(unittest.TestCase):
+    api = RecoveryTests.api
+
+    def setUp(self):
+        RecoveryTests.setUp(self)
+        del self.ex.preflight
+        Path(self.cfg["image_file"]).write_text("UPDATE_IMAGE=old\n")
+        Path(self.cfg["image_file"]).chmod(0o600)
+        self.current = {"Id": "c" * 64, "Image": "old-image", "State": {"Running": True}, "Mounts": [],
+                        "HostConfig": {"NetworkMode": "appnet"},
+                        "Config": {"Hostname": "c" * 12, "Domainname": "", "Labels": {}},
+                        "NetworkSettings": {"Networks": {"appnet": {}}}}
+        self.probe = copy.deepcopy(self.current)
+        self.probe.update(Id="d" * 64, State={"Running": False, "Status": "created"})
+        self.probe["Config"]["Hostname"] = "d" * 12
+        self.probe_present = False
+        self.create_loss = False
+        self.commands = []
+        self.ex.inspect = lambda ref: self.probe if ref in ("d" * 64, self.cfg["container"] + "-update-check") else self.current
+        self.addCleanup(patch.stopall)
+        patch.object(executor, "command", side_effect=self.command).start()
+        patch.object(executor.shutil, "which", return_value="present").start()
+
+    def command(self, args, **kwargs):
+        self.commands.append(args)
+        if "{{.OSType}}/{{.Architecture}}" in args: return "linux/amd64"
+        if "{{.DockerRootDir}}" in args: return str(self.root)
+        if args[1:3] == ["context", "inspect"]: return json.dumps("unix://" + str(self.root / "socket"))
+        if args[1:3] == ["image", "inspect"]: return json.dumps([{"Os": "linux", "Architecture": "amd64"}])
+        if args[1:3] == ["container", "ls"]: return "d" * 64 if self.probe_present else ""
+        if args[1] == "create":
+            if self.probe_present: raise executor.Stop("command_failed:docker")
+            self.probe_present = True
+            labels = {}
+            for i, arg in enumerate(args):
+                if arg == "--label":
+                    key, value = args[i + 1].split("=", 1)
+                    labels[key] = value
+            self.probe["Config"]["Labels"] = labels
+            self.probe["Name"] = "/" + self.cfg["container"] + "-update-check"
+            if self.create_loss: raise executor.Stop("command_unavailable_or_timeout")
+            return "d" * 64
+        if args[1] == "rm": self.probe_present = False; return ""
+        raise AssertionError(args)
+
+    def test_extra_network_hostname_domain_and_endpoint_customization_rejected(self):
+        changes = (("extra", lambda: self.current["NetworkSettings"]["Networks"].update(dbnet={})),
+                   ("hostname", lambda: self.current["Config"].update(Hostname="custom")),
+                   ("domain", lambda: self.current["Config"].update(Domainname="custom.test")),
+                   ("endpoint", lambda: self.current["NetworkSettings"]["Networks"]["appnet"].update(IPAMConfig={"IPv4Address": "172.20.0.9"})))
+        original = copy.deepcopy(self.current)
+        for name, change in changes:
+            with self.subTest(name=name):
+                self.current = copy.deepcopy(original)
+                change()
+                with self.assertRaises(executor.Stop): self.ex.preflight()
+                self.assertFalse(self.probe_present)
+        self.assertFalse(any(a[1] in ("stop", "rename", "start") for a in self.commands))
+
+    def test_compose_model_multiple_replicas_with_single_current_container_rejected(self):
+        path = self.root / "compose.json"
+        self.ex.cfg.update(mode="compose", service="app", project="isolated", compose_file=str(path))
+        for settings in ({"scale": 2}, {"deploy": {"replicas": 2}}, {"deploy": {"mode": "global"}}):
+            with self.subTest(settings=settings):
+                model = {"services": {"app": {"image": "${UPDATE_IMAGE}", **settings}}}
+                path.write_text(json.dumps(model)); path.chmod(0o600)
+                def compose(*args, image_override=None):
+                    if args[0] == "ps": return self.current["Id"]
+                    parsed = copy.deepcopy(model)
+                    parsed["services"]["app"]["image"] = image_override or "old"
+                    return json.dumps(parsed)
+                self.ex.compose = compose
+                with self.assertRaisesRegex(executor.Stop, "compose_requires_single_replica"):
+                    self.ex.preflight()
+
+    def test_create_response_loss_is_cleaned_and_preflight_retry_succeeds(self):
+        self.create_loss = True
+        with self.assertRaisesRegex(executor.Stop, "command_unavailable_or_timeout"):
+            self.ex.preflight()
+        self.assertFalse(self.probe_present)
+        self.create_loss = False
+        self.assertEqual(self.ex.preflight()["Id"], self.current["Id"])
+        self.assertFalse(self.probe_present)
+
+    def test_foreign_and_running_probe_are_never_removed(self):
+        for own, running in ((False, False), (True, True)):
+            with self.subTest(own=own, running=running):
+                self.probe_present = True
+                self.probe["Name"] = "/" + self.cfg["container"] + "-update-check"
+                self.probe["Config"]["Labels"] = self.ex.probe_labels() if own else {}
+                self.probe["State"] = {"Running": running, "Status": "running" if running else "created"}
+                before = len(self.commands)
+                with self.assertRaisesRegex(executor.Stop, "probe_"): self.ex.preflight()
+                self.assertFalse(any(a[1] == "rm" for a in self.commands[before:]))
+                self.assertTrue(self.probe_present)
+
+    def test_default_and_host_network_pass_and_clean_probe(self):
+        for network in ("appnet", "host"):
+            self.current["HostConfig"]["NetworkMode"] = self.probe["HostConfig"]["NetworkMode"] = network
+            self.current["NetworkSettings"]["Networks"] = {network: {"IPAddress": "dynamic", "EndpointID": "old"}}
+            self.probe["NetworkSettings"]["Networks"] = {network: {"IPAddress": "", "EndpointID": ""}}
+            self.assertEqual(self.ex.preflight()["Id"], self.current["Id"])
+            self.assertFalse(self.probe_present)
+
+    def test_compose_default_and_explicit_one_pass(self):
+        path = self.root / "compose.json"
+        path.write_text('${UPDATE_IMAGE}'); path.chmod(0o600)
+        self.ex.cfg.update(mode="compose", service="app", compose_file=str(path))
+        for settings in ({}, {"scale": 1}, {"deploy": {"replicas": 1, "mode": "replicated"}}):
+            self.ex.check_compose_image_source = lambda: {"services": {"app": {"image": "old", **settings}}}
+            self.ex.compose = lambda *a, **k: self.current["Id"]
+            self.assertEqual(self.ex.preflight()["Id"], self.current["Id"])
 
 
 if __name__ == "__main__":

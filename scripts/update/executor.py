@@ -69,11 +69,15 @@ def private(path, directory=False):
     require(path.exists() and not path.is_symlink(), "missing_or_symlink_control_file")
     if os.name == "posix":
         info = path.stat()
+        require(stat.S_ISDIR(info.st_mode) if directory else stat.S_ISREG(info.st_mode), "control_file_type")
         require(info.st_uid in (0, os.geteuid()), "control_file_owner")
         require(not info.st_mode & (0o022 if directory else 0o077), "control_file_permissions")
         # A private file in a writable parent can still be replaced by another user.
         for parent in path.parents:
-            require(not parent.stat().st_mode & 0o022 or parent.stat().st_mode & stat.S_ISVTX,
+            require(not parent.is_symlink(), "control_parent_symlink")
+            info = parent.stat()
+            require(info.st_uid in (0, os.geteuid()), "control_parent_owner")
+            require(not info.st_mode & 0o022 or (info.st_uid == 0 and info.st_mode & stat.S_ISVTX),
                     "control_parent_writable")
 
 
@@ -96,8 +100,9 @@ def host_settings(config):
 
 class Executor:
     def __init__(self, config):
-        self.config_path = Path(config).resolve()
-        private(self.config_path)
+        config_path = Path(config).absolute()
+        private(config_path)  # Validate the supplied path before resolving away symlinks.
+        self.config_path = config_path.resolve()
         self.cfg = json.loads(self.config_path.read_text())
         required = {"url", "instance_id", "token_file", "state_dir", "backup_dir", "platform",
                     "mode", "mounts", "image_file"}
@@ -200,8 +205,21 @@ class Executor:
             return
         self.record["pending"].append(status)
         self.save()
+        return True
 
     def flush(self):
+        # Repair old attention snapshots through the same owned-event endpoint.
+        # A 409/401 retains the evidence; never claim a new task to reconcile one.
+        if self.record["step"] == "attention":
+            status = self.record["pending"][-1] if self.record["pending"] else self.record["confirmed"]
+            if status != "needs_attention":
+                require(self.record.get("error_code") != "claimed_task_without_local_evidence",
+                        "manual_reconciliation_required")
+                require(status in ("downloading", "stopping", "backing_up", "replacing", "verifying") and
+                        self.record.get("old_container") and self.record.get("old_image"),
+                        "attention_evidence_requires_reconciliation")
+                self.record.setdefault("error_code", "interrupted_destructive_step")
+                self.queue("needs_attention")
         while self.record["pending"]:
             status = self.record["pending"][0]
             self.api("POST", "/api/updates/executor/tasks/" + self.record["task"]["id"] + "/events",
@@ -212,8 +230,8 @@ class Executor:
 
     def phase(self, step, status=None):
         self.record["step"] = step
-        if status:
-            self.queue(status)
+        if status and self.queue(status):
+            return
         self.save()
 
     def inspect(self, reference):
@@ -245,11 +263,32 @@ class Executor:
         require(len(ids) == 1, "compose_requires_single_registered_container")
         return ids[0]
 
-    def docker_create(self, name, image):
+    def probe_labels(self):
+        return {"io.echo-noise.update.probe": "true", "io.echo-noise.update.instance": self.cfg["instance_id"],
+                "io.echo-noise.update.config": str(self.config_path)}
+
+    def clean_probe(self):
+        name = self.cfg["container"] + "-update-check"
+        ids = command(["docker", "container", "ls", "--all", "--quiet", "--filter", "name=^/" + name + "$"]).split()
+        require(len(ids) <= 1, "probe_name_ambiguous")
+        if not ids:
+            return
+        probe = self.inspect(ids[0])
+        require(probe.get("Name") == "/" + name and
+                all(probe["Config"].get("Labels", {}).get(k) == v for k, v in self.probe_labels().items()),
+                "probe_name_owned_by_other_remove_or_register_manually")
+        require(not probe["State"]["Running"] and probe["State"].get("Status") == "created",
+                "probe_has_run_requires_manual_reconciliation")
+        command(["docker", "rm", probe["Id"]])  # No force: Engine also rejects a concurrent start.
+
+    def docker_create(self, name, image, probe=False):
         opts = self.cfg.get("docker", {})
         allowed = {"network", "restart", "env_file", "devices", "ports", "log_driver", "log_options", "entrypoint", "command", "user"}
         require(opts.keys() <= allowed, "docker_option_unsupported")
         args = ["docker", "create", "--name", name, "--platform", self.cfg["platform"]]
+        if probe:
+            for key, value in self.probe_labels().items():
+                args += ["--label", key + "=" + value]
         for key, flag in (("network", "--network"), ("restart", "--restart"), ("env_file", "--env-file"),
                           ("log_driver", "--log-driver"), ("entrypoint", "--entrypoint"), ("user", "--user")):
             if key in opts:
@@ -264,6 +303,15 @@ class Executor:
         args += [image, *opts.get("command", [])]
         return command(args).strip()
 
+    def docker_sockets(self):
+        # Docker context selection takes precedence over DOCKER_HOST.
+        endpoint = os.environ.get("DOCKER_HOST") if not os.environ.get("DOCKER_CONTEXT") else None
+        endpoint = endpoint or json.loads(command(["docker", "context", "inspect", "--format", "{{json .Endpoints.docker.Host}}"] ))
+        require(endpoint.startswith("unix://") and Path(endpoint[7:]).is_absolute(), "local_unix_docker_endpoint_required")
+        socket = Path(endpoint[7:]).resolve(strict=True)
+        require(stat.S_ISSOCK(socket.stat().st_mode), "docker_endpoint_not_socket")
+        return [socket] + [p.resolve() for p in (Path("/var/run/docker.sock"), Path("/run/docker.sock")) if p.exists()]
+
     def check_mounts(self, current):
         expected = sorted((m["type"], m["source"], m["target"], not m.get("read_only", False)) for m in self.cfg["mounts"])
         actual = sorted((m["Type"], m.get("Name") if m["Type"] == "volume" else m["Source"], m["Destination"], m["RW"]) for m in current["Mounts"])
@@ -274,8 +322,11 @@ class Executor:
             controls.append(Path(self.cfg["compose_file"]))
         elif self.cfg.get("docker", {}).get("env_file"):
             controls.append(Path(self.cfg["docker"]["env_file"]))
+        sockets = self.docker_sockets() if current["Mounts"] else []
         for mount in current["Mounts"]:
             source = Path(mount["Source"]).resolve()
+            require(all(not p.is_relative_to(source) and not os.path.samefile(source, p) for p in sockets),
+                    "docker_socket_in_application")
             require(all(not p.resolve().is_relative_to(source) for p in controls), "app_can_access_executor_controls")
             require(mount["Destination"] != "/var/run/docker.sock", "docker_socket_in_application")
 
@@ -288,6 +339,7 @@ class Executor:
             private(self.cfg["compose_file"])
             model = self.check_compose_image_source()
             service = model["services"][self.cfg["service"]]
+            self.check_compose_replicas(service)
             require("build" not in service and "image" in service, "compose_prebuilt_image_required")
             require(Path(self.cfg["compose_file"]).read_text().count("${UPDATE_IMAGE") == 1, "compose_single_image_setting_required")
         elif self.cfg.get("docker", {}).get("env_file"):
@@ -299,8 +351,9 @@ class Executor:
         self.check_mounts(current)
         if self.cfg["mode"] == "docker":
             probe = self.cfg["container"] + "-update-check"
-            probe_id = self.docker_create(probe, current["Image"])
+            self.clean_probe()
             try:
+                probe_id = self.docker_create(probe, current["Image"], probe=True)
                 configured = self.inspect(probe_id)
                 # -v and --mount encode the same mount differently in HostConfig.
                 self.check_mounts(configured)
@@ -309,15 +362,41 @@ class Executor:
                 actual, desired = host_settings(current["HostConfig"]), host_settings(configured["HostConfig"])
                 differences = sorted(k for k in actual.keys() | desired.keys() if actual.get(k) != desired.get(k))
                 require(not differences, "docker_parameters_not_represented:" + ",".join(differences))
+                networks = current.get("NetworkSettings", {}).get("Networks", {})
+                require(networks.keys() == configured.get("NetworkSettings", {}).get("Networks", {}).keys(),
+                        "docker_networks_not_represented")
+                for endpoint in networks.values():
+                    require(not any(endpoint.get(k) for k in ("IPAMConfig", "Links", "DriverOpts", "GwPriority")),
+                            "docker_network_endpoint_not_represented")
+                    aliases = endpoint.get("Aliases") or []
+                    require(all(a in (current["Id"][:12], current.get("Name", "").lstrip("/")) for a in aliases),
+                            "docker_network_alias_not_represented")
+                require(current["Config"].get("Hostname") == current["Id"][:12] and
+                        current["Config"].get("Domainname", "") == configured["Config"].get("Domainname", ""),
+                        "docker_hostname_or_domain_not_represented")
                 for key in ("Env", "Cmd", "Entrypoint", "User", "WorkingDir", "Healthcheck", "Labels", "Volumes", "ExposedPorts", "StopSignal"):
-                    require(current["Config"].get(key) == configured["Config"].get(key), "docker_config_not_represented")
+                    actual = current["Config"].get(key)
+                    desired = configured["Config"].get(key)
+                    if key == "Labels":
+                        actual = actual or {}
+                        desired = {k: v for k, v in (desired or {}).items() if k not in self.probe_labels()}
+                        require(not any(k in (current["Config"].get("Labels") or {}) for k in self.probe_labels()),
+                                "docker_probe_labels_reserved")
+                    require(actual == desired, "docker_config_not_represented")
             finally:
-                command(["docker", "rm", probe_id])
+                self.clean_probe()
         self.check_space()
         docker_root = command(["docker", "info", "--format", "{{.DockerRootDir}}"] ).strip()
         require(Path(docker_root).is_dir(), "local_docker_engine_required")
         require(shutil.disk_usage(docker_root).free >= self.cfg.get("min_free_bytes", 1024**3), "docker_disk_space")
         return current
+
+    def check_compose_replicas(self, service):
+        deploy = service.get("deploy", {})
+        require(service.get("scale", 1) == 1 and deploy.get("replicas", 1) == 1 and
+                deploy.get("mode", "replicated") == "replicated" and
+                deploy.get("update_config", {}).get("order", "stop-first") == "stop-first",
+                "compose_requires_single_replica")
 
     def check_space(self):
         for field in ("state_dir", "backup_dir"):
@@ -363,6 +442,7 @@ class Executor:
         write_image(self.cfg["image_file"], self.reference())
         if self.cfg["mode"] == "compose":
             service = json.loads(self.compose("config", "--format", "json"))["services"][self.cfg["service"]]
+            self.check_compose_replicas(service)
             require(service["image"] == self.reference(), "compose_target_image_mismatch")
             self.compose("up", "--detach", "--no-deps", "--no-build", "--pull", "never", self.cfg["service"])
         else:
@@ -395,10 +475,8 @@ class Executor:
         raise Stop("target_health_timeout")
 
     def attention(self, code):
-        self.phase("attention")
         self.record["error_code"] = code
-        self.save()
-        self.queue("needs_attention")
+        self.phase("attention", "needs_attention")
         with contextlib.suppress(Stop):
             self.flush()
         raise Stop(code)
