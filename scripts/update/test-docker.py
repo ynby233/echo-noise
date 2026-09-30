@@ -265,11 +265,8 @@ def test_attention(ex, task, cid):
     rejected(ex.run, "manual_reconciliation_required")
     assert ex.record["confirmed"] == "needs_attention" and not ex.record["closed"]
     assert current_id(ex) == cid and ex.inspect(cid)["State"]["Running"]
-    try:
-        seed(ex)
-        raise AssertionError("needs_attention lost active slot")
-    except urllib.error.HTTPError as error:
-        assert error.code == 409
+    occupied = seed(ex)
+    assert occupied["id"] == task["id"] and occupied["status"] == "needs_attention"
     print("F4: SIGKILL after first attention write recovered to real DB needs_attention; legacy reconciled; active slot retained", flush=True)
 
 
@@ -435,7 +432,7 @@ def test_mode(mode, old_ref, new_ref, new_digest, attention=False):
 
 
 if __name__ == "__main__":
-    from unittest import mock as unittest_patch
+    from unittest.mock import patch as unittest_patch
     print("Engine " + docker("version", "--format", "{{.Server.Version}}") + "; " + docker("compose", "version", "--short"), flush=True)
     prefix = "echo-noise-u3-" + str(os.getpid())
     containers = []
