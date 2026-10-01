@@ -24,6 +24,19 @@ import executor
 
 
 class IsolatedExecutor(executor.Executor):
+    def offline_tool(self, *args, **kwargs):
+        original = executor.command
+        def diagnostic(argv, **options):
+            if "/app/update-tool" in argv:
+                result = subprocess.run(argv, text=True, capture_output=True, timeout=options.get("timeout", 120))
+                if result.returncode:
+                    print("isolated offline tool failure: " + result.stderr, flush=True)
+                    raise executor.Stop("command_failed:docker")
+                return result.stdout
+            return original(argv, **options)
+        with unittest_patch.object(executor, "command", side_effect=diagnostic):
+            return super().offline_tool(*args, **kwargs)
+
     def inspect(self, reference):
         result = super().inspect(reference)
         if str(reference).endswith("-update-check") or result.get("Name", "").endswith("-update-check"):

@@ -648,7 +648,7 @@ class Executor:
             if not self.target_running():
                 self.attention("replacement_outcome_unknown")
             self.phase("replaced")
-        elif step in ("stop_intent", "stopped", "backup_intent", "backed_up", "restore_old_intent"):
+        elif step in ("prepare_intent", "stop_intent", "stopped", "backup_intent", "backed_up", "restore_old_intent"):
             self.attention("interrupted_destructive_step")
         elif step in ("claimed", "download_intent", "downloaded"):
             try:
@@ -678,8 +678,14 @@ class Executor:
             try:
                 require(self.data_protection_available(), "u4_backup_unavailable")
                 self.check_space()
+                self.phase("prepare_intent")
                 self.prepare_shutdown()
             except Stop as error:
+                if self.record["step"] == "prepare_intent":
+                    try:
+                        self.api("POST", "/api/updates/executor/tasks/" + self.record["task"]["id"] + "/prepare", {"cancel": True}, token=self.record["token_file"])
+                    except Stop:
+                        self.attention("shutdown_preparation_requires_reconciliation")
                 self.record["error_code"] = str(error)
                 self.phase("failed", "failed")
                 self.flush()
