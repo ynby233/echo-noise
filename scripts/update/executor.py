@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Single registered Linux Docker/Compose deployment; U4 must supply data protection."""
+"""Single registered Linux Docker/Compose deployment with offline SQLite protection."""
 import argparse
 import contextlib
 import json
@@ -15,7 +15,7 @@ import time
 from urllib.parse import urlsplit
 
 IMAGE = "ghcr.io/ynby233/echo-noise"
-VERSION = "u3-1"
+VERSION = "u4-1"
 
 
 class Stop(Exception):
@@ -107,7 +107,7 @@ class Executor:
         required = {"url", "instance_id", "token_file", "state_dir", "backup_dir", "platform",
                     "mode", "mounts", "image_file"}
         allowed = required | {"container", "docker", "compose_file", "project", "service",
-                              "min_free_bytes", "http_timeout", "health_timeout", "stop_timeout"}
+                              "min_free_bytes", "http_timeout", "health_timeout", "stop_timeout", "backup_timeout"}
         require(required <= self.cfg.keys() and self.cfg.keys() <= allowed, "config_fields")
         cfg = self.cfg
         url = urlsplit(cfg["url"])
@@ -166,7 +166,8 @@ class Executor:
             return
         private(self.journal)
         self.record = json.loads(self.journal.read_text())
-        require(self.record["version"] == VERSION, "journal_version_unsupported")
+        require(self.record["version"] in ("u3-1", VERSION), "journal_version_unsupported")
+        self.record["version"] = VERSION
         require(self.record["instance_id"] == self.cfg["instance_id"] and
                 self.record["config_path"] == str(self.config_path) and
                 self.record["deployment"] == self.deployment(), "journal_deployment_mismatch")
@@ -244,7 +245,7 @@ class Executor:
         if image_override is not None:
             environment["UPDATE_IMAGE"] = image_override
         return command(["docker", "compose", "--project-name", cfg["project"], "--env-file", cfg["image_file"],
-                        "--file", cfg["compose_file"], *args], env=environment)
+                        "--file", cfg["compose_file"], *args], env=environment, timeout=max(120, cfg.get("stop_timeout", 60) + 30))
 
     def check_compose_image_source(self):
         original = json.loads(self.compose("config", "--format", "json"))
@@ -439,18 +440,148 @@ class Executor:
                 "image_id": image["Id"], "repo_digests": image["RepoDigests"]}
 
     def data_protection_available(self):
-        return False  # U4: validated SQLite/layout backup and controlled shutdown capability.
+        current = self.inspect(self.record["old_container"] if self.record else self.container_id())
+        require(not current["Config"].get("Labels", {}).get("com.docker.swarm.service.id"), "swarm_writer_unsupported")
+        env = dict(v.split("=", 1) for v in current["Config"].get("Env", []) if "=" in v)
+        require(env.get("ECHO_NOISE_CONFIG_DIR", "/app/config") == "/app/config" and
+                env.get("RUNTIME_ENV_FILE", "/app/config/runtime.env") == "/app/config/runtime.env", "runtime_config_layout_unsupported")
+        self.check_writers(current, allow_old=True)
+        try:
+            plan = self.offline_tool(current, "plan")
+        except Stop:
+            raise Stop("u4_backup_unavailable") from None
+        require(plan.get("version") == 1, "backup_tool_version_unsupported")
+        # Every resolved source must come from the administrator's actual mounts,
+        # never from an image layer or an anonymous/unregistered data location.
+        paths = [plan["database"], "/app/data", "/app/config"] + [r["Path"] for r in plan["roots"]]
+        for path in paths:
+            require(any(Path(path).is_relative_to(Path(m["Destination"])) and
+                        Path(m["Source"]).is_dir() for m in current["Mounts"]), "backup_source_not_mounted")
+        needed = max(self.cfg.get("min_free_bytes", 1024**3), 3 * plan["bytes"] + 64 * 1024**2)
+        require(shutil.disk_usage(self.cfg["backup_dir"]).free >= needed, "backup_disk_space")
+        if self.record:
+            self.record["backup_plan"] = plan
+            self.save()
+        return True
+
+    def offline_tool(self, current, action, *options, writable=False):
+        name = current["Id"][:12] + "-update-tool"
+        labels = {"io.echo-noise.update.tool": "true", "io.echo-noise.update.instance": self.cfg["instance_id"]}
+        ids = command(["docker", "ps", "-aq", "--filter", "name=^/" + name + "$"]).split()
+        for cid in ids:
+            helper = self.inspect(cid)
+            require(all(helper["Config"].get("Labels", {}).get(k) == v for k, v in labels.items()) and
+                    not helper["State"]["Running"], "offline_tool_requires_reconciliation")
+            command(["docker", "rm", cid])
+        fd, env_path = tempfile.mkstemp(prefix=".tool-env-", dir=self.state)
+        try:
+            env = current["Config"].get("Env", [])
+            require(all("\n" not in v and "\r" not in v for v in env), "multiline_environment_unsupported")
+            with os.fdopen(fd, "w") as out:
+                out.write("\n".join(env) + "\n")
+            args = ["docker", "run", "--rm", "--name", name, "--network", "none", "--read-only",
+                    "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--tmpfs", "/tmp",
+                    "--env-file", env_path, "--workdir", "/app", "--entrypoint", "/app/docker-entrypoint.sh"]
+            for key, value in labels.items():
+                args += ["--label", key + "=" + value]
+            for m in current["Mounts"]:
+                require(m["Type"] in ("bind", "volume"), "backup_mount_type_unsupported")
+                source = m.get("Name") if m["Type"] == "volume" else m["Source"]
+                require("," not in source and "," not in m["Destination"], "backup_mount_path_unsupported")
+                mount = "type=" + m["Type"] + ",source=" + source + ",target=" + m["Destination"]
+                if not writable or not m["RW"]:
+                    mount += ",readonly"
+                args += ["--mount", mount]
+            if action == "backup":
+                args += ["--mount", "type=bind,source=" + self.record["backup_path"] + ",target=/update-backup"]
+            args += [current["Image"], "/app/update-tool", action, *options]
+            result = command(args, timeout=self.cfg.get("backup_timeout", 3600) if action == "backup" else 120)
+            return json.loads(result)
+        finally:
+            Path(env_path).unlink(missing_ok=True)
+
+    def check_writers(self, current, allow_old=False):
+        sources = [Path(m["Source"]).resolve() for m in current["Mounts"] if m["RW"]]
+        ids = command(["docker", "ps", "-aq"]).split()
+        for cid in ids:
+            other = self.inspect(cid)
+            if other["Id"] == current["Id"]:
+                continue
+            if not other["State"]["Running"] and other["HostConfig"]["RestartPolicy"]["Name"] in ("", "no"):
+                continue
+            for mount in other["Mounts"]:
+                path = Path(mount["Source"]).resolve()
+                require(not mount["RW"] or all(not path.is_relative_to(s) and not s.is_relative_to(path) for s in sources),
+                        "another_container_can_write_data")
+        require(allow_old or not current["State"]["Running"], "old_writer_still_running")
+        # Also refuse ordinary host processes holding registered files open.
+        # A future privileged administrator can always start another writer;
+        # deployment instructions require suspending external writer schedules.
+        allowed = {os.getpid()}
+        if allow_old and current["State"]["Running"]:
+            allowed.update(int(p) for p in command(["docker", "top", current["Id"], "-eo", "pid"]).split() if p.isdigit())
+        for proc in Path("/proc").iterdir():
+            if not proc.name.isdigit() or int(proc.name) in allowed:
+                continue
+            try:
+                for fd in (proc / "fd").iterdir():
+                    try:
+                        target = Path(os.readlink(fd))
+                        require(not target.is_absolute() or all(not target.is_relative_to(s) for s in sources),
+                                "host_process_can_write_data")
+                    except FileNotFoundError:
+                        pass
+            except FileNotFoundError:
+                pass
+            except PermissionError:
+                raise Stop("root_required_to_check_writers") from None
+
+    def prepare_shutdown(self):
+        self.api("POST", "/api/updates/executor/tasks/" + self.record["task"]["id"] + "/prepare", {}, token=self.record["token_file"])
 
     def backup(self):
-        raise Stop("u4_backup_unavailable")
+        current = self.inspect(self.record["old_container"])
+        self.check_writers(current)
+        destination = Path(self.record["backup_path"])
+        destination.mkdir(mode=0o700, parents=True, exist_ok=True)
+        private(destination, directory=True)
+        # Preserve secrets only in the administrator's backup directory.
+        atomic_write(destination / "old-container.json", json.dumps(current, indent=2) + "\n")
+        for label, path in (("executor-config.json", self.config_path), ("image.env", Path(self.cfg["image_file"])),
+                            ("compose.yml", Path(self.cfg["compose_file"]) if self.cfg["mode"] == "compose" else
+                             Path(self.cfg["docker"]["env_file"]) if self.cfg.get("docker", {}).get("env_file") else None)):
+            if path:
+                atomic_write(destination / label, path.read_text())
+        self.offline_tool(current, "backup", "--output", "/update-backup/backup.zip")
+        require((destination / "backup.zip").is_file(), "backup_archive_missing")
+        self.record["backup_complete"] = True
+        self.save()
 
     def stop_container(self):
         command(["docker", "update", "--restart=no", self.record["old_container"]])
         if self.cfg["mode"] == "compose":
             self.compose("stop", "--timeout", str(self.cfg.get("stop_timeout", 60)), self.cfg["service"])
         else:
-            command(["docker", "stop", "--time", str(self.cfg.get("stop_timeout", 60)), self.record["old_container"]])
-        require(not self.inspect(self.record["old_container"])["State"]["Running"], "old_writer_still_running")
+            command(["docker", "stop", "--time", str(self.cfg.get("stop_timeout", 60)), self.record["old_container"]], timeout=self.cfg.get("stop_timeout", 60) + 30)
+        current = self.inspect(self.record["old_container"])
+        require(not current["State"]["Running"], "old_writer_still_running")
+        require(current["State"].get("ExitCode") == 0 and not current["State"].get("OOMKilled"), "old_shutdown_not_clean")
+        require(current["HostConfig"]["RestartPolicy"]["Name"] == "no", "old_restart_not_disabled")
+
+    def restore_old(self):
+        # Only the original, unrenamed writer before replacement is eligible.
+        current = self.inspect(self.record["old_container"])
+        require(current["Image"] == self.record["old_image"] and
+                self.inspect(self.container_id())["Id"] == current["Id"], "old_container_changed")
+        self.check_writers(current)
+        self.offline_tool(current, "plan")  # Refuse pending restores or changed layouts.
+        policy = self.record.get("old_restart_policy") or {"Name": "no"}
+        value = policy["Name"] or "no"
+        if value == "on-failure" and policy.get("MaximumRetryCount"):
+            value += ":" + str(policy["MaximumRetryCount"])
+        command(["docker", "update", "--restart=" + value, current["Id"]])
+        command(["docker", "start", current["Id"]])
+        require(self.inspect(current["Id"])["State"]["Running"], "old_restart_failed")
 
     def replace(self):
         write_image(self.cfg["image_file"], self.reference())
@@ -504,8 +635,8 @@ class Executor:
             return
         # Terminal retries use the pinned credential and no claim/runtime operation.
         self.flush()
-        if self.record["step"] == "complete":
-            require(self.record["confirmed"] == "succeeded", "journal_terminal_unconfirmed")
+        if self.record["step"] in ("complete", "failed"):
+            require(self.record["confirmed"] == ("succeeded" if self.record["step"] == "complete" else "failed"), "journal_terminal_unconfirmed")
             self.record["closed"] = True
             self.save()
             return
@@ -517,21 +648,51 @@ class Executor:
             if not self.target_running():
                 self.attention("replacement_outcome_unknown")
             self.phase("replaced")
-        elif step in ("stop_intent", "stopped", "backup_intent", "backed_up"):
+        elif step in ("stop_intent", "stopped", "backup_intent", "backed_up", "restore_old_intent"):
             self.attention("interrupted_destructive_step")
         elif step in ("claimed", "download_intent", "downloaded"):
-            self.runtime()
-            current = self.preflight()
-            require(current["Id"] == self.record["old_container"] and current["Image"] == self.record["old_image"], "registered_container_changed")
+            try:
+                self.runtime()
+                current = self.preflight()
+                require(current["Id"] == self.record["old_container"] and current["Image"] == self.record["old_image"], "registered_container_changed")
+            except Stop as error:
+                self.record["error_code"] = str(error)
+                self.phase("failed", "failed")
+                self.flush()
+                self.record["closed"] = True
+                self.save()
+                raise
             if step != "downloaded":
                 self.phase("download_intent", "downloading")
                 self.flush()  # Before downtime, auth/report errors prevent host mutation.
-                self.record["download"] = self.download()
+                try:
+                    self.record["download"] = self.download()
+                except Stop as error:
+                    self.record["error_code"] = str(error)
+                    self.phase("failed", "failed")
+                    self.flush()
+                    self.record["closed"] = True
+                    self.save()
+                    raise
                 self.phase("downloaded")
-            require(self.data_protection_available(), "u4_backup_unavailable")
-            self.check_space()
+            try:
+                require(self.data_protection_available(), "u4_backup_unavailable")
+                self.check_space()
+                self.prepare_shutdown()
+            except Stop as error:
+                self.record["error_code"] = str(error)
+                self.phase("failed", "failed")
+                self.flush()
+                self.record["closed"] = True
+                self.save()
+                raise
             self.phase("stop_intent", "stopping")
-            self.flush()
+            try:
+                self.flush()
+            except Stop:
+                with contextlib.suppress(Stop):
+                    self.api("POST", "/api/updates/executor/tasks/" + self.record["task"]["id"] + "/prepare", {"cancel": True}, token=self.record["token_file"])
+                raise
             try:
                 self.stop_container()
                 self.phase("stopped")
@@ -542,6 +703,18 @@ class Executor:
                 self.replace()
                 self.phase("replaced")
             except Stop as error:
+                if self.record["step"] in ("stopped", "backup_intent", "backed_up"):
+                    try:
+                        self.phase("restore_old_intent")
+                        self.restore_old()
+                    except Stop:
+                        self.attention("old_restart_requires_reconciliation")
+                    self.record["error_code"] = str(error)
+                    self.phase("failed", "failed")
+                    self.flush()
+                    self.record["closed"] = True
+                    self.save()
+                    raise error
                 self.attention(str(error))
         try:
             self.phase("verifying", "verifying")
@@ -558,11 +731,45 @@ class Executor:
             os.replace(self.journal, self.state / (self.record["task"]["id"] + ".json"))
             self.record = None
 
+    def reconcile(self, task_id, outcome, reason):
+        require(re.fullmatch(r"[a-f0-9]{32}", task_id or ""), "explicit_task_id_required")
+        require(self.record is None or self.record["task"]["id"] == task_id, "local_task_mismatch")
+        if outcome == "verify":
+            require(self.record and self.record["step"] == "attention" and "download" in self.record,
+                    "verification_evidence_required")
+            self.flush()
+            require(self.record["confirmed"] == "needs_attention", "attention_confirmation_required")
+            self.verify()
+            self.phase("verifying", "verifying")
+            self.flush()
+            self.phase("complete", "succeeded")
+            self.flush()
+            self.record["closed"] = True
+            self.save()
+            return
+        require(outcome == "failed" and reason in ("operator-confirmed-stop", "manual-recovery-complete"),
+                "explicit_failure_reason_required")
+        require(os.geteuid() == 0, "host_administrator_required")
+        current = self.inspect(self.container_id())
+        self.check_mounts(current)
+        self.check_writers(current)
+        evidence = self.state / (task_id + "-reconciliation.json")
+        atomic_write(evidence, json.dumps({"task": task_id, "instance_id": self.cfg["instance_id"],
+                     "container": current["Id"], "image": current["Image"], "reason": reason, "step": "settle_intent"}))
+        self.offline_tool(current, "settle", "--task", task_id, "--instance", self.cfg["instance_id"], "--reason", reason, writable=True)
+        atomic_write(evidence, json.dumps({"task": task_id, "reason": reason, "step": "failed"}))
+        if self.record:
+            self.record.update(step="failed", confirmed="failed", pending=[], closed=True, error_code=reason)
+            self.save()
+
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("check", "claim", "report", "run"))
+    parser.add_argument("action", choices=("check", "claim", "report", "run", "reconcile"))
     parser.add_argument("config")
+    parser.add_argument("--task")
+    parser.add_argument("--outcome", choices=("verify", "failed"))
+    parser.add_argument("--reason", choices=("operator-confirmed-stop", "manual-recovery-complete"))
     args = parser.parse_args()
     try:
         require(sys.platform == "linux", "linux_host_required")
@@ -578,7 +785,10 @@ def main():
             if args.action == "check":
                 ex.runtime()
                 ex.preflight()
-                print(VERSION + ": deployment checked; installation requires U4 backup")
+                ex.data_protection_available()
+                print(VERSION + ": deployment and SQLite backup checked; installation requires server capability enablement")
+            elif args.action == "reconcile":
+                ex.reconcile(args.task, args.outcome, args.reason)
             elif args.action == "report":
                 require(ex.record is not None, "no_local_record")
                 ex.flush()

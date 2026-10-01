@@ -115,9 +115,42 @@ class RecoveryTests(unittest.TestCase):
     def test_product_requires_u4_before_stop(self):
         self.claim()
         self.ex.download = lambda: {"image_id": "new", "manifest_digest": self.task["target_digest"]}
+        self.ex.inspect = lambda _: {"Config": {}, "Mounts": [], "State": {"Running": True}, "Id": "old-container"}
+        self.ex.check_writers = lambda *a, **k: None
+        self.ex.offline_tool = lambda *a, **k: (_ for _ in ()).throw(executor.Stop("old_tool_missing"))
         self.ex.stop_container = lambda: self.fail("stopped without U4")
         with self.assertRaisesRegex(executor.Stop, "u4_backup_unavailable"):
             self.ex.run()
+
+    def test_backup_failure_restarts_only_unchanged_old_writer(self):
+        self.claim()
+        self.ex.download = lambda: {"image_id": "new"}
+        self.ex.data_protection_available = lambda: True
+        self.ex.prepare_shutdown = lambda: None
+        self.ex.stop_container = lambda: None
+        self.ex.backup = lambda: (_ for _ in ()).throw(executor.Stop("backup_failed"))
+        restarted = []
+        self.ex.restore_old = lambda: restarted.append(True)
+        self.ex.replace = lambda: self.fail("replaced after failed backup")
+        with self.assertRaisesRegex(executor.Stop, "backup_failed"):
+            self.ex.run()
+        self.assertEqual(restarted, [True])
+        self.assertTrue(self.ex.record["closed"])
+        self.assertEqual(self.ex.record["confirmed"], "failed")
+
+    def test_failed_terminal_retry_needs_no_runtime(self):
+        self.claim()
+        self.ex.phase("failed", "failed")
+        self.ex.runtime = lambda: self.fail("failed retry called runtime")
+        self.ex.run()
+        self.assertTrue(self.ex.record["closed"])
+
+    def test_forced_shutdown_cannot_enter_backup(self):
+        self.claim()
+        self.ex.inspect = lambda _: {"State": {"Running": False, "ExitCode": 137, "OOMKilled": False}, "HostConfig": {"RestartPolicy": {"Name": "no"}}}
+        with patch.object(executor, "command", return_value=""):
+            with self.assertRaisesRegex(executor.Stop, "old_shutdown_not_clean"):
+                self.ex.stop_container()
 
     def test_uncertain_stop_is_not_reexecuted(self):
         self.claim()
@@ -226,7 +259,7 @@ class RecoveryTests(unittest.TestCase):
         self.ex.cfg["service"] = "app"
         calls = []
         self.ex.compose = lambda *args: calls.append(["compose", *args])
-        self.ex.inspect = lambda ref: {"State": {"Running": False}}
+        self.ex.inspect = lambda ref: {"State": {"Running": False, "ExitCode": 0}, "HostConfig": {"RestartPolicy": {"Name": "no"}}}
         with patch.object(executor, "command", side_effect=lambda args: calls.append(args) or ""):
             self.ex.stop_container()
         self.assertEqual(calls[0], ["docker", "update", "--restart=no", "old-container"])

@@ -38,6 +38,14 @@ func LockOperation() func() {
 	return operationMu.Unlock
 }
 
+func PrepareUpdateShutdown(task string, cancel bool) error {
+	if !operationMu.TryLock() {
+		return errors.New("备份或同步正在进行")
+	}
+	defer operationMu.Unlock()
+	return backupservice.ReserveUpdate(task, backupservice.DefaultLayout(), cancel)
+}
+
 const storageSyncConfirmFile = "data/storage_sync_confirmed"
 
 func IsStorageSyncConfirmedLocal() bool {

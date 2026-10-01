@@ -57,6 +57,10 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     go build -trimpath -ldflags "-s -w -buildid= -X github.com/rcy1314/echo-noise/internal/buildinfo.Identity=${VERSION} -X github.com/rcy1314/echo-noise/internal/buildinfo.Version=${VERSION} -X github.com/rcy1314/echo-noise/internal/buildinfo.Revision=${REVISION} -X github.com/rcy1314/echo-noise/internal/buildinfo.BuiltAt=${BUILD_TIME}" -o /app/noise ./cmd/server/main.go
 
 # 创建必要的目录并设置权限
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    GOOS="${TARGETOS:-linux}" GOARCH="${TARGETARCH:-$(go env GOARCH)}" \
+    go build -trimpath -ldflags "-s -w" -o /app/update-tool ./cmd/update-tool
 RUN mkdir -p /app/data /app/public && chmod -R 755 /app/data
 
 # MCP 构建阶段（打包为单文件，避免在最终镜像中保留 node_modules）
@@ -129,6 +133,7 @@ WORKDIR /app
 COPY --from=backend-build /app/config /app/config
 COPY --from=backend-build /app/config /app/default-config
 COPY --from=backend-build /app/noise /app/noise
+COPY --from=backend-build /app/update-tool /app/update-tool
 
 # 运行时入口：支持从 /app/config/runtime.env 自动加载环境变量，便于 GUI 容器部署时文件化维护配置
 COPY ./docker-entrypoint.sh /app/docker-entrypoint.sh

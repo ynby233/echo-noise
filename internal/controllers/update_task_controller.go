@@ -14,6 +14,7 @@ import (
 	"github.com/rcy1314/echo-noise/internal/dto"
 	"github.com/rcy1314/echo-noise/internal/middleware"
 	"github.com/rcy1314/echo-noise/internal/models"
+	"github.com/rcy1314/echo-noise/internal/syncmanager"
 	"github.com/rcy1314/echo-noise/internal/updates"
 )
 
@@ -323,6 +324,39 @@ func GetExecutorRuntime(c *gin.Context) {
 	}
 	metadata := buildinfo.CurrentMetadata()
 	c.JSON(http.StatusOK, dto.OK(gin.H{"instance_id": instanceID, "build_identity": metadata.Identity, "version": metadata.Version, "revision": metadata.Revision, "built_at": metadata.BuiltAt, "image_digest": strings.TrimSpace(os.Getenv("IMAGE_DIGEST"))}, "运行身份读取成功"))
+}
+
+func PrepareUpdateShutdown(c *gin.Context) {
+	var request struct {
+		Cancel bool `json:"cancel"`
+	}
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.Status(http.StatusBadRequest)
+		return
+	}
+	service, err := updateTaskService()
+	if err != nil {
+		c.Status(http.StatusInternalServerError)
+		return
+	}
+	task, err := service.Get(c.Param("id"))
+	if err != nil {
+		c.Status(http.StatusNotFound)
+		return
+	}
+	if task.ExecutorCredentialID == nil || *task.ExecutorCredentialID != c.GetUint("executor_credential_id") {
+		c.Status(http.StatusForbidden)
+		return
+	}
+	if task.Status != updates.TaskDownloading && task.Status != updates.TaskStopping {
+		c.Status(http.StatusConflict)
+		return
+	}
+	if err := syncmanager.PrepareUpdateShutdown(task.PublicID, request.Cancel); err != nil {
+		c.JSON(http.StatusConflict, dto.Fail[any]("恢复、备份或同步未结束，不能准备更新停机"))
+		return
+	}
+	c.JSON(http.StatusOK, dto.OK[any](nil, "停机准备已确认"))
 }
 
 func writeUpdateAudit(c *gin.Context, actorID uint, action, targetType, targetID, summary string) {

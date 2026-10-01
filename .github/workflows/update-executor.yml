@@ -6,6 +6,13 @@ on:
     paths:
       - 'scripts/update/**'
       - 'internal/updates/**'
+      - 'internal/backup/**'
+      - 'internal/syncmanager/**'
+      - 'internal/routers/routers.go'
+      - 'cmd/update-tool/**'
+      - 'cmd/server/**'
+      - 'Dockerfile'
+      - 'docker-entrypoint.sh'
       - 'internal/controllers/update_task_controller.go'
       - 'internal/middleware/auth.go'
       - 'internal/models/update.go'
@@ -30,6 +37,7 @@ jobs:
         run: |
           python3 -m unittest discover -s scripts/update -p 'test_*.py' -v
           go test ./internal/updates ./internal/controllers ./internal/middleware ./internal/routers -run 'Update|Executor|Task|Overview|Rotated' -count=1 -timeout=8m
+          go test ./internal/backup ./internal/syncmanager -count=1 -timeout=8m
       - name: Compile two isolated coordinator builds
         env:
           CGO_ENABLED: '0'
@@ -38,5 +46,6 @@ jobs:
             revision=$(printf '%040d' 0 | tr 0 "$i")
             go build -ldflags "-X github.com/rcy1314/echo-noise/internal/buildinfo.Revision=$revision" -o "coordinator-$i" ./scripts/update/fixture
           done
+          go build -o update-tool ./cmd/update-tool
       - name: Real registry and Docker/Compose replacement
         run: sudo -E python3 scripts/update/test-docker.py

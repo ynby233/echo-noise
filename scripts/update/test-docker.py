@@ -17,6 +17,8 @@ import subprocess
 import tempfile
 import time
 import urllib.request
+import zipfile
+import sqlite3
 
 import executor
 
@@ -45,16 +47,6 @@ class IsolatedExecutor(executor.Executor):
 
     def manifest(self, reference):
         return json.loads(executor.command(["docker", "manifest", "inspect", "--insecure", "--verbose", reference]))
-
-    def data_protection_available(self):
-        return True
-
-    def backup(self):
-        # Explicit U3 empty-data simulation. Never imported by the production entry point.
-        assert not self.inspect(self.record["old_container"])["State"]["Running"]
-        dst = Path(self.record["backup_path"])
-        shutil.copytree(data, dst)
-        (dst / "U3-EMPTY-FIXTURE-ONLY").write_text("U4 must replace this with validated data protection.\n")
 
 
 def docker(*args):
@@ -320,12 +312,21 @@ def test_attention(ex, task, cid):
     print("F4: SIGKILL after first attention write recovered to real DB needs_attention; legacy reconciled; active slot retained", flush=True)
 
 
-def test_mode(mode, old_ref, new_ref, new_digest, attention=False):
+def test_mode(mode, old_ref, new_ref, new_digest, attention=False, scenario=""):
     global data, url
-    case = root / (mode + ("-attention" if attention else ""))
+    case = root / (mode + ("-attention" if attention else "") + ("-" + scenario if scenario else ""))
     data = case / "data"
     data.mkdir(parents=True, mode=0o700)
     (data / "sentinel").write_text("preserved")
+    app_config = case / "app-config"
+    app_config.mkdir(mode=0o700)
+    (app_config / "config.yaml").write_text("database:\n  type: sqlite\n  path: /data/fixture.db\n")
+    (app_config / "runtime.env").write_text("DB_PATH=/data/fixture.db\nATTACHMENT_BLOB_ROOT=/external-blobs\nCONFIG_TEST_SECRET=private-fixture-value\n")
+    external = case / "external-blobs"
+    external.mkdir(mode=0o700)
+    (external / "blob").write_bytes(b"external-blob")
+    (data / "images").mkdir()
+    (data / "images" / "image").write_bytes(b"legacy-image")
     image_file = case / "image.env"
     executor.write_image(image_file, old_ref)
     with socket.socket() as reservation:
@@ -334,19 +335,27 @@ def test_mode(mode, old_ref, new_ref, new_digest, attention=False):
     publish = "127.0.0.1:" + str(app_port) + ":1314"
     opts = {"restart": "no", "ports": [publish], "env_file": str(case / "app.env"),
             "log_driver": "json-file", "log_options": {"max-size": "10m", "max-file": "3"}}
+    if scenario in ("backup-failure", "stop-interruption"):
+        opts["restart"] = "always"
     executor.atomic_write(case / "app.env", "FIXTURE_TARGET_DIGEST=" + new_digest + "\nFIXTURE_TARGET_REVISION=" + "2" * 40 + "\n")
     cfg = {"url": "http://127.0.0.1:1", "instance_id": "0" * 32,
            "token_file": str(case / "token"), "state_dir": str(case / "state"),
            "backup_dir": str(case / "backups"), "platform": "linux/amd64", "mode": mode,
-           "mounts": [{"type": "bind", "source": str(data), "target": "/data"}],
+           "mounts": [{"type": "bind", "source": str(data), "target": "/data"},
+                      {"type": "bind", "source": str(data), "target": "/app/data"},
+                      {"type": "bind", "source": str(app_config), "target": "/app/config"},
+                      {"type": "bind", "source": str(external), "target": "/external-blobs"}],
            "image_file": str(image_file), "min_free_bytes": 1024}
     # Config is created after the fixture emits its first one-time credential.
     if mode == "docker":
-        name = prefix + "-docker" + ("-attention" if attention else "")
+        name = prefix + "-docker" + ("-attention" if attention else "") + ("-" + scenario if scenario else "")
         cfg.update(container=name, docker=opts)
-        args = ["create", "--name", name, "--platform", "linux/amd64", "--restart", "no", "--env-file", str(case / "app.env"),
-                "--publish", publish, "--mount", "type=bind,source=" + str(data) + ",target=/data",
-                "--log-driver", "json-file", "--log-opt", "max-size=10m", "--log-opt", "max-file=3", old_ref]
+        args = ["create", "--name", name, "--platform", "linux/amd64", "--restart", opts["restart"], "--env-file", str(case / "app.env"),
+                "--publish", publish,
+                "--log-driver", "json-file", "--log-opt", "max-size=10m", "--log-opt", "max-file=3"]
+        for mount in cfg["mounts"]:
+            args += ["--mount", "type=bind,source=" + mount["source"] + ",target=" + mount["target"]]
+        args += [old_ref]
         cid = docker(*args)
         containers.append(cid)
         docker("start", cid)
@@ -355,7 +364,7 @@ def test_mode(mode, old_ref, new_ref, new_digest, attention=False):
         compose = case / "compose.json"
         model = {"services": {
             "app": {"image": "${UPDATE_IMAGE}", "env_file": [str(case / "app.env")], "ports": [publish],
-                    "volumes": [str(data) + ":/data"], "restart": "no"},
+                    "volumes": [m["source"] + ":" + m["target"] for m in cfg["mounts"]], "restart": "no"},
             "other": {"image": old_ref, "volumes": [prefix + "-other:/data"], "restart": "no"}},
                  "volumes": {prefix + "-other": {"name": prefix + "-other"}}}
         executor.atomic_write(compose, json.dumps(model))
@@ -374,7 +383,7 @@ def test_mode(mode, old_ref, new_ref, new_digest, attention=False):
     cfg["instance_id"] = (data / "instance").read_text()
     ex = new_executor(cfg)
     ex.preflight()
-    if not attention:
+    if not attention and not scenario:
         test_engine_and_volumes(ex, old_ref)
         if mode == "docker":
             test_paths(ex)
@@ -390,6 +399,87 @@ def test_mode(mode, old_ref, new_ref, new_digest, attention=False):
     task = seed(ex)
     if attention:
         test_attention(ex, task, cid)
+        return
+    if scenario:
+        ex.claim()
+        if scenario == "download-failure":
+            ex.download = lambda: (_ for _ in ()).throw(executor.Stop("fixture_download_failed"))
+            rejected(ex.run, "fixture_download_failed")
+            assert_status(task["id"], "failed")
+            assert current_id(ex) == cid and ex.inspect(cid)["State"]["Running"]
+        elif scenario == "backup-failure":
+            # Invoke the real tool with a read-only destination; the old image
+            # and writer are still unchanged, so recovery may restart it.
+            def failed_backup():
+                current = ex.inspect(cid)
+                ex.offline_tool(current, "backup", "--output", "/app/config/cannot-write.zip")
+            ex.backup = failed_backup
+            rejected(ex.run, "command_failed:docker")
+            wait()
+            assert_status(task["id"], "failed")
+            assert current_id(ex) == cid and ex.inspect(cid)["Image"] == ex.record["old_image"]
+            assert ex.inspect(cid)["HostConfig"]["RestartPolicy"]["Name"] == "always"
+        elif scenario == "forced-stop":
+            (data / "ignore-stop").touch()
+            ex.cfg["stop_timeout"] = 1
+            rejected(ex.run, "old_shutdown_not_clean")
+            assert not ex.inspect(cid)["State"]["Running"]
+            assert not Path(ex.record["backup_path"], "backup.zip").exists()
+            (data / "ignore-stop").unlink()
+            docker("start", cid)
+            wait()
+            ex.flush()
+            assert_status(task["id"], "needs_attention")
+        elif scenario == "verify-failure":
+            (data / "fail-health").touch()
+            ex.cfg["health_timeout"] = 3
+            rejected(ex.run, "target_health_timeout")
+            assert_status(task["id"], "needs_attention")
+            assert current_id(ex) != cid and ex.target_running()
+            assert not ex.inspect(cid)["State"]["Running"]
+            assert ex.inspect(cid)["HostConfig"]["RestartPolicy"]["Name"] == "no"
+            with sqlite3.connect("file:" + str(data / "fixture.db") + "?mode=ro", uri=True) as db:
+                assert db.execute("SELECT content FROM messages WHERE id=2").fetchone()[0] == "new version write"
+            # Revoked credentials cannot settle by HTTP. Explicit host authority
+            # with the writer stopped settles the same task without restoring DB.
+            request("/fixture/revoke")
+            rejected(ex.flush, "http_401") if ex.record["pending"] else None
+            new_id = current_id(ex)
+            docker("update", "--restart=no", new_id)
+            docker("stop", new_id)
+            ex.reconcile(task["id"], "failed", "operator-confirmed-stop")
+            assert ex.record["closed"]
+            docker("start", new_id)
+            (data / "fail-health").unlink()
+            wait()
+            assert_status(task["id"], "failed")
+            with sqlite3.connect(data / "fixture.db") as db:
+                assert db.execute("SELECT count(*) FROM messages WHERE id=2").fetchone()[0] == 1
+        elif scenario == "stop-interruption":
+            def killed_after_stop():
+                normal = ex.stop_container
+                def stop():
+                    normal()
+                    os.kill(os.getpid(), signal.SIGKILL)
+                ex.stop_container = stop
+                ex.run()
+            killed_child(killed_after_stop)
+            ex.load_record()
+            assert ex.record["step"] == "stop_intent"
+            assert not ex.inspect(cid)["State"]["Running"]
+            assert ex.inspect(cid)["HostConfig"]["RestartPolicy"]["Name"] == "no"
+            # Dedicated CI runner: daemon restart must not resurrect any retained
+            # previous writer. This never runs against the personal NAS.
+            subprocess.run(["systemctl", "restart", "docker"], check=True, timeout=60)
+            assert not ex.inspect(cid)["State"]["Running"]
+            docker("start", registry)
+            rejected(ex.run, "interrupted_destructive_step")
+            docker("start", cid)
+            wait()
+            rejected(ex.run, "manual_reconciliation_required")
+            assert_status(task["id"], "needs_attention")
+            assert current_id(ex) == cid
+        print("U4 " + scenario + ": real engine/coordinator boundary passed", flush=True)
         return
     # Lose a committed claim response, then retrieve precisely the same task.
     assigned = ex.api("POST", "/api/updates/executor/claim")
@@ -448,7 +538,36 @@ def test_mode(mode, old_ref, new_ref, new_digest, attention=False):
     assert new_id != cid
     assert ex.record["step"] == "complete" and ex.record["pending"] == ["succeeded"]
     assert (data / "sentinel").read_text() == "preserved"
-    assert Path(ex.record["backup_path"], "U3-EMPTY-FIXTURE-ONLY").exists()
+    archive = Path(ex.record["backup_path"], "backup.zip")
+    assert archive.exists() and ex.record["backup_complete"]
+    with zipfile.ZipFile(archive) as z:
+        assert z.read("protected-config/runtime.env") == (app_config / "runtime.env").read_bytes()
+        assert z.read("attachment-blobs/blob") == b"external-blob"
+        assert z.read("images/image") == b"legacy-image"
+        restored = case / "restored"
+        restored.mkdir()
+        z.extract("database.db", restored)
+    with sqlite3.connect(restored / "database.db") as db:
+        assert db.execute("SELECT content FROM messages WHERE id=1").fetchone()[0] == "old WAL note"
+        assert db.execute("SELECT count(*) FROM messages WHERE id=2").fetchone()[0] == 0
+    # Exercise the established restore implementation in an independent empty
+    # container, then read back DB, blobs, media and restored configuration.
+    recovery = case / "recovery"
+    recovery.mkdir()
+    recovery_blobs = case / "recovery-blobs"
+    recovery_blobs.mkdir()
+    restore_args = ["run", "--rm", "--entrypoint", "/fixture", "--mount", "type=bind,source=" + str(recovery) + ",target=/data",
+                    "--mount", "type=bind,source=" + str(archive.parent) + ",target=/update-backup,readonly",
+                    "--mount", "type=bind,source=" + str(recovery_blobs) + ",target=/external-blobs",
+                    "--env", "ATTACHMENT_BLOB_ROOT=/external-blobs",
+                    "--mount", "type=bind,source=" + str(recovery) + ",target=/app/data",
+                    old_ref, "-restore", "/update-backup/backup.zip", "-restore-only"]
+    docker(*restore_args)
+    with sqlite3.connect(recovery / "fixture.db") as db:
+        assert db.execute("SELECT content FROM messages WHERE id=1").fetchone()[0] == "old WAL note"
+    assert (recovery_blobs / "blob").read_bytes() == b"external-blob"
+    assert (recovery / "images" / "image").read_bytes() == b"legacy-image"
+    print(mode + ": U4 real old-image archive contains SQLite/WAL note, external blob, media and protected config", flush=True)
     assert Path(cfg["image_file"]).read_text().strip() == "UPDATE_IMAGE=" + new_ref
     assert ex.record["download"]["requested_digest"] != ex.record["download"]["manifest_digest"]
     assert ex.record["download"]["image_id"] != ex.record["download"]["requested_digest"]
@@ -503,6 +622,11 @@ if __name__ == "__main__":
                 context.mkdir()
                 shutil.copyfile("scripts/update/fixture/Dockerfile", context / "Dockerfile")
                 shutil.copyfile("coordinator-" + str(i), context / "coordinator")
+                shutil.copyfile("update-tool", context / "update-tool")
+                shutil.copyfile("docker-entrypoint.sh", context / "docker-entrypoint.sh")
+                # Git checkout on Windows can use CRLF; container scripts require LF.
+                script = context / "docker-entrypoint.sh"
+                script.write_text(script.read_text().replace("\r\n", "\n"))
                 (context / "coordinator").chmod(0o755)
                 tag = registry_image + ":fixture-" + str(i)
                 docker("build", "--build-arg", "REVISION=" + str(i) * 40, "--tag", tag, str(context))
@@ -523,6 +647,8 @@ if __name__ == "__main__":
             test_mode("docker", refs[0][0], refs[1][0], refs[1][1])
             test_mode("compose", refs[0][0], refs[1][0], refs[1][1])
             test_mode("docker", refs[0][0], refs[1][0], refs[1][1], attention=True)
+            for scenario in ("download-failure", "backup-failure", "forced-stop", "verify-failure", "stop-interruption"):
+                test_mode("docker", refs[0][0], refs[1][0], refs[1][1], scenario=scenario)
         finally:
             for project, image_file, compose in compose_cleanup:
                 with contextlib.suppress(executor.Stop):

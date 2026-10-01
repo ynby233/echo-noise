@@ -296,6 +296,7 @@ func SetupRouter() *gin.Engine {
 	executorRoutes.Use(middleware.UpdateExecutorAuthMiddleware())
 	executorRoutes.POST("/claim", controllers.ClaimUpdateTask)
 	executorRoutes.POST("/tasks/:id/events", controllers.RecordUpdateTaskEvent)
+	executorRoutes.POST("/tasks/:id/prepare", controllers.PrepareUpdateShutdown)
 	executorRoutes.GET("/runtime", controllers.GetExecutorRuntime)
 	registerAdminAuthorizationRoutes(authRoutes)
 	registerRuntimePolicyRoutes(authRoutes)

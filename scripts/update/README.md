@@ -1,6 +1,6 @@
-# U3 外部更新执行器
+# 外部更新执行器与 U4 数据保护
 
-Linux 宿主执行器，更新一个管理员登记的 Docker 容器或 Compose 服务。程序不在应用容器中运行，应用不挂 Docker socket。生产 `POST /api/updates/tasks` 继续返回 501；U4 一致备份尚未接入，`run` 可以领取、下载和记录目标，但在停止应用前以 `u4_backup_unavailable` 返回非零。不能将隔离 fixture 用于业务宿主绕过限制。
+Linux 宿主执行器，更新一个管理员登记的 Docker 容器或 Compose 服务。程序不在应用容器中运行，应用不挂 Docker socket。生产 `POST /api/updates/tasks` 继续返回 501；U4 已接入旧镜像离线 SQLite 备份；当前仍须等待 U5 能力判断及 U6 初次接入，不能用于现有站点直接安装。旧镜像没有 `/app/update-tool` 时，停机前返回 `u4_backup_unavailable`。
 
 依赖为 Linux、Python 3.9+ 标准库、Docker CLI/本地 Engine、curl；Compose 模式另需 Compose v2（`config --format json`、`up --pull never`）。锁用 `fcntl.flock`，与宿主 flock 相同；不新增服务或 Python 包、不自动安装依赖。非回环地址必须使用 HTTPS，保留系统证书验证，不跟随认证请求重定向。实际验收架构是 linux/amd64；arm64 配置/manifest 判断可识别，但尚无 ARM 运行验收。
 
@@ -30,7 +30,7 @@ install -m 600 scripts/update/docker.example.json /etc/echo-noise-update/executo
 python3 /etc/echo-noise-update/executor.py check /etc/echo-noise-update/executor.json
 ```
 
-`check` 核对配对、依赖、架构、实际容器、登记挂载、权限和最低磁盘余量。Docker 模式创建**不启动**的临时容器，用旧 image ID 比较固定启动参数，然后删除它；不执行迁移。无法表示的高级参数、额外网络、自定义配置会拒绝，可改用管理员 Compose，不能假装克隆任意 inspect。支持 Docker network、restart、env_file、devices、ports、log_driver/options、entrypoint、command、user；挂载支持显式 bind/现存 named volume，非默认传播/卷驱动不支持。`min_free_bytes` 默认 1 GiB，检查状态/备份及 Docker 根目录；不是备份容量保证，U4 必须按真实布局测量。
+`check` 核对配对、依赖、架构、实际容器、登记挂载、权限和最低磁盘余量。Docker 模式创建**不启动**的临时容器，用旧 image ID 比较固定启动参数，然后删除它；不执行迁移。无法表示的高级参数、额外网络、自定义配置会拒绝，可改用管理员 Compose，不能假装克隆任意 inspect。支持 Docker network、restart、env_file、devices、ports、log_driver/options、entrypoint、command、user；挂载支持显式 bind/现存 named volume，非默认传播/卷驱动不支持。`min_free_bytes` 默认 1 GiB，检查状态/备份及 Docker 根目录；另以旧镜像 plan 测量全部归档源的字节量，备份目录至少需三倍源大小加 64 MiB 和配置最低余量中的较大值；失败在停机前拒绝。
 
 实际网络集合必须与探测容器一致；静态 IPAM、额外 alias/Links/DriverOpts/网关优先级和显式自定义 hostname/domain 无法由本期参数表示，停机前拒绝。Docker 模式还比较 Config 中的固定 MacAddress，不能保留时返回 `docker_mac_address_not_represented`；运行时动态 MAC/IP/endpoint ID 不作为配置差异。默认容器 ID 主机名、host 网络继承的宿主主机名正常支持。
 
@@ -68,20 +68,20 @@ docker compose --project-name echo-noise --env-file /etc/echo-noise-update/image
 python3 executor.py check /absolute/executor.json   # 核对，不领取
 python3 executor.py claim /absolute/executor.json   # 领取并落盘，无任务 exit 0
 python3 executor.py report /absolute/executor.json  # 仅按序补报已有记录
-python3 executor.py run /absolute/executor.json     # 先恢复，再领取；U4 前禁止停换
+python3 executor.py run /absolute/executor.json     # 先恢复，再领取；生产创建仍受 U5 保护
 ```
 
 每次 CLI 独占登记 state_dir 的 flock，并发调用非零退出，不删除锁文件“恢复”。`active.json` 原子替换/fsync、0600，保存任务/实例、目标 digest/revision、旧容器/image ID、配置位置、备份位置、token **文件引用**、确认/待报阶段和动作意图/结果；无 token 明文或原 env。日志只输出任务 ID、阶段和有限错误码。保留宿主/scheduler stderr；服务起不来时网页无法查询是实际限制。
 
-状态按 `claimed → downloading → stopping → backing_up → replacing → verifying → succeeded` 回报。停机期间继续确认后的宿主操作，事件落盘后在新服务恢复时串行补报。ACK 丢失重发当前未确认事件；409 保留记录并退出，不能忽略/跳过。实例或配置不一致、原任务无本地证据时停止，不领取第二条任务。下载/核对可重试；停止/备份中断结果不明进入 `needs_attention`；替换意图存在且实际目标已运行时只核验/补报，不再次替换。
+状态按 `claimed → downloading → stopping → backing_up → replacing → verifying → succeeded` 回报。停机期间继续确认后的宿主操作，事件落盘后在新服务恢复时串行补报。ACK 丢失重发当前未确认事件；409 保留记录并退出，不能忽略/跳过。实例或配置不一致、原任务无本地证据时停止，不领取第二条任务。下载/停机前检查失败记录 failed；停止/备份中断结果不明进入 `needs_attention`；替换意图存在且实际目标已运行时只核验/补报，不再次替换。
 
-最终 ACK 丢失保留 `step=complete` 和待报 `succeeded`，下次用原 token 引用补报，不先要求旧 token 调用 claim/runtime。轮换按 U2 范围接受自己最终回报；撤销/过期 401，记录保留、非零退出。已确认结束记录在下次领取前按任务 ID 归档；旧镜像/备份不全局 prune。
+最终 ACK 丢失保留 `step=complete/failed` 和待报 `succeeded/failed`，下次用原 token 引用补报，不先要求旧 token 调用 claim/runtime。轮换按 U2 范围接受自己最终回报；撤销/过期 401，记录保留、非零退出。已确认结束记录在下次领取前按任务 ID 归档；旧镜像/备份不全局 prune。
 
-`needs_attention` 保留服务端活动占位。保存日志、记录、新旧镜像、备份及数据库现场，由 U4 人工结案；U3 无强制清空/重装入口。禁止删除记录、改库或用新 token 冒认原执行器解除占位；失效凭据的受权结案工具属 U4。
+`needs_attention` 保留服务端活动占位。保存日志、记录、新旧镜像、备份及数据库现场，通过下述受权人工结案。禁止删除记录、手工改库或用新 token 冒认原执行器解除占位。
 
 异常 step、有限错误码与待报 needs_attention 同一次原子写入。旧版 attention/pending=[] 记录在 run/report 通过原 token、原任务事件接口补报；需本地旧容器/image 证据及合法 downloading/stopping/backing_up/replacing/verifying 状态。服务端仍校验任务归属和状态转换，409/401/传输失败保留记录；无法证明合法来源返回 `attention_evidence_requires_reconciliation`，无本地证据的 claim 保持 `manual_reconciliation_required`。补报不会 stop/replace，不解除活动占位。
 
-## 测试与 U4 接口
+## U4 一致备份、停机与人工结案
 
 ```sh
 python3 -m unittest discover -s scripts/update -p 'test_*.py' -v
@@ -100,10 +100,38 @@ done
 sudo -E python3 scripts/update/test-docker.py
 ```
 
-`.github/workflows/update-executor.yml` 自动在独立 runner 执行。fixture 使用临时 SQLite、真实 TaskService/Create/Claim、真实认证/控制器和不同内嵌 revision 的 coordinator，回环 registry、独立端口和临时卷；生产路由无开关。仅 fixture 子类将官方仓库映射到回环 registry，并模拟**无业务数据**停机备份；产品入口不导入它。
+`.github/workflows/update-executor.yml` 自动在独立 runner 执行。fixture 使用临时 SQLite、真实 TaskService/Create/Claim、真实认证/控制器和不同内嵌 revision 的 coordinator，回环 registry、独立端口和临时卷；生产路由无开关。仅 fixture 子类将官方仓库映射到回环 registry，由真实旧镜像 `/app/update-tool` 归档合成 SQLite 笔记、外置本地 Blob、兼容媒体和配置，并实际恢复到隔离目录；产品入口不导入它。
 
 真实检查覆盖 Docker/Compose 停旧替换、健康/runtime、OCI index/manifest/image ID、错误架构、flock、claim 丢失取回、409、停机积压事件、DB 提交后最终响应丢失、轮换/撤销、SIGKILL 后核对不重装、Compose 再 up 及其他服务身份/挂载。清理只处理自有项目/临时卷；fixture 的 `down --volumes` 只清理独立测试卷，不是产品执行器动作。
 
 F1–F6 补验包含真实 network connect、自定义 hostname/domain 拒绝及 host 成功、两种多副本文件加单副本覆盖启动、create 后 SIGKILL/回执丢失重试与他人/运行中探测保留、真实 UID/mode/链接与 UNIX/Engine socket 检查，以及异常首次写入 SIGKILL 后真实协调数据库 needs_attention/活动占位。均使用空数据隔离实例，不操作 NAS。
 
-这些不证明真实业务 WAL/Blob/外置附件一致备份恢复，也不证明 NAS scheduler 接入。U4 接入 `Executor.data_protection_available()`、`backup()`，完善 `stop_container()`：复用 `internal/backup`、增加不启动迁移的独立备份命令、实际验证空间/失败/迁移风险与人工结案后，才考虑开放安装。U5 接后台恢复及能力判断，U6 安装 NAS 任务计划。
+隔离数据与实际生产业务恢复、NAS scheduler 接入分别验收。U5 接后台恢复及能力判断，U6 安装 NAS 任务计划；本阶段保持生产 501。
+
+
+`check` 用已安装旧 image ID 启动无网络、只读文件系统、只读源挂载的 `/app/update-tool plan`。工具加载既有 config/runtime.env，不生成配置，不启动服务，不迁移、不应用待恢复包。SQLite 连接为 mode=ro，包含已提交 WAL，不对源使用 immutable。所有解析源必须处于登记挂载；数据库、config、data 以及外置 Blob 缺失挂载、目录链接、特殊文件、远端 Blob/远端附件配置均拒绝。仅验收 Linux/amd64 + SQLite，本地目录可用 bind 或普通 local named volume。非 SQLite 仍可检查版本，不能安装。
+
+宿主执行用户需 root 才能完整核对 `/proc/*/fd`。共享挂载的其他 running 容器，或停止但可自动重启的容器，以及打开数据文件的宿主进程，都会阻止停换。宿主管理员还须暂停外部脚本/定时写入者，不得在更新中手动启动另一实例；未来 root 操作无法由当前检查保证。执行器不修改其他容器或第三方计划任务。
+
+下载与空间检查成功后，`POST /api/updates/executor/tasks/ID/prepare` 仅允许原任务有效凭据，在 downloading/stopping 阶段通过既有 sync/restore/archive 锁确认；恢复/同步/备份未结束或存在待恢复包返回 409。准备后全部恢复调用方与新建归档会拒绝，普通业务写入在实际停机时结束。撤销停机准备使用同一接口 `{"cancel":true}`；进程退出后内存准备状态自动消失。停机前先持久化意图及原 restart 策略，再设旧容器 restart=no；只有 running=false、exit code=0、非 OOM 才进入备份。SIGKILL/超时/非零退出保留现场进入 needs_attention。
+
+备份在 0700 的任务目录保存 0600 归档、原容器配置及必要 image/env/Compose 配置；原配置可能含秘密，不进入日志或公开报告。`backup.zip` 包括 database.db、既有附件/媒体根和 protected-config；按现有恢复工具恢复数据库/媒体，配置在授权的离线恢复时单独解压 protected-config 到登记配置目录。空间估计包含临时快照和归档余量；`backup_timeout` 默认 3600 秒，可按真实大附件测量调整。写盘/权限/超时/校验失败均不报备份成功。
+
+若备份失败且从未写入 replace_intent，核对旧容器/image/数据写入者与无待恢复包后，恢复原 restart 策略并启动同一个旧容器，按序补报 failed。已写 replace_intent，启动回执失败或新版健康/revision 失败都保留 needs_attention；即使容器后来停了也不推断新版未运行，不自动恢复旧库或启动旧镜像。Docker 保留的旧容器始终 restart=no；Compose 仍仅替换登记服务并保留旧 image/备份/配置，成功后新实例使用真源的 restart 策略。
+
+正常人工完成沿原任务事件接口核验，不重新安装：
+
+```sh
+python3 executor.py reconcile /absolute/executor.json --task TASK_ID --outcome verify
+```
+
+需要 attention、本地目标证据和原任务有效凭据；先核验真实镜像/挂载/health/runtime，再经 verifying → succeeded。验证失败保留占位。
+
+凭据撤销/过期或本地记录丢失时：管理员先保留现场，核对是否已有迁移/写入，完成必要的受权人工恢复；停止当前登记容器并设置 restart=no，核对其他写入者。然后 root 执行：
+
+```sh
+python3 executor.py reconcile /absolute/executor.json --task TASK_ID --outcome failed --reason operator-confirmed-stop
+# 已由管理员完成必要的数据恢复时可用 --reason manual-recovery-complete
+```
+
+CLI 获取同一 flock，指定任务 ID/instance，持久化结案意图，再用当前安装镜像的离线工具修改该任务及唯一 active_slot。它不依赖 HTTP token、不放宽 HTTP 认证、不修改业务库内容、不报 succeeded；只允许可合法失败的活动任务（包括停机中无法补报 attention 的 downloading/stopping/backing_up/replacing/verifying）。有限原因保存在任务和事件，幂等重试保留原证据。拒绝不匹配实例/任务、pending 和已完成结果。本地 active.json 存在时须同一任务，成功仅将其关闭并保留历史。执行器不启动容器；管理员在核对数据安全后按原策略恢复服务。现存镜像缺少工具时先按 U6 的明确引导方案升级工具，不能删库/删任务解除占位。

@@ -31,6 +31,60 @@ func openTaskTestDB(t *testing.T, path string) *gorm.DB {
 	return db
 }
 
+func TestOfflineSettlementAfterRevocationPreservesEvidence(t *testing.T) {
+	db := openTaskTestDB(t, ":memory:")
+	s := NewTaskService(db)
+	credential, token, err := s.CreateCredential(1, "host")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Authenticate(token); err != nil {
+		t.Fatal(err)
+	}
+	target := Target{Channel: "edge", Image: officialUpdateImage, Digest: "sha256:" + strings.Repeat("a", 64), Revision: strings.Repeat("1", 40)}
+	task, _, err := s.Create(1, target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Claim(credential.ID); err != nil {
+		t.Fatal(err)
+	}
+	for _, state := range []string{TaskDownloading, TaskStopping, TaskNeedsAttention} {
+		if err := s.RecordEvent(credential.ID, task.PublicID, state, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.RevokeCredential(1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.AuthenticateTaskReport(token, task.PublicID); err == nil {
+		t.Fatal("revocation bypassed")
+	}
+	instance, _ := s.InstanceID()
+	if err := s.SettleOffline("other", task.PublicID, "operator-confirmed-stop"); err == nil {
+		t.Fatal("wrong instance accepted")
+	}
+	if err := s.SettleOffline(instance, task.PublicID, "succeeded"); err == nil {
+		t.Fatal("manufactured success")
+	}
+	for i := 0; i < 2; i++ {
+		if err := s.SettleOffline(instance, task.PublicID, "operator-confirmed-stop"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	settled, _ := s.Get(task.PublicID)
+	if settled.Status != TaskFailed || settled.ActiveSlot != nil || settled.FinishedAt == nil {
+		t.Fatal("active slot not released")
+	}
+	var events []models.UpdateTaskEvent
+	if err := db.Where("task_id = ?", task.ID).Order("id").Find(&events).Error; err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 5 || events[4].Summary != "宿主管理员人工结案: operator-confirmed-stop" {
+		t.Fatalf("audit evidence: %+v", events)
+	}
+}
+
 func TestConcurrentUpdateTaskCreateReturnsOneActiveTask(t *testing.T) {
 	db := openTaskTestDB(t, ":memory:")
 	service := NewTaskService(db)

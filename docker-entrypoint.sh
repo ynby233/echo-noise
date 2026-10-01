@@ -56,8 +56,14 @@ load_runtime_env() {
 
   rm -f "$tmp_file"
   trap - EXIT HUP INT TERM
-  echo "Loaded runtime environment from $env_file"
+  echo "Loaded runtime environment from $env_file" >&2
 }
+
+if [ "${1:-}" = "/app/update-tool" ]; then
+  # Offline tools use the installed runtime environment without creating config.
+  load_runtime_env
+  exec "$@"
+fi
 
 load_default_config
 load_runtime_env_example

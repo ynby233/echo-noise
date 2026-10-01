@@ -29,8 +29,9 @@ const (
 )
 
 var (
-	archiveMu sync.Mutex
-	restoreMu sync.Mutex
+	archiveMu         sync.Mutex
+	restoreMu         sync.Mutex
+	updateReservation string
 )
 
 // ErrRestartRequired tells callers that a verified restore is safely staged
@@ -93,6 +94,12 @@ func DefaultLayout() Layout {
 func CreateArchive(destination string, db *gorm.DB, layout Layout) error {
 	archiveMu.Lock()
 	defer archiveMu.Unlock()
+	restoreMu.Lock()
+	reserved := updateReservation != ""
+	restoreMu.Unlock()
+	if reserved {
+		return errors.New("更新停机已准备，不能启动备份")
+	}
 	if db == nil {
 		return errors.New("数据库未初始化")
 	}
@@ -281,6 +288,9 @@ func StageRestore(source string, layout Layout) error {
 func StageRestoreWithResult(source string, layout Layout) (StageResult, error) {
 	restoreMu.Lock()
 	defer restoreMu.Unlock()
+	if updateReservation != "" {
+		return StageResult{}, errors.New("更新停机已准备，不能同时恢复备份")
+	}
 	inspection, err := inspectArchive(source)
 	if err != nil {
 		return StageResult{}, err
@@ -307,6 +317,32 @@ func StageRestoreWithResult(source string, layout Layout) (StageResult, error) {
 		result.Warning = incompleteMigrationWarning
 	}
 	return result, nil
+}
+
+// ReserveUpdate uses the restore operation's existing lock. Once prepared,
+// all restore callers (HTTP and background sync) refuse staging until cancel
+// or process exit. Ordinary writes continue until controlled shutdown.
+func ReserveUpdate(task string, layout Layout, cancel bool) error {
+	if !restoreMu.TryLock() {
+		return errors.New("恢复正在进行")
+	}
+	defer restoreMu.Unlock()
+	if updateReservation != "" && updateReservation != task {
+		return errors.New("其他更新已准备停机")
+	}
+	if cancel {
+		updateReservation = ""
+		return nil
+	}
+	if !archiveMu.TryLock() {
+		return errors.New("备份正在进行")
+	}
+	defer archiveMu.Unlock()
+	if HasPendingRestore(layout) {
+		return ErrRestartRequired
+	}
+	updateReservation = task
+	return nil
 }
 
 func PendingRestorePath(layout Layout) string {

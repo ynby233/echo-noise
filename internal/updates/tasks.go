@@ -205,6 +205,42 @@ func terminalTaskStatus(status string) bool {
 	return status == TaskSucceeded || status == TaskFailed
 }
 
+// SettleOffline is only used by the local administrator's offline CLI. It is
+// deliberately not exposed by HTTP and cannot manufacture a successful install.
+func (s *TaskService) SettleOffline(instanceID, publicID, reason string) error {
+	if reason != "operator-confirmed-stop" && reason != "manual-recovery-complete" {
+		return ErrInvalidTransition
+	}
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		var preference models.UpdatePreference
+		if err := tx.First(&preference, 1).Error; err != nil {
+			return err
+		}
+		if instanceID == "" || preference.InstanceID != instanceID {
+			return ErrTaskOwnership
+		}
+		var task models.UpdateTask
+		if err := tx.Where("public_id = ?", publicID).First(&task).Error; err != nil {
+			return ErrTaskNotFound
+		}
+		summary := "宿主管理员人工结案: " + reason
+		if task.Status == TaskFailed && task.ErrorSummary == summary {
+			return nil
+		}
+		if task.ActiveSlot == nil || (!validTaskTransition(task.Status, TaskFailed)) {
+			return ErrInvalidTransition
+		}
+		result := tx.Model(&task).Where("status = ? AND active_slot = ?", TaskNeedsAttention, 1).Updates(map[string]any{"status": TaskFailed, "active_slot": nil, "finished_at": time.Now().UTC(), "error_summary": summary})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return ErrInvalidTransition
+		}
+		return tx.Create(&models.UpdateTaskEvent{TaskID: task.ID, Status: TaskFailed, Summary: summary}).Error
+	})
+}
+
 func (s *TaskService) CreateCredential(actorID uint, name string) (models.UpdateExecutorCredential, string, error) {
 	if actorID != models.PrimaryAdminUserID {
 		return models.UpdateExecutorCredential{}, "", ErrCredentialInvalid

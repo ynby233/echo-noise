@@ -299,7 +299,9 @@ func main() {
 	shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 30*time.Second)
 
 	// 优雅关闭服务器
+	shutdownFailed := false
 	if err := srv.Shutdown(shutdownCtx); err != nil {
+		shutdownFailed = true
 		logLifecycleStage("shutdown", "http_shutdown", "failed", stageStarted)
 		log.Printf("服务器关闭错误: %v\n", err)
 	} else {
@@ -311,6 +313,7 @@ func main() {
 	logLifecycleStage("shutdown", "access_log_flush", "begin", stageStarted)
 	flushCtx, cancelFlush := context.WithTimeout(context.Background(), 5*time.Second)
 	if err := middleware.FlushAccessLogs(flushCtx); err != nil {
+		shutdownFailed = true
 		logLifecycleStage("shutdown", "access_log_flush", "failed", stageStarted)
 		log.Printf("访问日志刷新错误: %v\n", err)
 	} else {
@@ -322,6 +325,7 @@ func main() {
 	stageStarted = time.Now()
 	logLifecycleStage("shutdown", "database_close", "begin", stageStarted)
 	if err := closeDatabaseWithTimeout(databaseCloseTimeout); err != nil {
+		shutdownFailed = true
 		logLifecycleStage("shutdown", "database_close", "failed", stageStarted)
 		log.Printf("数据库关闭错误: %v\n", err)
 	} else {
@@ -329,6 +333,9 @@ func main() {
 	}
 
 	log.Println("服务器已关闭")
+	if shutdownFailed {
+		os.Exit(1)
+	}
 }
 
 // cleanOldLogs 清理指定天数之前的日志文件

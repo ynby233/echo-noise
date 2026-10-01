@@ -1,7 +1,11 @@
-FROM scratch
+FROM alpine:3.22
 ARG REVISION
 LABEL org.opencontainers.image.revision=$REVISION
 COPY coordinator /fixture
+COPY update-tool /app/update-tool
+COPY docker-entrypoint.sh /app/docker-entrypoint.sh
+WORKDIR /app
+RUN mkdir -p /app/config /app/data && printf 'database:\n  type: sqlite\n  path: /data/fixture.db\n' > /app/config/config.yaml && chmod +x /app/docker-entrypoint.sh
 EXPOSE 1314
 HEALTHCHECK --interval=1s --timeout=3s --retries=30 CMD ["/fixture", "-health"]
 ENTRYPOINT ["/fixture"]

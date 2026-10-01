@@ -3,17 +3,23 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"flag"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
+	"github.com/rcy1314/echo-noise/config"
+	"github.com/rcy1314/echo-noise/internal/backup"
+	"github.com/rcy1314/echo-noise/internal/buildinfo"
 	"github.com/rcy1314/echo-noise/internal/controllers"
 	"github.com/rcy1314/echo-noise/internal/database"
 	"github.com/rcy1314/echo-noise/internal/dto"
@@ -26,6 +32,8 @@ import (
 
 func main() {
 	health := flag.Bool("health", false, "container health probe")
+	restore := flag.String("restore", "", "isolated archive restore")
+	restoreOnly := flag.Bool("restore-only", false, "exit after isolated restore")
 	flag.Parse()
 	if *health {
 		client := &http.Client{Timeout: 2 * time.Second}
@@ -38,12 +46,30 @@ func main() {
 	}
 	gin.SetMode(gin.ReleaseMode)
 	dir := "/data"
-	db, err := gorm.Open(sqlite.Open(filepath.Join(dir, "fixture.db")), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	must(config.LoadConfig())
+	if *restore != "" {
+		layout := backup.DefaultLayout()
+		_, err := backup.StageRestoreWithResult(*restore, layout)
+		must(err)
+		applied, err := backup.ApplyPendingRestore(layout)
+		must(err)
+		must(applied.Commit())
+		if *restoreOnly {
+			return
+		}
+	}
+	db, err := gorm.Open(sqlite.Open("file:"+filepath.Join(dir, "fixture.db")+"?_pragma=journal_mode(WAL)&_pragma=wal_autocheckpoint(0)"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 	must(err)
 	sqlDB, err := db.DB()
 	must(err)
 	sqlDB.SetMaxOpenConns(1)
 	must(db.AutoMigrate(&models.UpdatePreference{}, &models.UpdateExecutorCredential{}, &models.UpdateTask{}, &models.UpdateTaskEvent{}))
+	for _, statement := range []string{"CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY, username TEXT, password TEXT, is_admin INTEGER)", "CREATE TABLE IF NOT EXISTS messages(id INTEGER PRIMARY KEY, content TEXT, user_id INTEGER)", "CREATE TABLE IF NOT EXISTS site_configs(id INTEGER PRIMARY KEY)", "INSERT OR IGNORE INTO messages VALUES(1, 'old WAL note', 1)"} {
+		must(db.Exec(statement).Error)
+	}
+	if buildinfo.CurrentMetadata().Revision == "2222222222222222222222222222222222222222" {
+		must(db.Exec("INSERT OR IGNORE INTO messages VALUES(2, 'new version write', 1)").Error)
+	}
 	database.DB = db
 	models.SetDB(db)
 	service := updates.NewTaskService(db)
@@ -58,11 +84,18 @@ func main() {
 	must(err)
 	must(os.WriteFile(filepath.Join(dir, "instance"), []byte(instance), 0600))
 	router := gin.New()
-	router.GET("/health", func(c *gin.Context) { c.Status(http.StatusOK) })
+	router.GET("/health", func(c *gin.Context) {
+		if _, err := os.Stat(filepath.Join(dir, "fail-health")); err == nil && buildinfo.CurrentMetadata().Revision == "2222222222222222222222222222222222222222" {
+			c.Status(http.StatusServiceUnavailable)
+			return
+		}
+		c.Status(http.StatusOK)
+	})
 	executor := router.Group("/api/updates/executor", middleware.UpdateExecutorAuthMiddleware())
 	executor.GET("/runtime", controllers.GetExecutorRuntime)
 	executor.POST("/claim", controllers.ClaimUpdateTask)
 	executor.POST("/tasks/:id/events", controllers.RecordUpdateTaskEvent)
+	executor.POST("/tasks/:id/prepare", controllers.PrepareUpdateShutdown)
 	// Fixture endpoints stay loopback-published and never exist in production.
 	router.POST("/fixture/create", func(c *gin.Context) {
 		task, _, err := service.Create(1, updates.Target{Channel: "edge", Image: "ghcr.io/ynby233/echo-noise", Digest: os.Getenv("FIXTURE_TARGET_DIGEST"), Revision: os.Getenv("FIXTURE_TARGET_REVISION")})
@@ -117,7 +150,22 @@ func main() {
 		}
 		router.ServeHTTP(w, r)
 	})}
-	must(server.ListenAndServe())
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGTERM, syscall.SIGINT)
+	go func() {
+		err := server.ListenAndServe()
+		if err != http.ErrServerClosed {
+			must(err)
+		}
+	}()
+	<-quit
+	if _, err := os.Stat(filepath.Join(dir, "ignore-stop")); err == nil {
+		select {}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	must(server.Shutdown(ctx))
+	must(sqlDB.Close())
 }
 
 func must(err error) {
