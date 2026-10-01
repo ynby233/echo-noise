@@ -1,0 +1,8 @@
+description: Check, claim or recover the one registered application instance
+schedule: "* * * * *"
+max_active_runs: 1
+timeout_sec: 7200
+# No full-flow retry; the executor reads active.json before doing anything else.
+steps:
+  - id: executor
+    run: python3 /opt/echo-noise-update/executor.py run /var/lib/echo-noise-update/executor.json

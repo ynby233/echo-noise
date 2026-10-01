@@ -99,10 +99,13 @@ func main() {
 	executor.POST("/tasks/:id/prepare", controllers.PrepareUpdateShutdown)
 	// Fixture endpoints stay loopback-published and never exist in production.
 	router.POST("/fixture/create", func(c *gin.Context) {
-		task, _, err := service.Create(1, updates.Target{Channel: "edge", Image: "ghcr.io/ynby233/echo-noise", Digest: os.Getenv("FIXTURE_TARGET_DIGEST"), Revision: os.Getenv("FIXTURE_TARGET_REVISION")})
+		task, created, err := service.Create(1, updates.Target{Channel: "edge", Image: "ghcr.io/ynby233/echo-noise", Digest: os.Getenv("FIXTURE_TARGET_DIGEST"), Revision: os.Getenv("FIXTURE_TARGET_REVISION")})
 		if err != nil {
 			c.Status(http.StatusConflict)
 			return
+		}
+		if created {
+			_ = updates.WakeExecutor()
 		}
 		c.JSON(http.StatusCreated, dto.OK(task))
 	})
@@ -120,6 +123,10 @@ func main() {
 		task, err := service.Get(c.Param("id"))
 		must(err)
 		c.JSON(http.StatusOK, dto.OK(task))
+	})
+	router.GET("/fixture/state", func(c *gin.Context) {
+		c.Set("user_id", uint(1))
+		controllers.GetUpdateState(c)
 	})
 	server := &http.Server{Addr: ":1314", ReadHeaderTimeout: 5 * time.Second, Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		marker := filepath.Join(dir, "drop-final")

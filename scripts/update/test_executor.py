@@ -463,9 +463,26 @@ class RecoveryTests(unittest.TestCase):
 class PreflightTests(unittest.TestCase):
     api = RecoveryTests.api
 
+    def test_container_view_requires_real_host_pid_disk_and_mounts(self):
+        current = {"State": {"Pid": 123}, "Mounts": [{"Source": "/srv/data", "Destination": "/app/data"}]}
+        check = executor.Executor.check_host_view
+        with patch.object(executor.os, "readlink", side_effect=["target-pid-namespace", "host-pid-namespace"]), \
+                patch.object(executor.os.path, "samefile", side_effect=[True, True]) as same:
+            check(self.ex, current, "/var/lib/docker")
+            self.assertEqual(same.call_args_list[1].args, ("/srv/data", "/proc/123/root/app/data"))
+        for values, code in (([False], "host_docker_root_view_required"), ([True, False], "host_mount_view_required")):
+            with patch.object(executor.os, "readlink", side_effect=["target", "host"]), \
+                    patch.object(executor.os.path, "samefile", side_effect=values), self.assertRaisesRegex(executor.Stop, code):
+                check(self.ex, current, "/var/lib/docker")
+        with patch.object(executor.os, "readlink", return_value="container-local"), self.assertRaisesRegex(executor.Stop, "host_pid_view_required"):
+            check(self.ex, current, "/var/lib/docker")
+        with patch.object(executor.os, "readlink", side_effect=PermissionError), self.assertRaisesRegex(executor.Stop, "host_view_unavailable_or_permission_denied"):
+            check(self.ex, current, "/var/lib/docker")
+
     def setUp(self):
         RecoveryTests.setUp(self)
         del self.ex.preflight
+        self.ex.check_host_view = lambda *args: None  # Synthetic inspect has no real host PID.
         Path(self.cfg["image_file"]).write_text("UPDATE_IMAGE=old\n")
         Path(self.cfg["image_file"]).chmod(0o600)
         self.current = {"Id": "c" * 64, "Image": "old-image", "State": {"Running": True}, "Mounts": [],

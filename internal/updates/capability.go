@@ -9,7 +9,7 @@ import (
 	"gorm.io/gorm"
 )
 
-const ExecutorVersion = "u5-1"
+const ExecutorVersion = "u6-1"
 const ExecutorCheckWindow = 3 * time.Minute
 
 var executorVersionPattern = regexp.MustCompile(`^u[0-9]{1,2}-[0-9]{1,3}$`)

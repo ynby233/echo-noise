@@ -27,7 +27,7 @@ permissions:
 jobs:
   isolated-docker-compose:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v6
@@ -49,3 +49,7 @@ jobs:
           go build -o update-tool ./cmd/update-tool
       - name: Real registry and Docker/Compose replacement
         run: sudo -E python3 scripts/update/test-docker.py
+      - name: Rebuildable Dagu container and scheduled recovery
+        run: |
+          docker build -f scripts/update/Dockerfile.dagu -t echo-noise-update:u6-1 .
+          sudo -E python3 scripts/update/test-dagu.py

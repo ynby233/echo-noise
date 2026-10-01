@@ -15,7 +15,7 @@ import time
 from urllib.parse import urlsplit
 
 IMAGE = "ghcr.io/ynby233/echo-noise"
-VERSION = "u5-1"
+VERSION = "u6-1"
 
 
 class Stop(Exception):
@@ -166,7 +166,7 @@ class Executor:
             return
         private(self.journal)
         self.record = json.loads(self.journal.read_text())
-        require(self.record["version"] in ("u3-1", "u4-1", VERSION), "journal_version_unsupported")
+        require(self.record["version"] in ("u3-1", "u4-1", "u5-1", VERSION), "journal_version_unsupported")
         self.record["version"] = VERSION
         require(self.record["instance_id"] == self.cfg["instance_id"] and
                 self.record["config_path"] == str(self.config_path) and
@@ -421,8 +421,23 @@ class Executor:
         self.check_space()
         docker_root = command(["docker", "info", "--format", "{{.DockerRootDir}}"] ).strip()
         require(Path(docker_root).is_dir(), "local_docker_engine_required")
+        self.check_host_view(current, docker_root)
         require(shutil.disk_usage(docker_root).free >= self.cfg.get("min_free_bytes", 1024**3), "docker_disk_space")
         return current
+
+    def check_host_view(self, current, docker_root):
+        # State.Pid is a host PID. A container-local /proc can silently miss writers.
+        pid = current["State"].get("Pid", 0)
+        require(pid > 0, "host_pid_view_required")
+        try:
+            require(os.readlink(f"/proc/{pid}/ns/pid") != os.readlink("/proc/self/ns/pid"),
+                    "host_pid_view_required")
+            require(os.path.samefile(docker_root, "/proc/1/root" + docker_root), "host_docker_root_view_required")
+            for mount in current["Mounts"]:
+                require(os.path.samefile(mount["Source"], f"/proc/{pid}/root" + mount["Destination"]),
+                        "host_mount_view_required")
+        except OSError:
+            raise Stop("host_view_unavailable_or_permission_denied") from None
 
     def check_compose_replicas(self, service):
         deploy = service.get("deploy", {})

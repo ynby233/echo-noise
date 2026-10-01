@@ -702,6 +702,43 @@ def test_mode(mode, old_ref, new_ref, new_digest, attention=False, scenario=""):
     print(mode + ": real stop/replacement/runtime verified; lost response/rotation/revocation/lock passed", flush=True)
 
 
+def build_images():
+    global registry_image
+    registry = docker("run", "--detach", "--name", prefix + "-registry", "--publish", "127.0.0.1::5000", "registry:2")
+    containers.append(registry)
+    registry_port = json.loads(docker("inspect", registry))[0]["NetworkSettings"]["Ports"]["5000/tcp"][0]["HostPort"]
+    registry_image = "127.0.0.1:" + registry_port + "/echo-noise-u3"
+    refs = []
+    for i in (1, 2):
+        context = root / ("image-" + str(i))
+        context.mkdir()
+        shutil.copyfile("scripts/update/fixture/Dockerfile", context / "Dockerfile")
+        shutil.copyfile("coordinator-" + str(i), context / "coordinator")
+        shutil.copyfile("update-tool", context / "update-tool")
+        shutil.copyfile("docker-entrypoint.sh", context / "docker-entrypoint.sh")
+        # Git checkout on Windows can use CRLF; container scripts require LF.
+        script = context / "docker-entrypoint.sh"
+        script.write_text(script.read_text().replace("\r\n", "\n"))
+        (context / "coordinator").chmod(0o755)
+        tag = registry_image + ":fixture-" + str(i)
+        docker("build", "--build-arg", "REVISION=" + str(i) * 40, "--tag", tag, str(context))
+        docker("push", tag)
+        digest = json.loads(docker("image", "inspect", tag))[0]["RepoDigests"][0].split("@", 1)[1]
+        refs.append((registry_image + "@" + digest, digest))
+    # Real OCI index digest differs from the selected platform manifest and image ID.
+    manifest_url = "http://127.0.0.1:" + registry_port + "/v2/echo-noise-u3/manifests/"
+    with urllib.request.urlopen(urllib.request.Request(manifest_url + refs[1][1], headers={"Accept": "application/vnd.docker.distribution.manifest.v2+json, application/vnd.oci.image.manifest.v1+json"})) as response:
+        manifest = response.read()
+        media_type = response.headers["Content-Type"]
+    index = {"schemaVersion": 2, "mediaType": "application/vnd.oci.image.index.v1+json", "manifests": [
+        {"mediaType": media_type, "size": len(manifest), "digest": refs[1][1], "platform": {"os": "linux", "architecture": "amd64"}}]}
+    with urllib.request.urlopen(urllib.request.Request(manifest_url + "fixture-2-index", data=json.dumps(index).encode(), method="PUT", headers={"Content-Type": index["mediaType"]})) as response:
+        index_digest = response.headers["Docker-Content-Digest"]
+    refs[1] = (registry_image + "@" + index_digest, index_digest)
+    docker("pull", refs[1][0])
+    return refs
+
+
 if __name__ == "__main__":
     from unittest.mock import patch as unittest_patch
     print("Engine " + docker("version", "--format", "{{.Server.Version}}") + "; " + docker("compose", "version", "--short"), flush=True)
@@ -713,38 +750,7 @@ if __name__ == "__main__":
     with tempfile.TemporaryDirectory(prefix=prefix) as tmp:
         root = Path(tmp)
         try:
-            registry = docker("run", "--detach", "--name", prefix + "-registry", "--publish", "127.0.0.1::5000", "registry:2")
-            containers.append(registry)
-            registry_port = json.loads(docker("inspect", registry))[0]["NetworkSettings"]["Ports"]["5000/tcp"][0]["HostPort"]
-            registry_image = "127.0.0.1:" + registry_port + "/echo-noise-u3"
-            refs = []
-            for i in (1, 2):
-                context = root / ("image-" + str(i))
-                context.mkdir()
-                shutil.copyfile("scripts/update/fixture/Dockerfile", context / "Dockerfile")
-                shutil.copyfile("coordinator-" + str(i), context / "coordinator")
-                shutil.copyfile("update-tool", context / "update-tool")
-                shutil.copyfile("docker-entrypoint.sh", context / "docker-entrypoint.sh")
-                # Git checkout on Windows can use CRLF; container scripts require LF.
-                script = context / "docker-entrypoint.sh"
-                script.write_text(script.read_text().replace("\r\n", "\n"))
-                (context / "coordinator").chmod(0o755)
-                tag = registry_image + ":fixture-" + str(i)
-                docker("build", "--build-arg", "REVISION=" + str(i) * 40, "--tag", tag, str(context))
-                docker("push", tag)
-                digest = json.loads(docker("image", "inspect", tag))[0]["RepoDigests"][0].split("@", 1)[1]
-                refs.append((registry_image + "@" + digest, digest))
-            # Real OCI index digest differs from the selected platform manifest and image ID.
-            manifest_url = "http://127.0.0.1:" + registry_port + "/v2/echo-noise-u3/manifests/"
-            with urllib.request.urlopen(urllib.request.Request(manifest_url + refs[1][1], headers={"Accept": "application/vnd.docker.distribution.manifest.v2+json, application/vnd.oci.image.manifest.v1+json"})) as response:
-                manifest = response.read()
-                media_type = response.headers["Content-Type"]
-            index = {"schemaVersion": 2, "mediaType": "application/vnd.oci.image.index.v1+json", "manifests": [
-                {"mediaType": media_type, "size": len(manifest), "digest": refs[1][1], "platform": {"os": "linux", "architecture": "amd64"}}]}
-            with urllib.request.urlopen(urllib.request.Request(manifest_url + "fixture-2-index", data=json.dumps(index).encode(), method="PUT", headers={"Content-Type": index["mediaType"]})) as response:
-                index_digest = response.headers["Docker-Content-Digest"]
-            refs[1] = (registry_image + "@" + index_digest, index_digest)
-            docker("pull", refs[1][0])
+            refs = build_images()
             test_offline_wal(refs[0][0])
             test_mode("docker", refs[0][0], refs[1][0], refs[1][1])
             test_mode("compose", refs[0][0], refs[1][0], refs[1][1])

@@ -1,10 +1,12 @@
 # 外部更新执行器与 U4 数据保护
 
-Linux 宿主执行器，更新一个管理员登记的 Docker 容器或 Compose 服务。程序不在应用容器中运行，应用不挂 Docker socket。U5 已接通受控 `POST /api/updates/tasks`；没有近期部署检查返回 412，不能仅凭有效 token 安装。现有 NAS 初次引导/调度接入属于 U6。旧镜像没有 `/app/update-tool` 时，停机前返回 `u4_backup_unavailable`。
+Linux 宿主或 Dagu 容器执行器，更新一个管理员登记的 Docker 容器或 Compose 服务。程序不在应用容器中运行，应用不挂 Docker socket。U5 已接通受控 `POST /api/updates/tasks`；没有近期部署检查返回 412，不能仅凭有效 token 安装。Dagu 接入见下文；通用主动领取仍可单独使用。旧镜像没有 `/app/update-tool` 时，停机前返回 `u4_backup_unavailable`。
 
 依赖为 Linux、Python 3.9+ 标准库、Docker CLI/本地 Engine、curl；Compose 模式另需 Compose v2（`config --format json`、`up --pull never`）。锁用 `fcntl.flock`，与宿主 flock 相同；不新增服务或 Python 包、不自动安装依赖。非回环地址必须使用 HTTPS，保留系统证书验证，不跟随认证请求重定向。实际验收架构是 linux/amd64；arm64 配置/manifest 判断可识别，但尚无 ARM 运行验收。
 
 ## 配对与固定配置
+
+Dagu 的可重建镜像、宿主视图、固定认证 Webhook 和分钟调度见 [Dagu 接入说明](dagu.md)。
 
 站长必须是固定 ID 1，使用现有登录认证调用 API。管理员 JWT/密码不能当长期 executor token；初次接口请求使用现有站长客户端的认证方式，不在终端参数填管理员 token。
 
@@ -108,13 +110,13 @@ sudo -E python3 scripts/update/test-docker.py
 
 F1–F6 补验包含真实 network connect、自定义 hostname/domain 拒绝及 host 成功、两种多副本文件加单副本覆盖启动、create 后 SIGKILL/回执丢失重试与他人/运行中探测保留、真实 UID/mode/链接与 UNIX/Engine socket 检查，以及异常首次写入 SIGKILL 后真实协调数据库 needs_attention/活动占位。均使用空数据隔离实例，不操作 NAS。
 
-隔离数据与实际生产业务恢复、NAS scheduler 接入分别验收。U5 已接后台恢复和能力判断，U6 安装 NAS 任务计划；旧自更新入口仍 501/410，不作为 fallback。
+隔离数据与实际生产业务恢复、NAS scheduler 接入分别验收。U5 已接后台恢复和能力判断，U6 接入 Dagu 容器调度；旧自更新入口仍 501/410，不作为 fallback。
 
 ## U5 后台与能力检查
 
-固定 ID 1 站长在后台“版本与更新”创建一次显示的 token、读取实例 ID，按上文写受控配置；在宿主运行 `check`。`u5-1` 的 check/空闲 run 在真实 preflight 与旧镜像 SQLite 备份 plan/数据布局/写入者/空间检查通过后，上报同一 instance/full revision。失败清除此前成功检查，HTTP 只接收有限能力字段，具体错误留在宿主 stderr。`u3-1`/`u4-1` 本地 journal 仍可恢复；升级脚本不能删除旧凭据或未结束记录。
+固定 ID 1 站长在后台“版本与更新”创建一次显示的 token、读取实例 ID，按上文写受控配置；在宿主运行 `check`。当前 `u6-1` 的 check/空闲 run 在真实 preflight 与旧镜像 SQLite 备份 plan/数据布局/写入者/空间检查通过后，上报同一 instance/full revision。失败清除此前成功检查，HTTP 只接收有限能力字段，具体错误留在宿主 stderr。`u3-1`/`u4-1`/`u5-1` 本地 journal 仍可恢复；升级脚本不能删除旧凭据或未结束记录。
 
-安装需当前有效且未轮换的凭据、最近三分钟内成功部署检查、匹配实例/已安装 revision、u5-1、Linux/amd64、SQLite。`last_seen_at` 的普通认证不延长 `checked_at`；连接过但未检查/离线/脚本过旧/不支持平台或数据保护失败均不可安装。每分钟 run 无任务即退出，三分钟窗口对应三轮调度；大型检查超过窗口或调度缺失会保守拒绝创建，不重新分配已领取任务。ARM、MySQL/PostgreSQL、远端附件未验收，不支持安装。
+安装需当前有效且未轮换的凭据、最近三分钟内成功部署检查、匹配实例/已安装 revision、u6-1、Linux/amd64、SQLite。`last_seen_at` 的普通认证不延长 `checked_at`；连接过但未检查/离线/脚本过旧/不支持平台或数据保护失败均不可安装。每分钟 run 无任务即退出，三分钟窗口对应三轮调度；大型检查超过窗口或调度缺失会保守拒绝创建，不重新分配已领取任务。ARM、MySQL/PostgreSQL、远端附件未验收，不支持安装。
 
 `GET /api/updates` 返回两渠道、跟随偏好、能力、活动任务或最近结果及站长部署指引；`GET /api/updates/state` 每三秒只查询本地任务/运行身份/能力，不重复扫描 registry。刷新、换浏览器、清缓存均从服务端发现原任务。`needs_attention` 占用两个渠道，必须按 U4 结案；任务创建重试返回原活动任务，渠道目标在确认后变化返回 409。浏览器 HTTP 中断只查询，不自动再次 POST；页面停机时依赖宿主日志。匿名 `GET /api/updates/maintenance` 仅返回维护布尔值，没有任务 ID/镜像/提交/错误/凭据信息。
 
