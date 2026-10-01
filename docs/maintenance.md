@@ -183,7 +183,7 @@ node scripts/update-panel.browser.cjs
 
 U5 浏览器入口 `node scripts/update-panel.browser.cjs` 使用真实生产 Vue 组件、隔离状态 API 和 Chromium，覆盖两渠道空态/失败、安装条件、一次显示凭据、草稿确认、连点、创建响应丢失、停机重连、清缓存换浏览器任务恢复、人工处理占位、成功/失败、委派权限及 320/390/768/1440 明暗主题。它验证前端实际行为；真实容器替换由独立执行器 workflow 验证，NAS 接入留给 U6。
 
-2026-10-02 U6 方案已改用用户部署的 Dagu 常驻容器，替代 fnOS“任务计划”；用户已确认网页可打开，本项目更新链尚未接通。当前执行器按 Linux 宿主运行验收，容器内的 Docker/数据路径、磁盘和写入者进程视图需适配；不能仅映射 socket 就宣称可用，也不能删除数据保护检查。后续交付可选固定任务认证唤醒，并保留 Dagu 定时实际检查/领取/恢复，沿用原 claim/events 和 3 分钟能力窗口。详细步骤、验收及下一会话启动指令以 [U1–U7 交接第 11/14 节](direct-update-implementation-handoff-2026-09-11.md#11-u6dagu-容器执行与-nas-首次接入) 为准；本段仅记录计划，未声称对应代码或 NAS 接入已经完成。
+2026-10-02 U6 已完成：复用用户现有 Dagu 2.18.1，执行器 u6-1 的可重建环境、宿主路径/磁盘/进程视图、固定认证唤醒和分钟检查/领取/恢复已通过隔离及 NAS 后台完整更新。保留原 claim/events、flock、active.json 和三分钟能力窗口；业务与 Engine 根只读挂载，独立控制目录持久化。交付 [Dagu 说明](../scripts/update/dagu.md)，容器验收入口 `sudo -E python3 scripts/update/test-dagu.py`（先编译 README 中 fixture/update-tool 并构建派生镜像），CI 同时保留原 `test-docker.py` 全部回归。实测 NAS 默认 AppArmor、私有文件及固定主机名差异和处理边界见 [U6 验收报告](u6-dagu-nas-acceptance-2026-10-02.md)。下一阶段 U7 从全链矩阵接手，不重新初始化配对或退回原计划。
 
 独立复核增加明确 409/412 拒绝后无需刷新可恢复、已有旧终态时未知 POST 不解锁且只查询新任务的行为回归；Python 预检文件系统异常清除旧成功检查的回归也已加入。首页懒加载脚本在工具栏因重叠收起时正常点击可见展开手柄，再点击留言，不强制点击或移除加载断言。最新证据见 [U5 复核修复验收](u5-review-repairs-acceptance-2026-10-01.md)。
 
