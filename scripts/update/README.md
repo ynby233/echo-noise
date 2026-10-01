@@ -97,6 +97,7 @@ for i in 1 2; do
   CGO_ENABLED=0 go build -ldflags "-X github.com/rcy1314/echo-noise/internal/buildinfo.Revision=$revision" \
     -o "coordinator-$i" ./scripts/update/fixture
 done
+CGO_ENABLED=0 go build -o update-tool ./cmd/update-tool
 sudo -E python3 scripts/update/test-docker.py
 ```
 
@@ -134,5 +135,4 @@ python3 executor.py reconcile /absolute/executor.json --task TASK_ID --outcome f
 # 已由管理员完成必要的数据恢复时可用 --reason manual-recovery-complete
 ```
 
-CLI 获取同一 flock，指定任务 ID/instance，持久化结案意图，再用当前安装镜像的离线工具修改该任务及唯一 active_slot。它不依赖 HTTP token、不放宽 HTTP 认证、不修改业务库内容、不报 succeeded；只允许可合法失败的活动任务（包括停机中无法补报 attention 的 downloading/stopping/backing_up/replacing/verifying）。有限原因保存在任务和事件，幂等重试保留原证据。拒绝不匹配实例/任务、pending 和已完成结果。本地 active.json 存在时须同一任务，成功仅将其关闭并保留历史。执行器不启动容器；管理员在核对数据安全后按原策略恢复服务。现存镜像缺少工具时先按 U6 的明确引导方案升级工具，不能删库/删任务解除占位。
-
+CLI 获取同一 flock，指定任务 ID/instance，持久化结案意图，再用当前安装镜像的离线工具修改该任务及唯一 active_slot。它不依赖 HTTP token、不放宽 HTTP 认证、不修改业务库内容、不报 succeeded；只允许可合法失败的活动任务（包括 claimed 以及停机中无法补报 attention 的 downloading/stopping/backing_up/replacing/verifying）。有限原因保存在任务和事件，幂等重试保留原证据。拒绝不匹配实例/任务、pending 和已完成结果。本地 active.json 存在时须同一任务，成功仅将其关闭并保留历史。执行器不启动容器；管理员在核对数据安全后按原策略恢复服务。现存镜像缺少工具时先按 U6 的明确引导方案升级工具，不能删库/删任务解除占位。
