@@ -583,6 +583,17 @@ class Executor:
         command(["docker", "update", "--restart=" + value, current["Id"]])
         command(["docker", "start", current["Id"]])
         require(self.inspect(current["Id"])["State"]["Running"], "old_restart_failed")
+        deadline = time.monotonic() + self.cfg.get("health_timeout", 120)
+        while time.monotonic() < deadline:
+            old = self.inspect(current["Id"])
+            require(old["Image"] == self.record["old_image"], "old_container_changed")
+            if old["State"].get("Health", {}).get("Status") == "healthy":
+                runtime = self.runtime()
+                require(runtime["revision"] == old["Config"].get("Labels", {}).get("org.opencontainers.image.revision"),
+                        "old_runtime_revision_mismatch")
+                return
+            time.sleep(2)
+        raise Stop("old_restart_health_timeout")
 
     def replace(self):
         write_image(self.cfg["image_file"], self.reference())

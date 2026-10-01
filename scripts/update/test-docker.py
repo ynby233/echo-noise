@@ -602,7 +602,6 @@ def test_mode(mode, old_ref, new_ref, new_digest, attention=False, scenario=""):
     if mode == "compose":
         # Kill the host executor after replacement, before it records the result.
         # On restart, inspect the real container and never repeat compose up.
-        import multiprocessing
         def killed_run():
             normal_phase = ex.phase
             def phase(step, status=None):
