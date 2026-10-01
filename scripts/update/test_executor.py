@@ -145,6 +145,19 @@ class RecoveryTests(unittest.TestCase):
         self.ex.run()
         self.assertTrue(self.ex.record["closed"])
 
+    def test_backup_filesystem_error_recovers_without_disclosing_path(self):
+        self.claim()
+        self.ex.download = lambda: {"image_id": "new"}
+        self.ex.data_protection_available = lambda: True
+        self.ex.prepare_shutdown = lambda: None
+        self.ex.stop_container = lambda: None
+        self.ex.backup = lambda: (_ for _ in ()).throw(PermissionError("private backup path"))
+        self.ex.restore_old = lambda: None
+        with self.assertRaisesRegex(executor.Stop, "^host_operation_failed$"):
+            self.ex.run()
+        self.assertEqual(self.ex.record["confirmed"], "failed")
+        self.assertNotIn("private backup path", self.ex.journal.read_text())
+
     def test_forced_shutdown_cannot_enter_backup(self):
         self.claim()
         self.ex.inspect = lambda _: {"State": {"Running": False, "ExitCode": 137, "OOMKilled": False}, "HostConfig": {"RestartPolicy": {"Name": "no"}}}

@@ -720,20 +720,21 @@ class Executor:
                 self.phase("replace_intent", "replacing")
                 self.replace()
                 self.phase("replaced")
-            except Stop as error:
+            except (Stop, OSError, ValueError, KeyError) as error:
+                code = str(error) if isinstance(error, Stop) else "host_operation_failed"
                 if self.record["step"] in ("stopped", "backup_intent", "backed_up"):
                     try:
                         self.phase("restore_old_intent")
                         self.restore_old()
-                    except Stop:
+                    except (Stop, OSError, ValueError, KeyError):
                         self.attention("old_restart_requires_reconciliation")
-                    self.record["error_code"] = str(error)
+                    self.record["error_code"] = code
                     self.phase("failed", "failed")
                     self.flush()
                     self.record["closed"] = True
                     self.save()
-                    raise error
-                self.attention(str(error))
+                    raise Stop(code) from None
+                self.attention(code)
         try:
             self.phase("verifying", "verifying")
             self.verify()
