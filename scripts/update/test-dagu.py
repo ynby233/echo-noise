@@ -68,6 +68,17 @@ def test_case(root, refs, scenario):
     (config / "config.yaml").write_text("database:\n  type: sqlite\n  path: /data/fixture.db\n")
     (config / "runtime.env").write_text("DB_PATH=/data/fixture.db\n")
     (data / "sentinel").write_bytes(b"preserved attachment")
+    if scenario == "wake":
+        # Real NAS regression: user-owned private files must be readable by the
+        # offline helper while its business mounts still forbid writes.
+        for path in (config / "runtime.env", data / "sentinel"):
+            os.chown(path, 1000, 1000)
+            path.chmod(0o600)
+        docker("run", "--rm", "--cap-drop", "ALL", "--cap-add", "DAC_OVERRIDE",
+               "--mount", "type=bind,source=" + str(config) + ",target=/app/config,readonly",
+               "--entrypoint", "/bin/sh", refs[0][0], "-c",
+               "test -r /app/config/runtime.env && ! echo mutation > /app/config/runtime.env")
+        assert (config / "runtime.env").read_text() == "DB_PATH=/data/fixture.db\n"
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
         port = s.getsockname()[1]
@@ -84,6 +95,8 @@ def test_case(root, refs, scenario):
               {"type": "bind", "source": str(data), "target": "/app/data"},
               {"type": "bind", "source": str(config), "target": "/app/config"}]
     args = ["run", "-d", "--name", app, "--network", "host", "--restart=no", "--env-file", str(control / "app.env")]
+    if scenario == "wake":
+        args += ["--hostname", "registered-app-host"]
     for mount in mounts:
         args += ["--mount", "type=bind,source=" + mount["source"] + ",target=" + mount["target"]]
     old = docker(*args, refs[0][0])
@@ -97,6 +110,8 @@ def test_case(root, refs, scenario):
            "platform": "linux/amd64", "mode": "docker", "container": app, "mounts": mounts,
            "docker": {"network": "host", "restart": "no", "env_file": str(control / "app.env")},
            "min_free_bytes": 1024, "health_timeout": 5}
+    if scenario == "wake":
+        cfg["docker"]["hostname"] = "registered-app-host"
     executor.atomic_write(control / "executor.json", json.dumps(cfg))
     (home / "dags").mkdir()
     script_root = Path("scripts/update").resolve()
@@ -106,6 +121,7 @@ def test_case(root, refs, scenario):
     (home / "dags" / (task_name + ".yaml")).write_text(definition)
     scheduler = fixture.prefix + "-dagu-" + scenario
     scheduler_args = ["run", "-d", "--name", scheduler, "--network", "host", "--pid", "host", "--cap-add", "SYS_PTRACE",
+                      "--security-opt", "apparmor=unconfined",
                       "--env", "DAGU_HOME=/var/lib/dagu", "--env", "DAGU_HOST=127.0.0.1", "--env", "DAGU_PORT=" + str(port),
                       "--env", "FIXTURE_REGISTRY=" + fixture.registry_image,
                       "--mount", "type=bind,source=" + str(home) + ",target=/var/lib/dagu",

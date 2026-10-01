@@ -51,5 +51,5 @@ jobs:
         run: sudo -E python3 scripts/update/test-docker.py
       - name: Rebuildable Dagu container and scheduled recovery
         run: |
-          docker build -f scripts/update/Dockerfile.dagu -t echo-noise-update:u6-1 .
+          sudo -E docker build -f scripts/update/Dockerfile.dagu -t echo-noise-update:u6-1 .
           sudo -E python3 scripts/update/test-dagu.py
