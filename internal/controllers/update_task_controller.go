@@ -26,9 +26,24 @@ func updateTaskService() (*updates.TaskService, error) {
 	return updates.NewTaskService(db), nil
 }
 
-// U2 deliberately does not expose installation until the U3/U4 executor and
-// backup verification path exists. The coordinator itself is exercised with
-// isolated database tests; a real HTTP client cannot report a fake success.
+// Public readers need only a maintenance hint, never a task or build identity.
+func GetUpdateMaintenance(c *gin.Context) {
+	db, err := database.GetDB()
+	if err != nil {
+		c.Status(http.StatusServiceUnavailable)
+		return
+	}
+	var count int64
+	if err := db.Model(&models.UpdateTask{}).Where("active_slot = ?", 1).Count(&count).Error; err != nil {
+		c.Status(http.StatusServiceUnavailable)
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusOK, dto.OK(gin.H{"maintenance": count > 0}))
+}
+
+// Retired self-update routes remain unavailable; the guarded task route is the
+// only production installation entry.
 func UpdateTaskInstallationUnavailable(c *gin.Context) {
 	c.JSON(http.StatusNotImplemented, dto.Fail[any]("更新任务协调接口已就绪；宿主执行与备份尚未接入，当前不可安装"))
 }
@@ -56,7 +71,9 @@ func GetUpdates(c *gin.Context) {
 		return
 	}
 	instanceID := ""
+	guideURL := ""
 	if actorID == models.PrimaryAdminUserID {
+		guideURL = "https://github.com/ynby233/echo-noise/blob/main/scripts/update/README.md"
 		instanceID, err = service.InstanceID()
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, dto.Fail[any]("读取实例身份失败"))
@@ -88,7 +105,92 @@ func GetUpdates(c *gin.Context) {
 		}
 		credential = nil
 	}
-	c.JSON(http.StatusOK, dto.OK(gin.H{"follow_channel": channel, "instance_id": instanceID, "report": report, "executor": credential}, "更新状态读取成功"))
+	task, err := service.LatestTask()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, dto.Fail[any]("读取更新任务失败"))
+		return
+	}
+	redactUpdateTask(task, actorID)
+	installation, err := service.InstallationStatus(buildinfo.CurrentMetadata().Revision)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, dto.Fail[any]("读取安装能力失败"))
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusOK, dto.OK(gin.H{"follow_channel": channel, "instance_id": instanceID, "guide_url": guideURL, "report": report, "executor": credential, "task": task, "installation": installation}, "更新状态读取成功"))
+}
+
+// Poll persisted local state without doing a remote registry check each time.
+func GetUpdateState(c *gin.Context) {
+	actorID, ok := commentUint(c.GetUint("user_id"))
+	if !ok || actorID == 0 {
+		c.Status(http.StatusUnauthorized)
+		return
+	}
+	service, err := updateTaskService()
+	if err != nil {
+		c.Status(http.StatusInternalServerError)
+		return
+	}
+	task, err := service.LatestTask()
+	if err != nil {
+		c.Status(http.StatusInternalServerError)
+		return
+	}
+	redactUpdateTask(task, actorID)
+	installation, err := service.InstallationStatus(buildinfo.CurrentMetadata().Revision)
+	if err != nil {
+		c.Status(http.StatusInternalServerError)
+		return
+	}
+	credential, err := service.CurrentCredential()
+	if err != nil {
+		c.Status(http.StatusInternalServerError)
+		return
+	}
+	metadata := buildinfo.CurrentMetadata()
+	installed := gin.H{"version": publicReleaseVersion(metadata.Version)}
+	if actorID == models.PrimaryAdminUserID {
+		installed["revision"], installed["build_identity"] = metadata.Revision, metadata.Identity
+	} else {
+		credential = nil
+	}
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusOK, dto.OK(gin.H{"task": task, "installation": installation, "executor": credential, "installed": installed}, "更新状态读取成功"))
+}
+
+func redactUpdateTask(task *models.UpdateTask, actorID uint) {
+	if task == nil || actorID == models.PrimaryAdminUserID {
+		return
+	}
+	task.TargetImage, task.TargetDigest, task.TargetRevision, task.ErrorSummary = "", "", "", ""
+	if task.Channel == "stable" {
+		task.TargetVersion = publicReleaseVersion(task.TargetVersion)
+	} else {
+		task.TargetVersion = ""
+	}
+}
+
+func RecordExecutorDeploymentCheck(c *gin.Context) {
+	var check updates.DeploymentCheck
+	if err := c.ShouldBindJSON(&check); err != nil {
+		c.Status(http.StatusBadRequest)
+		return
+	}
+	if check.Revision != buildinfo.CurrentMetadata().Revision {
+		c.Status(http.StatusConflict)
+		return
+	}
+	service, err := updateTaskService()
+	if err != nil {
+		c.Status(http.StatusInternalServerError)
+		return
+	}
+	if err := service.RecordDeploymentCheck(c.GetUint("executor_credential_id"), check); err != nil {
+		c.JSON(http.StatusConflict, dto.Fail[any]("执行器检查与登记实例不匹配"))
+		return
+	}
+	c.JSON(http.StatusOK, dto.OK[any](nil, "部署检查已记录"))
 }
 
 func UpdateFollowChannel(c *gin.Context) {
@@ -124,7 +226,9 @@ func CreateUpdateTask(c *gin.Context) {
 		return
 	}
 	var request struct {
-		Channel string `json:"channel"`
+		Channel  string `json:"channel"`
+		Revision string `json:"revision"`
+		Digest   string `json:"digest"`
 	}
 	if err := c.ShouldBindJSON(&request); err != nil {
 		c.JSON(http.StatusBadRequest, dto.Fail[any]("更新任务参数错误"))
@@ -135,14 +239,36 @@ func CreateUpdateTask(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, dto.Fail[any]("更新渠道无效"))
 		return
 	}
+	service, err := updateTaskService()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, dto.Fail[any]("更新服务不可用"))
+		return
+	}
+	current, err := service.LatestTask()
+	if err != nil {
+		c.Status(http.StatusInternalServerError)
+		return
+	}
+	if current != nil && current.ActiveSlot != nil {
+		c.JSON(http.StatusOK, dto.OK(current, "已有更新任务，未重复创建"))
+		return
+	}
+	capability, err := service.InstallationStatus(buildinfo.CurrentMetadata().Revision)
+	if err != nil {
+		c.Status(http.StatusInternalServerError)
+		return
+	}
+	if !capability.Available {
+		c.JSON(http.StatusPreconditionFailed, gin.H{"code": 0, "msg": "宿主安装条件尚未满足，请查看部署检查状态", "data": capability})
+		return
+	}
 	target := discoverUpdates(c).Channel(channelName)
 	if !target.Installable || !target.HasUpdate || target.Status != updates.StatusUpdateAvailable {
 		c.JSON(http.StatusConflict, dto.Fail[any]("所选渠道当前没有可自动安装的后代版本"))
 		return
 	}
-	service, err := updateTaskService()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, dto.Fail[any]("更新服务不可用"))
+	if (request.Revision != "" && request.Revision != target.Revision) || (request.Digest != "" && request.Digest != target.Digest) {
+		c.JSON(http.StatusConflict, dto.Fail[any]("渠道目标已变化，请重新检查并确认"))
 		return
 	}
 	task, created, err := service.Create(actorID, updates.Target{Channel: target.Name, Image: target.Image, Digest: target.Digest, Revision: target.Revision, Version: target.Version})
@@ -182,14 +308,8 @@ func GetUpdateTask(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, dto.Fail[any]("读取更新任务失败"))
 		return
 	}
-	if actorID != models.PrimaryAdminUserID {
-		task.TargetImage, task.TargetDigest, task.TargetRevision, task.ErrorSummary = "", "", "", ""
-		if task.Channel == "stable" {
-			task.TargetVersion = publicReleaseVersion(task.TargetVersion)
-		} else {
-			task.TargetVersion = ""
-		}
-	}
+	redactUpdateTask(&task, actorID)
+	c.Header("Cache-Control", "no-store")
 	c.JSON(http.StatusOK, dto.OK(task, "更新任务读取成功"))
 }
 

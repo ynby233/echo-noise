@@ -166,6 +166,7 @@ node scripts/table-attachments.browser.cjs
 node scripts/home-lazy-loading.browser.cjs
 node scripts/async-feature-failures.browser.cjs
 node scripts/module-recovery.browser.cjs
+node scripts/update-panel.browser.cjs
 ```
 
 表格脚本默认读取 `web/.output/public`，可用 `TEST_OUTPUT_ROOT` 指定本次构建目录。它使用本地静态服务、合成 API 和隔离草稿，检查长名称、相同缩略名、同名不同 URL、多附件顺序、换行、重复展开及主动删除不复活；断言最终自动保存的完整 Markdown，失败返回非零退出码。其他三项覆盖首页懒加载、草稿与失败恢复、模块恢复语义；各脚本前置条件仍以脚本中的环境变量为准。
@@ -178,7 +179,9 @@ node scripts/module-recovery.browser.cjs
 
 ### U3/U4 外部执行器与数据保护
 
-通用 Docker/Compose 执行器、配置、旧镜像离线 SQLite 备份和人工结案见 [scripts/update](../scripts/update/README.md)。迁移后加载 `D:\ChatGPT\app\environments\echo-noise\env.ps1`，显式切回 `D:\ChatGPT\app\projects\echo-noise`，避免脚本内旧路径误导。阶段检查为 Python 标准库测试、更新/备份/同步相关 Go 测试、fixture 编译/vet 和 `Test external update executor` 真实隔离引擎测试；未改前端，不重复全部浏览器回归。生产任务创建仍 501，等待 U5 能力判断；旧安装镜像无 update-tool 时停机前拒绝，不能用 fixture 绕过。实际 NAS 引导及调度安装归 U6。U4 证据和失败边界见 [U4 验收报告](u4-backup-failure-recovery-acceptance-2026-10-01.md)。
+通用 Docker/Compose 执行器、配置、旧镜像离线 SQLite 备份和人工结案见 [scripts/update](../scripts/update/README.md)。迁移后加载 `D:\ChatGPT\app\environments\echo-noise\env.ps1`，显式切回 `D:\ChatGPT\app\projects\echo-noise`，避免脚本内旧路径误导。阶段检查为 Python 标准库测试、更新/备份/同步相关 Go 测试、fixture 编译/vet 和 `Test external update executor` 真实隔离引擎测试。U5 接通能力判断和后台，只在近期实际部署检查通过时允许创建，否则 412；旧安装镜像无 update-tool 时停机前拒绝，不能用 fixture 绕过。旧自更新仍 501/410。实际 NAS 引导及调度安装归 U6。U4 证据和失败边界见 [U4 验收报告](u4-backup-failure-recovery-acceptance-2026-10-01.md)。
+
+U5 浏览器入口 `node scripts/update-panel.browser.cjs` 使用真实生产 Vue 组件、隔离状态 API 和 Chromium，覆盖两渠道空态/失败、安装条件、一次显示凭据、草稿确认、连点、创建响应丢失、停机重连、清缓存换浏览器任务恢复、人工处理占位、成功/失败、委派权限及 320/390/768/1440 明暗主题。它验证前端实际行为；真实容器替换由独立执行器 workflow 验证，NAS 接入留给 U6。
 
 2026-10-01 的实际提交、两项成功工作流、镜像 digest、NAS 只读核对与 U4 接口位置见 [U3 交付报告](u3-external-executor-acceptance-2026-10-01.md)。
 

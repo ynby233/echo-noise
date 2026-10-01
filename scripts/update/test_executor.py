@@ -32,6 +32,7 @@ class RecoveryTests(unittest.TestCase):
         self.ex = executor.Executor(self.config)
         self.ex.preflight = lambda: {"Id": "old-container", "Image": "sha256:" + "c" * 64}
         self.ex.runtime = lambda: {"instance_id": self.cfg["instance_id"], "revision": "1" * 40}
+        self.ex.data_protection_available = lambda: True
         self.task = {"id": "a" * 32, "status": "claimed", "channel": "edge",
                      "target_image": executor.IMAGE, "target_digest": "sha256:" + "b" * 64,
                      "target_revision": "2" * 40}
@@ -57,6 +58,21 @@ class RecoveryTests(unittest.TestCase):
         with self.assertRaises(executor.Stop):
             self.ex.claim()
         self.assertEqual(self.calls, [])
+
+    def test_failed_deployment_check_clears_readiness_before_claim(self):
+        self.ex.data_protection_available = lambda: (_ for _ in ()).throw(executor.Stop("u4_backup_unavailable"))
+        with self.assertRaisesRegex(executor.Stop, "u4_backup_unavailable"):
+            self.ex.claim()
+        self.assertEqual(len(self.calls), 1)
+        self.assertEqual(self.calls[0][0], "/api/updates/executor/check")
+        self.assertFalse(self.calls[0][1]["ok"])
+        self.assertFalse(self.ex.journal.exists())
+
+    def test_successful_deployment_check_reports_only_finite_capability_fields(self):
+        self.ex.check_deployment()
+        self.assertEqual(self.calls, [("/api/updates/executor/check", {
+            "instance_id": self.cfg["instance_id"], "version": executor.VERSION,
+            "platform": "linux/amd64", "revision": "1" * 40, "ok": True})])
 
     def test_claim_response_loss_retries_same_server_task(self):
         normal = self.api
@@ -84,7 +100,7 @@ class RecoveryTests(unittest.TestCase):
         self.assertEqual(self.ex.record["pending"], ["downloading", "stopping"])
         self.ex.api = self.api
         self.ex.flush()
-        self.assertEqual([body["status"] for _, body in self.calls if body], ["downloading", "stopping"])
+        self.assertEqual([body["status"] for _, body in self.calls if body and "status" in body], ["downloading", "stopping"])
         self.assertEqual(self.ex.record["confirmed"], "stopping")
 
     def test_409_keeps_evidence_and_never_drops_event(self):
@@ -114,6 +130,7 @@ class RecoveryTests(unittest.TestCase):
 
     def test_product_requires_u4_before_stop(self):
         self.claim()
+        self.ex.data_protection_available = types.MethodType(executor.Executor.data_protection_available, self.ex)
         self.ex.download = lambda: {"image_id": "new", "manifest_digest": self.task["target_digest"]}
         self.ex.inspect = lambda _: {"Config": {}, "Mounts": [], "State": {"Running": True}, "Id": "old-container"}
         self.ex.check_writers = lambda *a, **k: None

@@ -424,7 +424,7 @@ func TestProtectedAdminRouteMatrixRejectsDelegatedAdministratorWithoutRequiredGr
 		t.Fatalf("open database: %v", err)
 	}
 	if err := db.AutoMigrate(
-		&models.User{}, &models.Setting{}, &models.SiteConfig{}, &models.SecurityConfig{}, &models.AdminCapabilityGrant{}, &models.AdminAuditLog{}, &models.AdminAuditConfig{}, &models.UpdateTask{},
+		&models.User{}, &models.Setting{}, &models.SiteConfig{}, &models.SecurityConfig{}, &models.AdminCapabilityGrant{}, &models.AdminAuditLog{}, &models.AdminAuditConfig{}, &models.UpdateTask{}, &models.UpdatePreference{}, &models.UpdateExecutorCredential{},
 	); err != nil {
 		t.Fatalf("migrate route matrix database: %v", err)
 	}
@@ -471,7 +471,7 @@ func TestProtectedAdminRouteMatrixRejectsDelegatedAdministratorWithoutRequiredGr
 		request.Header.Set("Authorization", "Bearer "+primary.Token)
 		response := httptest.NewRecorder()
 		r.ServeHTTP(response, request)
-		if response.Code != http.StatusNotImplemented {
+		if response.Code != map[string]int{"/api/updates/tasks": http.StatusPreconditionFailed, "/api/version/update": http.StatusNotImplemented}[path] {
 			t.Fatalf("U2 installation route %s status=%d body=%s", path, response.Code, response.Body.String())
 		}
 	}

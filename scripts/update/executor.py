@@ -15,7 +15,7 @@ import time
 from urllib.parse import urlsplit
 
 IMAGE = "ghcr.io/ynby233/echo-noise"
-VERSION = "u4-1"
+VERSION = "u5-1"
 
 
 class Stop(Exception):
@@ -166,7 +166,7 @@ class Executor:
             return
         private(self.journal)
         self.record = json.loads(self.journal.read_text())
-        require(self.record["version"] in ("u3-1", VERSION), "journal_version_unsupported")
+        require(self.record["version"] in ("u3-1", "u4-1", VERSION), "journal_version_unsupported")
         self.record["version"] = VERSION
         require(self.record["instance_id"] == self.cfg["instance_id"] and
                 self.record["config_path"] == str(self.config_path) and
@@ -178,8 +178,7 @@ class Executor:
 
     def claim(self):
         require(self.record is None, "local_record_exists")
-        require(self.runtime()["instance_id"] == self.cfg["instance_id"], "instance_mismatch")
-        old = self.preflight()
+        old = self.check_deployment()
         task = self.api("POST", "/api/updates/executor/claim")
         if task is None:
             return
@@ -200,6 +199,23 @@ class Executor:
             self.record["error_code"] = "claimed_task_without_local_evidence"
         self.save()
         require(task["status"] == "claimed", "claimed_task_without_local_evidence")
+
+    def check_deployment(self):
+        runtime = self.runtime()
+        require(runtime["instance_id"] == self.cfg["instance_id"], "instance_mismatch")
+        check = {"instance_id": self.cfg["instance_id"], "version": VERSION,
+                 "platform": self.cfg["platform"], "revision": runtime["revision"], "ok": False}
+        try:
+            require(self.cfg["platform"] == "linux/amd64", "platform_not_accepted")
+            old = self.preflight()
+            require(self.data_protection_available(), "u4_backup_unavailable")
+        except Stop:
+            with contextlib.suppress(Stop):
+                self.api("POST", "/api/updates/executor/check", check)
+            raise
+        check["ok"] = True
+        self.api("POST", "/api/updates/executor/check", check)
+        return old
 
     def queue(self, status):
         if (self.record["pending"] and self.record["pending"][-1] == status) or (not self.record["pending"] and self.record["confirmed"] == status):
@@ -803,10 +819,8 @@ def main():
                 raise Stop("executor_already_running") from None
             ex.load_record()
             if args.action == "check":
-                ex.runtime()
-                ex.preflight()
-                ex.data_protection_available()
-                print(VERSION + ": deployment and SQLite backup checked; installation requires server capability enablement")
+                ex.check_deployment()
+                print(VERSION + ": deployment and SQLite backup checked; readiness reported")
             elif args.action == "reconcile":
                 ex.reconcile(args.task, args.outcome, args.reason)
             elif args.action == "report":

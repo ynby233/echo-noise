@@ -93,6 +93,7 @@ func main() {
 	})
 	executor := router.Group("/api/updates/executor", middleware.UpdateExecutorAuthMiddleware())
 	executor.GET("/runtime", controllers.GetExecutorRuntime)
+	executor.POST("/check", controllers.RecordExecutorDeploymentCheck)
 	executor.POST("/claim", controllers.ClaimUpdateTask)
 	executor.POST("/tasks/:id/events", controllers.RecordUpdateTaskEvent)
 	executor.POST("/tasks/:id/prepare", controllers.PrepareUpdateShutdown)

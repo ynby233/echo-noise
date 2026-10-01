@@ -58,6 +58,10 @@ func TestRotatedExecutorCanRetryOnlyItsOwnFinalReportHTTP(t *testing.T) {
 				t.Fatalf("initial authentication: %d %s", response.Code, response.Body.String())
 			}
 			target := updates.Target{Channel: "edge", Image: "ghcr.io/ynby233/echo-noise", Digest: "sha256:" + strings.Repeat("a", 64), Revision: strings.Repeat("1", 40)}
+			instance, _ := service.InstanceID()
+			if err := service.RecordDeploymentCheck(old.ID, updates.DeploymentCheck{InstanceID: instance, Version: updates.ExecutorVersion, Platform: "linux/amd64", Revision: target.Revision, OK: true}); err != nil {
+				t.Fatal(err)
+			}
 			task, _, err := service.Create(1, target)
 			if err != nil {
 				t.Fatal(err)
@@ -89,6 +93,10 @@ func TestRotatedExecutorCanRetryOnlyItsOwnFinalReportHTTP(t *testing.T) {
 				t.Fatal(err)
 			}
 			if _, err := service.Authenticate(newToken); err != nil {
+				t.Fatal(err)
+			}
+			next, _ := service.CurrentCredential()
+			if err := service.RecordDeploymentCheck(next.ID, updates.DeploymentCheck{InstanceID: instance, Version: updates.ExecutorVersion, Platform: "linux/amd64", Revision: target.Revision, OK: true}); err != nil {
 				t.Fatal(err)
 			}
 			otherTask, _, err := service.Create(1, target)

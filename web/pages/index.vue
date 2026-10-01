@@ -7,6 +7,7 @@ editor, search, feed, notification and comment features mount only on demand. --
       <div class="loading-text">加载中...</div>
     </div>
     <div ref="contentWrapper" class="content-wrapper gpu-accelerated">
+      <p v-if="updateMaintenance" role="status" class="text-center text-sm px-4 py-2">站点维护中，请保存当前草稿；服务暂时不可用时稍后重试。</p>
       <UContainer class="container-fixed pt-2 pb-0 mt-4 mb-0" :class="{ 'container-masonry': isMasonry, 'container-single': !isMobile && layoutState === 'single' }">
         <div :class="['layout-container', gridModeClass]">
       <ClientOnly>
@@ -1007,6 +1008,15 @@ onMounted(async () => {
 
 
 const userStore = useUserStore()
+const updateMaintenance = ref(false)
+let maintenanceTimer: ReturnType<typeof setTimeout> | undefined
+let maintenanceDisposed = false
+const readMaintenance = async () => {
+  try { const response = await fetch('/api/updates/maintenance', { cache: 'no-store', signal: AbortSignal.timeout(5000) }); if (response.ok) { const body = await response.json(); if (!maintenanceDisposed && body?.code === 1) updateMaintenance.value = !!body.data?.maintenance } } catch {}
+  if (!maintenanceDisposed) maintenanceTimer = setTimeout(readMaintenance, 15000)
+}
+onMounted(() => { void readMaintenance() })
+onUnmounted(() => { maintenanceDisposed = true; clearTimeout(maintenanceTimer) })
 const { can, refreshCapabilities } = useAdminCapabilities()
 onMounted(() => { void refreshCapabilities() })
 const isLoggedIn = computed(() => !!(userStore.isLogin && userStore.user))

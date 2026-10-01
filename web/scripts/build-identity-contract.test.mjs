@@ -28,7 +28,7 @@ assert.match(releaseWorkflow, /saynote-\$\{BUILD_ID\}\.apk/, 'Android artifact n
 assert.match(releaseWorkflow, /saynote-\$\{BUILD_ID\}\.dmg/, 'macOS artifact name must carry the build identity')
 assert.match(releaseWorkflow, /saynote-.*BUILD_ID.*\.exe/, 'Windows artifact name must carry the build identity')
 assert.match(routes, /authRoutes\.GET\("\/version\/build"/, 'build identity endpoint must be authenticated')
-assert.match(panel, /id="version-section"[\s\S]{0,1800}v-if="isPrimaryAdmin"[\s\S]{0,300}info\.buildIdentity/, 'the version section must show the identity only to the primary administrator')
-assert.match(panel, /version\/build/, 'the admin UI must read the server build identity')
+assert.match(panel, /id="version-section"[\s\S]{0,1800}v-if="isPrimaryAdmin"[\s\S]{0,300}installed\.build_identity/, 'the version section must show the identity only to the primary administrator')
+assert.match(panel, /updates\/state/, 'the admin UI must read the authenticated server runtime and task state')
 
 console.log('build identity contract passed')

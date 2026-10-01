@@ -15,16 +15,22 @@ type UpdatePreference struct {
 // UpdateExecutorCredential stores only a verifier. The token is returned once
 // when the primary administrator creates or rotates the credential.
 type UpdateExecutorCredential struct {
-	ID           uint       `gorm:"primaryKey" json:"id"`
-	Name         string     `gorm:"type:varchar(100);not null" json:"name"`
-	TokenHash    string     `gorm:"type:varchar(64);not null;uniqueIndex" json:"-"`
-	TokenPrefix  string     `gorm:"type:varchar(16);not null" json:"token_prefix"`
-	ExpiresAt    *time.Time `gorm:"index" json:"expires_at,omitempty"`
-	LastSeenAt   *time.Time `json:"last_seen_at,omitempty"`
-	SupersededAt *time.Time `gorm:"index" json:"-"`
-	RevokedAt    *time.Time `gorm:"index" json:"revoked_at,omitempty"`
-	CreatedAt    time.Time  `json:"created_at"`
-	UpdatedAt    time.Time  `json:"updated_at"`
+	ID                uint       `gorm:"primaryKey" json:"id"`
+	Name              string     `gorm:"type:varchar(100);not null" json:"name"`
+	TokenHash         string     `gorm:"type:varchar(64);not null;uniqueIndex" json:"-"`
+	TokenPrefix       string     `gorm:"type:varchar(16);not null" json:"token_prefix"`
+	ExpiresAt         *time.Time `gorm:"index" json:"expires_at,omitempty"`
+	LastSeenAt        *time.Time `json:"last_seen_at,omitempty"`
+	CheckedAt         *time.Time `json:"checked_at,omitempty"`
+	InstanceID        string     `gorm:"type:varchar(32)" json:"-"`
+	ExecutorVersion   string     `gorm:"type:varchar(20)" json:"executor_version,omitempty"`
+	Platform          string     `gorm:"type:varchar(30)" json:"platform,omitempty"`
+	InstalledRevision string     `gorm:"type:varchar(40)" json:"-"`
+	CheckOK           bool       `json:"check_ok"`
+	SupersededAt      *time.Time `gorm:"index" json:"-"`
+	RevokedAt         *time.Time `gorm:"index" json:"revoked_at,omitempty"`
+	CreatedAt         time.Time  `json:"created_at"`
+	UpdatedAt         time.Time  `json:"updated_at"`
 }
 
 // UpdateTask pins one server-resolved image target. ActiveSlot is cleared on a

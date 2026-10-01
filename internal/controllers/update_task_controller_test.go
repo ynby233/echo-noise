@@ -7,10 +7,12 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
 	"github.com/rcy1314/echo-noise/internal/backup"
+	"github.com/rcy1314/echo-noise/internal/buildinfo"
 	"github.com/rcy1314/echo-noise/internal/database"
 	"github.com/rcy1314/echo-noise/internal/middleware"
 	"github.com/rcy1314/echo-noise/internal/models"
@@ -18,6 +20,107 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
+
+func TestUpdateCreationRejectsContactWithoutDeploymentCheck(t *testing.T) {
+	db, router, _ := setupUpdateControllerTest(t)
+	if err := db.Model(&models.UpdateExecutorCredential{}).Where("id = ?", 1).Update("checked_at", nil).Error; err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/updates/tasks", strings.NewReader(`{"channel":"edge"}`))
+	req.Header.Set("X-Test-Role", "primary")
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusPreconditionFailed {
+		t.Fatalf("contact alone enabled installation: %d %s", w.Code, w.Body.String())
+	}
+}
+
+func TestUpdateOverviewRestoresAttentionAndLatestResultWithoutBrowserStorage(t *testing.T) {
+	db, router, _ := setupUpdateControllerTest(t)
+	slot := uint(1)
+	task := models.UpdateTask{PublicID: "restore-task", Status: updates.TaskNeedsAttention, ActiveSlot: &slot, TargetRevision: targetRevisionForController, TargetDigest: "sha256:private", Channel: "edge", ErrorSummary: "private host error"}
+	if err := db.Create(&task).Error; err != nil {
+		t.Fatal(err)
+	}
+	for _, status := range []string{updates.TaskNeedsAttention, updates.TaskSucceeded} {
+		for _, role := range []string{"primary", "delegated"} {
+			req := httptest.NewRequest(http.MethodGet, "/updates", nil)
+			req.Header.Set("X-Test-Role", role)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+			var body struct {
+				Data struct {
+					Task *models.UpdateTask `json:"task"`
+				} `json:"data"`
+			}
+			if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil || body.Data.Task == nil || body.Data.Task.PublicID != task.PublicID || body.Data.Task.Status != status {
+				t.Fatalf("server did not restore task: %s (%v)", w.Body.String(), err)
+			}
+			if role != "primary" && (body.Data.Task.TargetRevision != "" || body.Data.Task.TargetDigest != "" || body.Data.Task.ErrorSummary != "") {
+				t.Fatal("task leaked private fields")
+			}
+		}
+		if err := db.Model(&task).Updates(map[string]any{"status": updates.TaskSucceeded, "active_slot": nil, "finished_at": time.Now()}).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestExecutorDeploymentCheckHTTPRejectsWrongInstanceRevisionAndCredential(t *testing.T) {
+	_, router, token := setupUpdateControllerTest(t)
+	router.POST("/api/updates/executor/check", middleware.UpdateExecutorAuthMiddleware(), RecordExecutorDeploymentCheck)
+	s, _ := updateTaskService()
+	instance, _ := s.InstanceID()
+	call := func(raw, instanceID, revision string) int {
+		body, _ := json.Marshal(updates.DeploymentCheck{InstanceID: instanceID, Version: updates.ExecutorVersion, Platform: "linux/amd64", Revision: revision, OK: true})
+		req := httptest.NewRequest(http.MethodPost, "/api/updates/executor/check", bytes.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+raw)
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		return w.Code
+	}
+	if got := call("administrator-token", instance, buildinfo.Revision); got != 401 {
+		t.Fatalf("wrong token: %d", got)
+	}
+	if got := call(token, strings.Repeat("f", 32), buildinfo.Revision); got != 409 {
+		t.Fatalf("wrong instance: %d", got)
+	}
+	if got := call(token, instance, strings.Repeat("3", 40)); got != 409 {
+		t.Fatalf("wrong installed revision: %d", got)
+	}
+	if got := call(token, instance, buildinfo.Revision); got != 200 {
+		t.Fatalf("valid check: %d", got)
+	}
+}
+
+func TestUpdateTaskHTTPRejectsChangedConfirmedTargetAndPublicMaintenanceIsMinimal(t *testing.T) {
+	db, router, _ := setupUpdateControllerTest(t)
+	router.GET("/maintenance", GetUpdateMaintenance)
+	post := httptest.NewRequest(http.MethodPost, "/updates/tasks", strings.NewReader(`{"channel":"edge","revision":"old","digest":"sha256:old"}`))
+	post.Header.Set("X-Test-Role", "primary")
+	post.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, post)
+	if w.Code != 409 {
+		t.Fatalf("changed target accepted: %d", w.Code)
+	}
+	var count int64
+	db.Model(&models.UpdateTask{}).Count(&count)
+	if count != 0 {
+		t.Fatal("changed confirmation created task")
+	}
+	slot := uint(1)
+	if err := db.Create(&models.UpdateTask{PublicID: "private", Status: updates.TaskNeedsAttention, ActiveSlot: &slot, TargetRevision: targetRevisionForController}).Error; err != nil {
+		t.Fatal(err)
+	}
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/maintenance", nil))
+	if w.Code != 200 || !strings.Contains(w.Body.String(), `"maintenance":true`) || strings.Contains(w.Body.String(), "private") || strings.Contains(w.Body.String(), targetRevisionForController) {
+		t.Fatalf("public maintenance leak: %s", w.Body.String())
+	}
+}
 
 func setupUpdateControllerTest(t *testing.T) (*gorm.DB, *gin.Engine, string) {
 	t.Helper()
@@ -43,6 +146,18 @@ func setupUpdateControllerTest(t *testing.T) (*gorm.DB, *gin.Engine, string) {
 	if _, err := updates.NewTaskService(db).Authenticate(rawToken); err != nil {
 		t.Fatal(err)
 	}
+	oldRevision := buildinfo.Revision
+	buildinfo.Revision = strings.Repeat("1", 40)
+	t.Cleanup(func() { buildinfo.Revision = oldRevision })
+	s := updates.NewTaskService(db)
+	credential, err := s.CurrentCredential()
+	if err != nil {
+		t.Fatal(err)
+	}
+	instance, _ := s.InstanceID()
+	if err := s.RecordDeploymentCheck(credential.ID, updates.DeploymentCheck{InstanceID: instance, Version: updates.ExecutorVersion, Platform: "linux/amd64", Revision: buildinfo.Revision, OK: true}); err != nil {
+		t.Fatal(err)
+	}
 	originalDiscovery := discoverUpdates
 	discoverUpdates = func(*gin.Context) updates.Report {
 		return updates.Report{Channels: []updates.Channel{{
@@ -66,6 +181,7 @@ func setupUpdateControllerTest(t *testing.T) (*gorm.DB, *gin.Engine, string) {
 	})
 	router.POST("/updates/tasks", CreateUpdateTask)
 	router.GET("/updates", GetUpdates)
+	router.GET("/updates/state", GetUpdateState)
 	router.GET("/updates/tasks/:id", GetUpdateTask)
 	router.GET("/version/update/stream", UpdateVersionStream)
 	return db, router, rawToken

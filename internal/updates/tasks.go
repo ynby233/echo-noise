@@ -67,11 +67,11 @@ func (s *TaskService) Create(actorID uint, target Target) (models.UpdateTask, bo
 		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
 		}
-		var configured int64
-		if err := tx.Model(&models.UpdateExecutorCredential{}).Where("revoked_at IS NULL AND superseded_at IS NULL AND last_seen_at IS NOT NULL AND (expires_at IS NULL OR expires_at > ?)", time.Now().UTC()).Count(&configured).Error; err != nil {
+		capability, err := NewTaskService(tx).InstallationStatus("")
+		if err != nil {
 			return err
 		}
-		if configured == 0 {
+		if !capability.Available {
 			return ErrExecutorNotConfigured
 		}
 		publicID, err := randomHex(16)

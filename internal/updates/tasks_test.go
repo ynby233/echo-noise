@@ -14,6 +14,19 @@ import (
 	"gorm.io/gorm/logger"
 )
 
+func authenticateReadyForTest(service *TaskService, token string) (models.UpdateExecutorCredential, error) {
+	credential, err := service.Authenticate(token)
+	if err != nil {
+		return credential, err
+	}
+	instance, err := service.InstanceID()
+	if err != nil {
+		return credential, err
+	}
+	err = service.RecordDeploymentCheck(credential.ID, DeploymentCheck{InstanceID: instance, Version: ExecutorVersion, Platform: "linux/amd64", Revision: strings.Repeat("1", 40), OK: true})
+	return credential, err
+}
+
 func openTaskTestDB(t *testing.T, path string) *gorm.DB {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(path), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
@@ -38,7 +51,7 @@ func TestOfflineSettlementAfterRevocationPreservesEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.Authenticate(token); err != nil {
+	if _, err := authenticateReadyForTest(s, token); err != nil {
 		t.Fatal(err)
 	}
 	target := Target{Channel: "edge", Image: officialUpdateImage, Digest: "sha256:" + strings.Repeat("a", 64), Revision: strings.Repeat("1", 40)}
@@ -106,7 +119,7 @@ func TestConcurrentUpdateTaskCreateReturnsOneActiveTask(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.Authenticate(token); err != nil {
+	if _, err := authenticateReadyForTest(service, token); err != nil {
 		t.Fatal(err)
 	}
 	target := Target{Channel: "edge", Image: officialUpdateImage, Digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Revision: "1111111111111111111111111111111111111111"}
@@ -147,7 +160,7 @@ func TestUpdateTaskCreateIsIdempotentAndSurvivesRestart(t *testing.T) {
 	service := NewTaskService(db)
 	if _, token, err := service.CreateCredential(1, "host executor"); err != nil {
 		t.Fatal(err)
-	} else if _, err := service.Authenticate(token); err != nil {
+	} else if _, err := authenticateReadyForTest(service, token); err != nil {
 		t.Fatal(err)
 	}
 	instanceID, err := service.InstanceID()
@@ -197,6 +210,10 @@ func TestUpdateTaskClaimIsRecoverableAndEventsAreScopedAndMonotonic(t *testing.T
 		t.Fatal(err)
 	}
 	if err := db.Model(&other).Update("last_seen_at", time.Now().UTC()).Error; err != nil {
+		t.Fatal(err)
+	}
+	instance, _ := service.InstanceID()
+	if err := service.RecordDeploymentCheck(other.ID, DeploymentCheck{InstanceID: instance, Version: ExecutorVersion, Platform: "linux/amd64", Revision: strings.Repeat("1", 40), OK: true}); err != nil {
 		t.Fatal(err)
 	}
 	task, _, err := service.Create(1, Target{Channel: "stable", Image: "ghcr.io/ynby233/echo-noise", Digest: "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", Revision: "3333333333333333333333333333333333333333"})
@@ -278,7 +295,7 @@ func TestExecutorCredentialStoresOnlyHashAndRejectsExpiry(t *testing.T) {
 	if err := db.Model(&credential).Update("expires_at", past).Error; err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.Authenticate(raw); !errors.Is(err, ErrCredentialInvalid) {
+	if _, err := authenticateReadyForTest(service, raw); !errors.Is(err, ErrCredentialInvalid) {
 		t.Fatalf("expired token err=%v", err)
 	}
 }
@@ -290,7 +307,7 @@ func TestCredentialRotationLetsAssignedExecutorFinishButNotClaimAgain(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.Authenticate(oldToken); err != nil {
+	if _, err := authenticateReadyForTest(service, oldToken); err != nil {
 		t.Fatal(err)
 	}
 	task, _, err := service.Create(models.PrimaryAdminUserID, Target{Channel: "edge", Image: officialUpdateImage, Digest: "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", Revision: "6666666666666666666666666666666666666666"})
@@ -314,7 +331,7 @@ func TestCredentialRotationLetsAssignedExecutorFinishButNotClaimAgain(t *testing
 			t.Fatalf("advance to %s: %v", status, err)
 		}
 	}
-	if _, err := service.Authenticate(oldToken); !errors.Is(err, ErrCredentialInvalid) {
+	if _, err := authenticateReadyForTest(service, oldToken); !errors.Is(err, ErrCredentialInvalid) {
 		t.Fatalf("completed superseded credential remained valid: %v", err)
 	}
 }
@@ -326,7 +343,7 @@ func TestExecutorEventSummaryRedactsCredentials(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.Authenticate(raw); err != nil {
+	if _, err := authenticateReadyForTest(service, raw); err != nil {
 		t.Fatal(err)
 	}
 	task, _, err := service.Create(models.PrimaryAdminUserID, Target{Channel: "edge", Image: officialUpdateImage, Digest: "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd", Revision: "4444444444444444444444444444444444444444"})
@@ -354,7 +371,7 @@ func TestUpdateTaskNeedsAttentionBlocksReplacementUntilResolved(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.Authenticate(token); err != nil {
+	if _, err := authenticateReadyForTest(service, token); err != nil {
 		t.Fatal(err)
 	}
 	target := Target{Channel: "edge", Image: officialUpdateImage, Digest: "sha256:" + strings.Repeat("a", 64), Revision: strings.Repeat("1", 40)}
@@ -400,7 +417,7 @@ func TestUpdateTaskRejectsInvalidEventStatuses(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err := service.Authenticate(token); err != nil {
+			if _, err := authenticateReadyForTest(service, token); err != nil {
 				t.Fatal(err)
 			}
 			task, _, err := service.Create(1, Target{Channel: "edge", Image: officialUpdateImage, Digest: "sha256:" + strings.Repeat("a", 64), Revision: strings.Repeat("1", 40)})

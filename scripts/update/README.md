@@ -1,6 +1,6 @@
 # 外部更新执行器与 U4 数据保护
 
-Linux 宿主执行器，更新一个管理员登记的 Docker 容器或 Compose 服务。程序不在应用容器中运行，应用不挂 Docker socket。生产 `POST /api/updates/tasks` 继续返回 501；U4 已接入旧镜像离线 SQLite 备份；当前仍须等待 U5 能力判断及 U6 初次接入，不能用于现有站点直接安装。旧镜像没有 `/app/update-tool` 时，停机前返回 `u4_backup_unavailable`。
+Linux 宿主执行器，更新一个管理员登记的 Docker 容器或 Compose 服务。程序不在应用容器中运行，应用不挂 Docker socket。U5 已接通受控 `POST /api/updates/tasks`；没有近期部署检查返回 412，不能仅凭有效 token 安装。现有 NAS 初次引导/调度接入属于 U6。旧镜像没有 `/app/update-tool` 时，停机前返回 `u4_backup_unavailable`。
 
 依赖为 Linux、Python 3.9+ 标准库、Docker CLI/本地 Engine、curl；Compose 模式另需 Compose v2（`config --format json`、`up --pull never`）。锁用 `fcntl.flock`，与宿主 flock 相同；不新增服务或 Python 包、不自动安装依赖。非回环地址必须使用 HTTPS，保留系统证书验证，不跟随认证请求重定向。实际验收架构是 linux/amd64；arm64 配置/manifest 判断可识别，但尚无 ARM 运行验收。
 
@@ -13,6 +13,7 @@ Linux 宿主执行器，更新一个管理员登记的 Docker 容器或 Compose 
 | `POST /api/updates/executor/credential`，`{"name":"宿主执行器"}` | HTTP 201，`{"code":1,"data":{"credential":{...},"token":"仅显示一次"}}` |
 | `GET /api/updates` | `data.instance_id` 是管理员人工确认的固定实例 ID |
 | `GET /api/updates/executor/runtime` | executor Bearer；`data.instance_id/revision/build_identity` 用于核对 |
+| `POST /api/updates/executor/check` | executor Bearer；`instance_id/version/platform/revision/ok`，记录本脚本实际部署/SQLite 备份检查，不接受路径、秘密或自由文本 |
 | `POST /api/updates/executor/claim` | executor Bearer；无任务 204；有任务 `code:1`，`data.id/status/channel/target_image/target_digest/target_revision` |
 | `POST /api/updates/executor/tasks/ID/events`，`{"status":"downloading"}` | executor Bearer；成功 HTTP 200、`code:1`；非法转换 409；自由文本不保存 |
 
@@ -68,7 +69,7 @@ docker compose --project-name echo-noise --env-file /etc/echo-noise-update/image
 python3 executor.py check /absolute/executor.json   # 核对，不领取
 python3 executor.py claim /absolute/executor.json   # 领取并落盘，无任务 exit 0
 python3 executor.py report /absolute/executor.json  # 仅按序补报已有记录
-python3 executor.py run /absolute/executor.json     # 先恢复，再领取；生产创建仍受 U5 保护
+python3 executor.py run /absolute/executor.json     # 先恢复，再检查/上报能力，然后领取
 ```
 
 每次 CLI 独占登记 state_dir 的 flock，并发调用非零退出，不删除锁文件“恢复”。`active.json` 原子替换/fsync、0600，保存任务/实例、目标 digest/revision、旧容器/image ID、配置位置、备份位置、token **文件引用**、确认/待报阶段和动作意图/结果；无 token 明文或原 env。日志只输出任务 ID、阶段和有限错误码。保留宿主/scheduler stderr；服务起不来时网页无法查询是实际限制。
@@ -107,7 +108,17 @@ sudo -E python3 scripts/update/test-docker.py
 
 F1–F6 补验包含真实 network connect、自定义 hostname/domain 拒绝及 host 成功、两种多副本文件加单副本覆盖启动、create 后 SIGKILL/回执丢失重试与他人/运行中探测保留、真实 UID/mode/链接与 UNIX/Engine socket 检查，以及异常首次写入 SIGKILL 后真实协调数据库 needs_attention/活动占位。均使用空数据隔离实例，不操作 NAS。
 
-隔离数据与实际生产业务恢复、NAS scheduler 接入分别验收。U5 接后台恢复及能力判断，U6 安装 NAS 任务计划；本阶段保持生产 501。
+隔离数据与实际生产业务恢复、NAS scheduler 接入分别验收。U5 已接后台恢复和能力判断，U6 安装 NAS 任务计划；旧自更新入口仍 501/410，不作为 fallback。
+
+## U5 后台与能力检查
+
+固定 ID 1 站长在后台“版本与更新”创建一次显示的 token、读取实例 ID，按上文写受控配置；在宿主运行 `check`。`u5-1` 的 check/空闲 run 在真实 preflight 与旧镜像 SQLite 备份 plan/数据布局/写入者/空间检查通过后，上报同一 instance/full revision。失败清除此前成功检查，HTTP 只接收有限能力字段，具体错误留在宿主 stderr。`u3-1`/`u4-1` 本地 journal 仍可恢复；升级脚本不能删除旧凭据或未结束记录。
+
+安装需当前有效且未轮换的凭据、最近三分钟内成功部署检查、匹配实例/已安装 revision、u5-1、Linux/amd64、SQLite。`last_seen_at` 的普通认证不延长 `checked_at`；连接过但未检查/离线/脚本过旧/不支持平台或数据保护失败均不可安装。每分钟 run 无任务即退出，三分钟窗口对应三轮调度；大型检查超过窗口或调度缺失会保守拒绝创建，不重新分配已领取任务。ARM、MySQL/PostgreSQL、远端附件未验收，不支持安装。
+
+`GET /api/updates` 返回两渠道、跟随偏好、能力、活动任务或最近结果及站长部署指引；`GET /api/updates/state` 每三秒只查询本地任务/运行身份/能力，不重复扫描 registry。刷新、换浏览器、清缓存均从服务端发现原任务。`needs_attention` 占用两个渠道，必须按 U4 结案；任务创建重试返回原活动任务，渠道目标在确认后变化返回 409。浏览器 HTTP 中断只查询，不自动再次 POST；页面停机时依赖宿主日志。匿名 `GET /api/updates/maintenance` 仅返回维护布尔值，没有任务 ID/镜像/提交/错误/凭据信息。
+
+安装确认列出目标提交、digest 和跟随偏好，提示停机和当前浏览器草稿；不会清除笔记/后台草稿，不保证其他用户草稿。一次性 token 只保留组件内存，隐藏/关闭/切换账号后清除。页面成功来自服务端 succeeded，新的运行提交另显示；没有假百分比或固定延时刷新报成功。
 
 
 `check` 用已安装旧 image ID 启动无网络、只读文件系统、只读源挂载的 `/app/update-tool plan`。工具加载既有 config/runtime.env，不生成配置，不启动服务，不迁移、不应用待恢复包。SQLite 连接为 mode=ro，有 WAL 时读取已提交 WAL；确认无 WAL 时才使用 immutable，避免在只读源挂载创建 WAL/SHM。所有解析源必须处于登记挂载；数据库、config、data 以及外置 Blob 缺失挂载、目录链接、特殊文件、远端 Blob/远端附件配置均拒绝。仅验收 Linux/amd64 + SQLite，本地目录可用 bind 或普通 local named volume。非 SQLite 仍可检查版本，不能安装。

@@ -92,7 +92,7 @@ def current_id(ex):
 
 
 def seed(ex):
-    ex.runtime()  # Authenticate through the real middleware before TaskService.Create.
+    ex.check_deployment()  # Actual preflight/backup check through authenticated HTTP.
     return request("/fixture/create")["data"]
 
 
