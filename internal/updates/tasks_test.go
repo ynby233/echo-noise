@@ -83,6 +83,20 @@ func TestOfflineSettlementAfterRevocationPreservesEvidence(t *testing.T) {
 	if len(events) != 5 || events[4].Summary != "宿主管理员人工结案: operator-confirmed-stop" {
 		t.Fatalf("audit evidence: %+v", events)
 	}
+	for _, state := range []string{TaskClaimed, TaskDownloading, TaskStopping, TaskBackingUp, TaskReplacing, TaskVerifying} {
+		slot := uint(1)
+		interrupted := models.UpdateTask{PublicID: "interrupted-" + state, Status: state, ActiveSlot: &slot, ExecutorCredentialID: &credential.ID}
+		if err := db.Create(&interrupted).Error; err != nil {
+			t.Fatal(err)
+		}
+		if err := s.SettleOffline(instance, interrupted.PublicID, "operator-confirmed-stop"); err != nil {
+			t.Fatalf("lost offline attention at %s: %v", state, err)
+		}
+		got, _ := s.Get(interrupted.PublicID)
+		if got.ActiveSlot != nil || got.Status != TaskFailed {
+			t.Fatalf("interrupted %s not closed", state)
+		}
+	}
 }
 
 func TestConcurrentUpdateTaskCreateReturnsOneActiveTask(t *testing.T) {

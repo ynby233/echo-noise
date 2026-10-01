@@ -648,14 +648,22 @@ def test_mode(mode, old_ref, new_ref, new_digest, attention=False, scenario=""):
     # container, then read back DB, blobs, media and restored configuration.
     recovery = case / "recovery"
     recovery.mkdir()
+    recovery_config = case / "recovery-config"
+    recovery_config.mkdir()
+    with zipfile.ZipFile(archive) as z:
+        for entry in z.namelist():
+            if entry.startswith("protected-config/"):
+                z.extract(entry, recovery_config)
+    assert (recovery_config / "protected-config/runtime.env").read_bytes() == (app_config / "runtime.env").read_bytes()
     recovery_blobs = case / "recovery-blobs"
     recovery_blobs.mkdir()
-    restore_args = ["run", "--rm", "--entrypoint", "/fixture", "--mount", "type=bind,source=" + str(recovery) + ",target=/data",
+    restore_args = ["run", "--rm", "--entrypoint", "/app/docker-entrypoint.sh", "--mount", "type=bind,source=" + str(recovery) + ",target=/data",
+                    "--mount", "type=bind,source=" + str(recovery_config / "protected-config") + ",target=/app/config",
                     "--mount", "type=bind,source=" + str(archive.parent) + ",target=/update-backup,readonly",
                     "--mount", "type=bind,source=" + str(recovery_blobs) + ",target=/external-blobs",
                     "--env", "ATTACHMENT_BLOB_ROOT=/external-blobs",
                     "--mount", "type=bind,source=" + str(recovery) + ",target=/app/data",
-                    old_ref, "-restore", "/update-backup/backup.zip", "-restore-only"]
+                    old_ref, "/fixture", "-restore", "/update-backup/backup.zip", "-restore-only"]
     docker(*restore_args)
     with sqlite3.connect(recovery / "fixture.db") as db:
         assert db.execute("SELECT content FROM messages WHERE id=1").fetchone()[0] == "old WAL note"

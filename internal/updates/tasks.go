@@ -230,7 +230,7 @@ func (s *TaskService) SettleOffline(instanceID, publicID, reason string) error {
 		if task.ActiveSlot == nil || (!validTaskTransition(task.Status, TaskFailed)) {
 			return ErrInvalidTransition
 		}
-		result := tx.Model(&task).Where("status = ? AND active_slot = ?", TaskNeedsAttention, 1).Updates(map[string]any{"status": TaskFailed, "active_slot": nil, "finished_at": time.Now().UTC(), "error_summary": summary})
+		result := tx.Model(&task).Where("status = ? AND active_slot = ?", task.Status, 1).Updates(map[string]any{"status": TaskFailed, "active_slot": nil, "finished_at": time.Now().UTC(), "error_summary": summary})
 		if result.Error != nil {
 			return result.Error
 		}
