@@ -109,11 +109,11 @@ F1–F6 补验包含真实 network connect、自定义 hostname/domain 拒绝及
 隔离数据与实际生产业务恢复、NAS scheduler 接入分别验收。U5 接后台恢复及能力判断，U6 安装 NAS 任务计划；本阶段保持生产 501。
 
 
-`check` 用已安装旧 image ID 启动无网络、只读文件系统、只读源挂载的 `/app/update-tool plan`。工具加载既有 config/runtime.env，不生成配置，不启动服务，不迁移、不应用待恢复包。SQLite 连接为 mode=ro，包含已提交 WAL，不对源使用 immutable。所有解析源必须处于登记挂载；数据库、config、data 以及外置 Blob 缺失挂载、目录链接、特殊文件、远端 Blob/远端附件配置均拒绝。仅验收 Linux/amd64 + SQLite，本地目录可用 bind 或普通 local named volume。非 SQLite 仍可检查版本，不能安装。
+`check` 用已安装旧 image ID 启动无网络、只读文件系统、只读源挂载的 `/app/update-tool plan`。工具加载既有 config/runtime.env，不生成配置，不启动服务，不迁移、不应用待恢复包。SQLite 连接为 mode=ro，有 WAL 时读取已提交 WAL；确认无 WAL 时才使用 immutable，避免在只读源挂载创建 WAL/SHM。所有解析源必须处于登记挂载；数据库、config、data 以及外置 Blob 缺失挂载、目录链接、特殊文件、远端 Blob/远端附件配置均拒绝。仅验收 Linux/amd64 + SQLite，本地目录可用 bind 或普通 local named volume。非 SQLite 仍可检查版本，不能安装。
 
 宿主执行用户需 root 才能完整核对 `/proc/*/fd`。共享挂载的其他 running 容器，或停止但可自动重启的容器，以及打开数据文件的宿主进程，都会阻止停换。宿主管理员还须暂停外部脚本/定时写入者，不得在更新中手动启动另一实例；未来 root 操作无法由当前检查保证。执行器不修改其他容器或第三方计划任务。
 
-下载与空间检查成功后，`POST /api/updates/executor/tasks/ID/prepare` 仅允许原任务有效凭据，在 downloading/stopping 阶段通过既有 sync/restore/archive 锁确认；恢复/同步/备份未结束或存在待恢复包返回 409。准备后全部恢复调用方与新建归档会拒绝，普通业务写入在实际停机时结束。撤销停机准备使用同一接口 `{"cancel":true}`；进程退出后内存准备状态自动消失。停机前先持久化意图及原 restart 策略，再设旧容器 restart=no；只有 running=false、exit code=0、非 OOM 才进入备份。SIGKILL/超时/非零退出保留现场进入 needs_attention。
+下载与空间检查成功后，`POST /api/updates/executor/tasks/ID/prepare` 仅允许原任务未撤销、未过期凭据，在 downloading/stopping 阶段通过既有 sync/restore/archive 锁确认；恢复/同步/备份未结束或存在待恢复包返回 409。准备后全部恢复调用方与新建归档会拒绝，普通业务写入在实际停机时结束。撤销停机准备使用同一接口 `{"cancel":true}`；进程退出后内存准备状态自动消失。停机前先持久化意图及原 restart 策略，再设旧容器 restart=no；只有 running=false、exit code=0、非 OOM 才进入备份。SIGKILL/超时/非零退出保留现场进入 needs_attention。
 
 备份在 0700 的任务目录保存 0600 归档、原容器配置及必要 image/env/Compose 配置；原配置可能含秘密，不进入日志或公开报告。`backup.zip` 包括 database.db、既有附件/媒体根和 protected-config；按现有恢复工具恢复数据库/媒体，配置在授权的离线恢复时单独解压 protected-config 到登记配置目录。空间估计包含临时快照和归档余量；`backup_timeout` 默认 3600 秒，可按真实大附件测量调整。写盘/权限/超时/校验失败均不报备份成功。
 
@@ -125,7 +125,7 @@ F1–F6 补验包含真实 network connect、自定义 hostname/domain 拒绝及
 python3 executor.py reconcile /absolute/executor.json --task TASK_ID --outcome verify
 ```
 
-需要 attention、本地目标证据和原任务有效凭据；先核验真实镜像/挂载/health/runtime，再经 verifying → succeeded。验证失败保留占位。
+需要 attention、本地目标证据和原任务未撤销、未过期凭据；先核验真实镜像/挂载/health/runtime，再经 verifying → succeeded。验证失败保留占位。
 
 凭据撤销/过期或本地记录丢失时：管理员先保留现场，核对是否已有迁移/写入，完成必要的受权人工恢复；停止当前登记容器并设置 restart=no，核对其他写入者。然后 root 执行：
 
@@ -135,3 +135,4 @@ python3 executor.py reconcile /absolute/executor.json --task TASK_ID --outcome f
 ```
 
 CLI 获取同一 flock，指定任务 ID/instance，持久化结案意图，再用当前安装镜像的离线工具修改该任务及唯一 active_slot。它不依赖 HTTP token、不放宽 HTTP 认证、不修改业务库内容、不报 succeeded；只允许可合法失败的活动任务（包括停机中无法补报 attention 的 downloading/stopping/backing_up/replacing/verifying）。有限原因保存在任务和事件，幂等重试保留原证据。拒绝不匹配实例/任务、pending 和已完成结果。本地 active.json 存在时须同一任务，成功仅将其关闭并保留历史。执行器不启动容器；管理员在核对数据安全后按原策略恢复服务。现存镜像缺少工具时先按 U6 的明确引导方案升级工具，不能删库/删任务解除占位。
+

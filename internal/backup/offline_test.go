@@ -128,3 +128,30 @@ func TestUpdateReservationBlocksEveryRestoreCaller(t *testing.T) {
 		t.Fatal("pending restore accepted")
 	}
 }
+
+func TestOfflineBackupRejectsRemoteSourcesAndPendingRestore(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "db")
+	db := openTestDatabase(t, path, "old")
+	sqlDB, _ := db.DB()
+	defer sqlDB.Close()
+	layout := Layout{DatabasePath: path}
+	if err := db.Exec("CREATE TABLE attachment_blobs(storage_backend TEXT)").Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec("INSERT INTO attachment_blobs VALUES('s3')").Error; err != nil {
+		t.Fatal(err)
+	}
+	if _, err := PlanOffline(db, layout, root); err == nil || err.Error() != "remote_attachment_backup_unsupported" {
+		t.Fatalf("remote source accepted: %v", err)
+	}
+	if err := db.Exec("DELETE FROM attachment_blobs").Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(PendingRestorePath(layout), []byte("pending"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := PlanOffline(db, layout, root); err == nil || err.Error() != "pending_restore_requires_reconciliation" {
+		t.Fatalf("pending restore accepted: %v", err)
+	}
+}

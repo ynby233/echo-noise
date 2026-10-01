@@ -100,6 +100,42 @@ def assert_status(task_id, status):
     assert request("/fixture/tasks/" + task_id, "GET")["data"]["status"] == status
 
 
+def test_offline_wal(old_ref):
+    # Leave committed pages exclusively in WAL via an abruptly exited writer.
+    case = root / "offline-wal"
+    case.mkdir()
+    source = case / "data"
+    source.mkdir()
+    config = case / "config"
+    config.mkdir()
+    (config / "config.yaml").write_text("database:\n  type: sqlite\n  path: /app/data/noise.db\n")
+    db_path = source / "noise.db"
+    code = """import sqlite3,os,sys
+c=sqlite3.connect(sys.argv[1])
+c.execute('pragma journal_mode=WAL')
+c.execute('pragma wal_autocheckpoint=0')
+c.executescript('CREATE TABLE users(id INTEGER PRIMARY KEY, username TEXT, password TEXT, is_admin INTEGER); CREATE TABLE messages(id INTEGER PRIMARY KEY, content TEXT, user_id INTEGER); CREATE TABLE site_configs(id INTEGER PRIMARY KEY); INSERT INTO messages VALUES(1, "WAL-only", 1);')
+c.commit()
+os._exit(0)
+"""
+    subprocess.run(["python3", "-c", code, str(db_path)], check=True)
+    assert Path(str(db_path) + "-wal").stat().st_size > 0
+    before = {p.name: p.read_bytes() for p in source.iterdir()}
+    backup_dir = case / "backup"
+    backup_dir.mkdir()
+    docker("run", "--rm", "--read-only", "--network", "none", "--tmpfs", "/tmp", "--entrypoint", "/app/docker-entrypoint.sh",
+           "--mount", "type=bind,source=" + str(source) + ",target=/app/data,readonly",
+           "--mount", "type=bind,source=" + str(config) + ",target=/app/config,readonly",
+           "--mount", "type=bind,source=" + str(backup_dir) + ",target=/backup",
+           old_ref, "/app/update-tool", "backup", "--output", "/backup/wal.zip")
+    assert before == {p.name: p.read_bytes() for p in source.iterdir()}
+    with zipfile.ZipFile(backup_dir / "wal.zip") as z:
+        z.extract("database.db", backup_dir)
+    with sqlite3.connect(backup_dir / "database.db") as db:
+        assert db.execute("SELECT content FROM messages").fetchone()[0] == "WAL-only"
+    print("U4 offline readonly WAL: crash-left committed note archived; DB/WAL/SHM bytes unchanged", flush=True)
+
+
 def rejected(action, code):
     try:
         action()
@@ -657,6 +693,7 @@ if __name__ == "__main__":
                 index_digest = response.headers["Docker-Content-Digest"]
             refs[1] = (registry_image + "@" + index_digest, index_digest)
             docker("pull", refs[1][0])
+            test_offline_wal(refs[0][0])
             test_mode("docker", refs[0][0], refs[1][0], refs[1][1])
             test_mode("compose", refs[0][0], refs[1][0], refs[1][1])
             test_mode("docker", refs[0][0], refs[1][0], refs[1][1], attention=True)
