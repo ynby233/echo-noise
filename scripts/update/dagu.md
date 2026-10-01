@@ -10,7 +10,9 @@
 
 `u6-1` 将实际业务容器的 Engine PID 对应到 `/proc`，核对不同的应用 PID namespace、应用挂载 inode，以及 `/proc/1/root` 中的真实 Engine 根目录。路径缺失、错误空间视图、权限不足或看不到宿主进程均拒绝安装。既有其他可写容器与宿主文件描述符检查继续执行。若 Docker/AppArmor 阻止必要读取，先保留拒绝结果并核实具体权限原因，不关闭全部保护。
 
-在 `/var/lib/echo-noise-update` 保存管理员登记的 JSON、token 文件、image.env，以及 state/backups；目录 0700，文件 0600，且所有父目录符合执行器 owner/mode 要求。沿用 [主说明](README.md) 的 Docker 或 Compose 配置及人工配对；应用路径、配置和 Docker 参数必须真实核对，不能按镜像标签猜目标。配置 URL 在 Host 网络可用 `http://127.0.0.1:1314`，非回环应用连接继续要求 HTTPS。
+在 `/var/lib/echo-noise-update` 保存管理员登记的 JSON、token 文件、image.env，以及 state/backups；目录 0700，文件 0600，且所有父目录符合执行器 owner/mode 要求。沿用 [主说明](README.md) 的 Docker 或 Compose 配置及人工配对；应用路径、配置和 Docker 参数必须真实核对，不能按镜像标签猜目标。Host 网络使用应用实际监听端口的回环 URL，非回环应用连接继续要求 HTTPS。
+
+若实测默认 AppArmor 阻止 SYS_PTRACE 读取宿主系统进程，可仅为执行容器配置 `security_opt: [apparmor=unconfined]`；先验证拒绝原因及真实写入者检测，不调整业务容器或其他服务，仍保留 seccomp、有限 capability、只读映射和所有执行器检查。个人接入中此权限差异已复现。离线工具只增加 `DAC_OVERRIDE`，用于读取 NAS 用户持有的文件；plan/backup 的业务映射仍只读，业务写入权限仅在受权 settle 时开放。
 
 新应用要求执行器 `u6-1`；升级脚本后仍可读取 u3-1/u4-1/u5-1 原记录及原 token 引用。现有任务先按 U4 处置，不删除记录来解除占位。缺少唤醒代码的旧应用只需一次正常外部部署引导；旧镜像必须有 U4 update-tool。
 

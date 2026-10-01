@@ -3,6 +3,7 @@ package controllers
 import (
 	"errors"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -282,6 +283,9 @@ func CreateUpdateTask(c *gin.Context) {
 	}
 	if created {
 		writeUpdateAudit(c, actorID, "create_task", "update_task", task.PublicID, "created pinned update task")
+		if err := updates.WakeExecutor(); err != nil {
+			log.Printf("update executor wake: %s", err) // Finite code, never URL/token/response.
+		}
 		c.JSON(http.StatusCreated, dto.OK(task, "更新任务已创建"))
 		return
 	}

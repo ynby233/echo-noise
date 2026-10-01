@@ -95,6 +95,11 @@ def host_settings(config):
     result = {k: v for k, v in config.items() if k not in ("Binds", "Mounts")}
     # Engine startup normalizes an unset OOM flag to null; both keep OOM killing enabled.
     result["OomKillDisable"] = bool(result.get("OomKillDisable"))
+    # Engine API/CLI versions encode unset collections as null or empty values.
+    for key in ("BlkioDeviceReadBps", "BlkioDeviceReadIOps", "BlkioDeviceWriteBps", "BlkioDeviceWriteIOps",
+                "BlkioWeightDevice", "Dns", "DnsOptions", "DnsSearch", "Ulimits"):
+        result[key] = result.get(key) or []
+    result["PortBindings"] = result.get("PortBindings") or {}
     return result
 
 
@@ -302,14 +307,14 @@ class Executor:
 
     def docker_create(self, name, image, probe=False):
         opts = self.cfg.get("docker", {})
-        allowed = {"network", "restart", "env_file", "devices", "ports", "log_driver", "log_options", "entrypoint", "command", "user"}
+        allowed = {"network", "restart", "env_file", "devices", "ports", "log_driver", "log_options", "entrypoint", "command", "user", "hostname"}
         require(opts.keys() <= allowed, "docker_option_unsupported")
         args = ["docker", "create", "--name", name, "--platform", self.cfg["platform"]]
         if probe:
             for key, value in self.probe_labels().items():
                 args += ["--label", key + "=" + value]
         for key, flag in (("network", "--network"), ("restart", "--restart"), ("env_file", "--env-file"),
-                          ("log_driver", "--log-driver"), ("entrypoint", "--entrypoint"), ("user", "--user")):
+                          ("log_driver", "--log-driver"), ("entrypoint", "--entrypoint"), ("user", "--user"), ("hostname", "--hostname")):
             if key in opts:
                 args += [flag, str(opts[key])]
         for key, flag in (("devices", "--device"), ("ports", "--publish")):
@@ -513,7 +518,8 @@ class Executor:
             with os.fdopen(fd, "w") as out:
                 out.write("\n".join(env) + "\n")
             args = ["docker", "run", "--rm", "--name", name, "--network", "none", "--read-only",
-                    "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--tmpfs", "/tmp",
+                    "--cap-drop", "ALL", "--cap-add", "DAC_OVERRIDE",
+                    "--security-opt", "no-new-privileges", "--tmpfs", "/tmp",
                     "--env-file", env_path, "--workdir", "/app", "--entrypoint", "/app/docker-entrypoint.sh"]
             for key, value in labels.items():
                 args += ["--label", key + "=" + value]

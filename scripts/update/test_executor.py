@@ -345,6 +345,13 @@ class RecoveryTests(unittest.TestCase):
         self.assertEqual(executor.host_settings({"OomKillDisable": None}), executor.host_settings({"OomKillDisable": False}))
         self.assertNotEqual(executor.host_settings({"OomKillDisable": True}), executor.host_settings({"OomKillDisable": False}))
 
+    def test_engine_empty_collections_do_not_hide_nonempty_settings(self):
+        for key in ("BlkioDeviceReadBps", "BlkioDeviceReadIOps", "BlkioDeviceWriteBps", "BlkioDeviceWriteIOps",
+                    "BlkioWeightDevice", "Dns", "DnsOptions", "DnsSearch", "Ulimits", "PortBindings"):
+            empty = {} if key == "PortBindings" else []
+            self.assertEqual(executor.host_settings({key: None}), executor.host_settings({key: empty}))
+            self.assertNotEqual(executor.host_settings({key: None}), executor.host_settings({key: ["configured"]}))
+
     def test_attention_first_write_retains_event_and_error_on_restart(self):
         self.claim()
         self.ex.record.update(step="stop_intent", confirmed="stopping")
@@ -650,6 +657,16 @@ class PreflightTests(unittest.TestCase):
         self.current["NetworkSettings"]["Networks"] = self.probe["NetworkSettings"]["Networks"] = {"host": {}}
         self.current["Config"]["Hostname"] = self.probe["Config"]["Hostname"] = "engine-host"
         self.assertEqual(self.ex.preflight()["Id"], self.current["Id"])
+
+    def test_registered_fixed_hostname_is_preserved(self):
+        self.ex.cfg["docker"] = {"hostname": "registered-host"}
+        self.current["Config"]["Hostname"] = self.probe["Config"]["Hostname"] = "registered-host"
+        self.assertEqual(self.ex.preflight()["Id"], self.current["Id"])
+        self.probe_present = False
+        with patch.object(executor, "command", return_value="probe") as run:
+            self.ex.docker_create("probe", "image")
+        args = run.call_args.args[0]
+        self.assertEqual(args[args.index("--hostname") + 1], "registered-host")
 
     def test_compose_default_and_explicit_one_pass(self):
         path = self.root / "compose.json"

@@ -566,7 +566,7 @@ def test_mode(mode, old_ref, new_ref, new_digest, attention=False, scenario=""):
             # previous writer. This never runs against the personal NAS.
             subprocess.run(["systemctl", "restart", "docker"], check=True, timeout=60)
             assert not ex.inspect(cid)["State"]["Running"]
-            docker("start", registry)
+            docker("start", prefix + "-registry")
             rejected(ex.run, "interrupted_destructive_step")
             docker("start", cid)
             wait()

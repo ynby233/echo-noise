@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -20,6 +22,49 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
+
+func TestUpdateWakeRunsAfterCommitAndFailureKeepsOriginalTask(t *testing.T) {
+	db, router, _ := setupUpdateControllerTest(t)
+	file := filepath.Join(t.TempDir(), "wake-token")
+	if err := os.WriteFile(file, []byte("dedicated-token"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("UPDATE_EXECUTOR_WAKE_TOKEN_FILE", file)
+	var calls int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		task, err := updates.NewTaskService(db).LatestTask()
+		if err != nil || task == nil || task.Status != updates.TaskPending {
+			t.Error("not committed before wake")
+		}
+		time.Sleep(3200 * time.Millisecond) // Exceeds the finite wake timeout.
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+	t.Setenv("UPDATE_EXECUTOR_WAKE_URL", server.URL)
+	post := func(role string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest("POST", "/updates/tasks", strings.NewReader(`{"channel":"edge"}`))
+		r.Header.Set("Content-Type", "application/json")
+		r.Header.Set("X-Test-Role", role)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, r)
+		return w
+	}
+	if post("delegated").Code != 403 || calls != 0 {
+		t.Fatal("rejected creation notified executor")
+	}
+	first := post("primary")
+	second := post("primary")
+	if first.Code != 201 || second.Code != 200 || calls != 1 {
+		t.Fatalf("codes=%d,%d calls=%d", first.Code, second.Code, calls)
+	}
+	var a, b struct {
+		Data models.UpdateTask `json:"data"`
+	}
+	if json.Unmarshal(first.Body.Bytes(), &a) != nil || json.Unmarshal(second.Body.Bytes(), &b) != nil || a.Data.PublicID == "" || a.Data.PublicID != b.Data.PublicID {
+		t.Fatal("wake failure lost or duplicated task")
+	}
+}
 
 func TestUpdateCreationRejectsContactWithoutDeploymentCheck(t *testing.T) {
 	db, router, _ := setupUpdateControllerTest(t)

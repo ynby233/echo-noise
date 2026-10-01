@@ -35,7 +35,7 @@ python3 /etc/echo-noise-update/executor.py check /etc/echo-noise-update/executor
 
 `check` 核对配对、依赖、架构、实际容器、登记挂载、权限和最低磁盘余量。Docker 模式创建**不启动**的临时容器，用旧 image ID 比较固定启动参数，然后删除它；不执行迁移。无法表示的高级参数、额外网络、自定义配置会拒绝，可改用管理员 Compose，不能假装克隆任意 inspect。支持 Docker network、restart、env_file、devices、ports、log_driver/options、entrypoint、command、user；挂载支持显式 bind/现存 named volume，非默认传播/卷驱动不支持。`min_free_bytes` 默认 1 GiB，检查状态/备份及 Docker 根目录；另以旧镜像 plan 测量全部归档源的字节量，备份目录至少需三倍源大小加 64 MiB 和配置最低余量中的较大值；失败在停机前拒绝。
 
-实际网络集合必须与探测容器一致；静态 IPAM、额外 alias/Links/DriverOpts/网关优先级和显式自定义 hostname/domain 无法由本期参数表示，停机前拒绝。Docker 模式还比较 Config 中的固定 MacAddress，不能保留时返回 `docker_mac_address_not_represented`；运行时动态 MAC/IP/endpoint ID 不作为配置差异。默认容器 ID 主机名、host 网络继承的宿主主机名正常支持。
+实际网络集合必须与探测容器一致；静态 IPAM、额外 alias/Links/DriverOpts/网关优先级和自定义 domain 无法由本期参数表示，停机前拒绝。固定主机名可通过 `docker.hostname` 明确登记，未登记的自定义名称仍拒绝；默认容器 ID 主机名、host 网络继承的宿主主机名正常支持。Docker 模式还比较 Config 中的固定 MacAddress，不能保留时返回 `docker_mac_address_not_represented`；运行时动态 MAC/IP/endpoint ID 不作为配置差异。Engine 将未设置的块设备限速、DNS、ulimits 和端口映射表示为 null 或空集合时视为相同，非空值仍逐项比较。
 
 在读取 Engine 信息、检查业务容器或创建探测容器之前，先核对本地 UNIX endpoint；无挂载部署也必须通过。`DOCKER_CONTEXT` 优先于 `DOCKER_HOST`，远程/TCP endpoint 或无法核实的本地 socket 不支持。应用挂载按宿主来源 realpath、同一文件与目录包含关系检查 endpoint（含 `/run`/`/var/run` 别名）；socket 改名、符号链接和整个父目录均拒绝。普通数据 bind 和 named volume 仍核对登记关系。Docker/Compose 共用挂载检查，命名卷另外读取 `docker volume inspect` 的 Name/Driver/Options，仅支持 local 驱动且无选项的普通卷；local bind/NFS 等带选项的卷返回 `named_volume_options_unsupported`，插件驱动返回 `named_volume_driver_unsupported`。这样避免 `_data` 路径掩盖真实宿主映射；不自动修改或删除管理员的卷。
 
