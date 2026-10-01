@@ -26,6 +26,16 @@ func OpenOffline(path string, writable bool) (*gorm.DB, error) {
 		return nil, err
 	}
 	dsn := "file:" + strings.ReplaceAll(url.PathEscape(filepath.ToSlash(absolute)), "%2F", "/") + "?mode=" + mode
+	// A clean shutdown removes WAL/SHM, while the main file still records WAL
+	// mode. SQLite otherwise tries creating sidecars on the read-only mount.
+	// Only a source with no WAL may use immutable; existing WAL is always read.
+	if !writable {
+		if _, err := os.Stat(absolute + "-wal"); errors.Is(err, os.ErrNotExist) {
+			dsn += "&immutable=1"
+		} else if err != nil {
+			return nil, err
+		}
+	}
 	return gorm.Open(sqlite.Open(dsn), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 }
 

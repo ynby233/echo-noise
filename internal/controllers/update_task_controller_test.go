@@ -10,7 +10,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
+	"github.com/rcy1314/echo-noise/internal/backup"
 	"github.com/rcy1314/echo-noise/internal/database"
+	"github.com/rcy1314/echo-noise/internal/middleware"
 	"github.com/rcy1314/echo-noise/internal/models"
 	"github.com/rcy1314/echo-noise/internal/updates"
 	"gorm.io/gorm"
@@ -67,6 +69,68 @@ func setupUpdateControllerTest(t *testing.T) (*gorm.DB, *gin.Engine, string) {
 	router.GET("/updates/tasks/:id", GetUpdateTask)
 	router.GET("/version/update/stream", UpdateVersionStream)
 	return db, router, rawToken
+}
+
+func TestExecutorShutdownPreparationAuthenticatesOwnerAndBlocksRestore(t *testing.T) {
+	db, _, token := setupUpdateControllerTest(t)
+	s := updates.NewTaskService(db)
+	target := updates.Target{Channel: "edge", Image: "ghcr.io/ynby233/echo-noise", Digest: "sha256:" + strings.Repeat("a", 64), Revision: strings.Repeat("1", 40)}
+	task, _, err := s.Create(1, target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	credential, err := s.Authenticate(token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Claim(credential.ID); err != nil {
+		t.Fatal(err)
+	}
+	r := gin.New()
+	r.POST("/api/updates/executor/tasks/:id/prepare", middleware.UpdateExecutorAuthMiddleware(), PrepareUpdateShutdown)
+	call := func(raw, body string) int {
+		req := httptest.NewRequest(http.MethodPost, "/api/updates/executor/tasks/"+task.PublicID+"/prepare", strings.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+raw)
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		return w.Code
+	}
+	if code := call("administrator-token", "{}"); code != 401 {
+		t.Fatalf("admin bypass: %d", code)
+	}
+	if code := call(token, "{}"); code != 409 {
+		t.Fatalf("claimed prepare: %d", code)
+	}
+	if err := s.RecordEvent(credential.ID, task.PublicID, updates.TaskDownloading, ""); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = backup.ReserveUpdate(task.PublicID, backup.DefaultLayout(), true) })
+	if code := call(token, "{}"); code != 200 {
+		t.Fatalf("prepare: %d", code)
+	}
+	if _, err := backup.StageRestoreWithResult("missing", backup.DefaultLayout()); err == nil || err.Error() != "更新停机已准备，不能同时恢复备份" {
+		t.Fatalf("restore was not blocked: %v", err)
+	}
+	if code := call(token, `{"cancel":true}`); code != 200 {
+		t.Fatalf("cancel: %d", code)
+	}
+	_, next, err := s.CreateCredential(1, "new")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if code := call(next, "{}"); code != 403 {
+		t.Fatalf("wrong owner prepare: %d", code)
+	}
+	if code := call(token, "{}"); code != 200 {
+		t.Fatalf("rotated active owner cannot finish its task: %d", code)
+	}
+	if err := s.RevokeCredential(1); err != nil {
+		t.Fatal(err)
+	}
+	if code := call(next, "{}"); code != 401 {
+		t.Fatalf("revoked token prepared: %d", code)
+	}
 }
 
 func TestUpdateTaskHTTPRequiresPrimaryAndDeduplicatesRepeatedPost(t *testing.T) {

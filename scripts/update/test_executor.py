@@ -152,6 +152,34 @@ class RecoveryTests(unittest.TestCase):
             with self.assertRaisesRegex(executor.Stop, "old_shutdown_not_clean"):
                 self.ex.stop_container()
 
+    def test_lost_prepare_and_cancel_preserves_attention(self):
+        self.claim()
+        self.ex.download = lambda: {"image_id": "new"}
+        self.ex.data_protection_available = lambda: True
+        self.ex.prepare_shutdown = lambda: (_ for _ in ()).throw(executor.Stop("http_transport"))
+        normal = self.api
+        def api(method, path, body=None, token=None):
+            if path.endswith("prepare"):
+                raise executor.Stop("http_transport")
+            return normal(method, path, body, token)
+        self.ex.api = api
+        self.ex.stop_container = lambda: self.fail("stopped after unconfirmed prepare")
+        with self.assertRaisesRegex(executor.Stop, "shutdown_preparation_requires_reconciliation"):
+            self.ex.run()
+        self.assertEqual(self.ex.record["step"], "attention")
+        self.assertEqual(self.ex.record["confirmed"], "needs_attention")
+        self.assertFalse(self.ex.record["closed"])
+
+    def test_started_target_failure_never_restarts_old(self):
+        self.claim()
+        self.ex.record.update(step="replace_intent", download={"image_id": "new"})
+        self.ex.target_running = lambda: True
+        self.ex.verify = lambda: (_ for _ in ()).throw(executor.Stop("target_health_timeout"))
+        self.ex.restore_old = lambda: self.fail("old restarted after new writes")
+        with self.assertRaisesRegex(executor.Stop, "target_health_timeout"):
+            self.ex.run()
+        self.assertEqual(self.ex.record["confirmed"], "needs_attention")
+
     def test_uncertain_stop_is_not_reexecuted(self):
         self.claim()
         self.ex.record["step"] = "stop_intent"
