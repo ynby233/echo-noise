@@ -1,6 +1,6 @@
 # U5 后台更新、能力判断与任务恢复验收
 
-日期：2026-10-01。接手基线 `b56da37421bd067e5810aa7ce97fa0bfa741ab10`；按 [U1–U7 第 10 节](direct-update-implementation-handoff-2026-09-11.md) 实施，保留 U1–U4 权限、任务占位、凭据轮换/撤销与一致备份/恢复边界。U5 实现和本地验收已完成；对应推送工作流结果在下方补录后才关闭阶段。NAS 引导、容器替换、调度安装及真实业务恢复没有执行，分别属于 U6/U7。
+**U5 已完成，最终产品代码 `7333cc16` 的本地、隔离真实 Docker/Compose 与对应镜像验收通过，可以关闭；下一阶段 U6。** 日期：2026-10-01。接手基线 `b56da37421bd067e5810aa7ce97fa0bfa741ab10`；按 [U1–U7 第 10 节](direct-update-implementation-handoff-2026-09-11.md) 实施，保留 U1–U4 权限、任务占位、凭据轮换/撤销与一致备份/恢复边界。NAS 引导、容器替换、调度安装及真实业务恢复没有执行，分别属于 U6/U7。既有首页浏览器缺口单独记录在下文，不能称全部邻近浏览器回归全绿。
 
 ## 实现与边界
 
@@ -34,6 +34,8 @@ overview 返回活动任务优先、否则最近结果；`GET /api/updates/state
 
 主体代码 `c07c54b02603b84bb4dc3aa8168a572db6df3778` 已推送 origin/main。[独立执行器运行 36820576608](https://github.com/ynby233/echo-noise/actions/runs/36820576608) 同 headSha、success；真实 Docker 与 Compose 停机/备份/替换/运行身份、回报丢失、轮换/撤销/锁以及 U4 空间/写入者/恢复/下载/备份/退出/核验/中断故障均通过。本次能力上报实际经真实认证/控制器到 SQLite，再由真实 TaskService 创建/领取，未用空备份或产品开关绕过。最后 timeout 补修仅前端/API 工具及文档，未修改此受验执行器/后端。
 
-代码提交、对应真实 Docker/Compose workflow、edge 镜像构建/smoke 结果待本次推送后补录。它们证明代码及隔离引擎/产物，不证明 NAS 已接入。本次没有 NAS 部署或实际任务计划验收，不发布正式 Release。
+最终产品代码 `7333cc16a0eae30b2057b7b8294210ec46dc63de` 包含 timeout 补修 `45f0dc2f` 和能力字段边界补修。后者 red 实际证明版本字段接受宿主自由文本；修改为普通版本格式及有限平台后 green，并再次通过 updates/controllers/middleware/routers 全包与相关 vet。不会将版本/平台输入当任意日志保存。主体对应 [镜像运行 36820576530](https://github.com/ynby233/echo-noise/actions/runs/36820576530) 已 success，候选/immutable smoke 完整身份均为 c07c54b02603b84bb4dc3aa8168a572db6df3778。
+
+[最终代码独立执行器运行 36821053887](https://github.com/ynby233/echo-noise/actions/runs/36821053887) 已 success，headSha 精确匹配 7333cc16a0eae30b2057b7b8294210ec46dc63de；日志再次确认 47 项 Python、真实 Docker/Compose 完整更新及上述故障。[最终 edge 镜像运行 36821053840](https://github.com/ynby233/echo-noise/actions/runs/36821053840) 同 headSha、success，候选 build/smoke、旧身份缺口拒绝、immutable 产物 smoke 及 edge 标签发布全部成功。它们证明代码及隔离引擎/产物，不证明 NAS 已接入。本次没有 NAS 部署或实际任务计划验收，不发布正式 Release。最终纯文档验收提交不改变代码/镜像身份，也不需要重复镜像构建。
 
 U6 从首次引导继续：只读核对目标宿主/容器/数据/调度，先做隔离实例，再准备具体引导方案；授权边界仍按总交接。需要旧安装镜像包含 update-tool，宿主安装 u5-1 和受控配置/token，再设置每分钟 run；仅网页创建凭据不代表具备安装条件。U7 验收已实际接入的整条链和故障。
