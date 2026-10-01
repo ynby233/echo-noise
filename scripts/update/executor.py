@@ -772,6 +772,7 @@ class Executor:
         current = self.inspect(self.container_id())
         self.check_mounts(current)
         self.check_writers(current)
+        require(current["HostConfig"]["RestartPolicy"]["Name"] == "no", "reconciliation_requires_restart_disabled")
         evidence = self.state / (task_id + "-reconciliation.json")
         atomic_write(evidence, json.dumps({"task": task_id, "instance_id": self.cfg["instance_id"],
                      "container": current["Id"], "image": current["Image"], "reason": reason, "step": "settle_intent"}))
