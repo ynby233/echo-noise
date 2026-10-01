@@ -90,6 +90,26 @@ func PlanOffline(db *gorm.DB, layout Layout, configDir string) (OfflinePlan, err
 		paths = append(paths, root.Path)
 	}
 	for _, path := range paths {
+		// Resolve existing parents too: walking only the final root would miss a
+		// symlink in its parent and could archive an unregistered external tree.
+		ancestor := path
+		for {
+			resolved, resolveErr := filepath.EvalSymlinks(ancestor)
+			if resolveErr == nil {
+				if resolved != ancestor {
+					return plan, errors.New("backup_source_symlink_unsupported")
+				}
+				break
+			}
+			if !errors.Is(resolveErr, os.ErrNotExist) {
+				return plan, resolveErr
+			}
+			parent := filepath.Dir(ancestor)
+			if parent == ancestor {
+				return plan, resolveErr
+			}
+			ancestor = parent
+		}
 		err = filepath.Walk(path, func(p string, info os.FileInfo, walkErr error) error {
 			if errors.Is(walkErr, os.ErrNotExist) && p == path {
 				return nil

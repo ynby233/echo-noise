@@ -461,6 +461,7 @@ def test_mode(mode, old_ref, new_ref, new_digest, attention=False, scenario=""):
             # and writer are still unchanged, so recovery may restart it.
             def failed_backup():
                 current = ex.inspect(cid)
+                Path(ex.record["backup_path"]).mkdir(mode=0o700, parents=True)
                 ex.offline_tool(current, "backup", "--output", "/app/config/cannot-write.zip")
             ex.backup = failed_backup
             rejected(ex.run, "command_failed:docker")

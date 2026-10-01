@@ -542,6 +542,7 @@ class Executor:
     def backup(self):
         current = self.inspect(self.record["old_container"])
         self.check_writers(current)
+        self.data_protection_available()  # Re-measure after the last business writes stopped.
         destination = Path(self.record["backup_path"])
         destination.mkdir(mode=0o700, parents=True, exist_ok=True)
         private(destination, directory=True)
