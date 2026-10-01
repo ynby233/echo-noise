@@ -2,6 +2,7 @@ package updates
 
 import (
 	"errors"
+	"regexp"
 	"time"
 
 	"github.com/rcy1314/echo-noise/internal/models"
@@ -10,6 +11,8 @@ import (
 
 const ExecutorVersion = "u5-1"
 const ExecutorCheckWindow = 3 * time.Minute
+
+var executorVersionPattern = regexp.MustCompile(`^u[0-9]{1,2}-[0-9]{1,3}$`)
 
 type DeploymentCheck struct {
 	InstanceID string `json:"instance_id"`
@@ -31,7 +34,7 @@ func (s *TaskService) RecordDeploymentCheck(id uint, check DeploymentCheck) erro
 	if err != nil {
 		return err
 	}
-	if instance == "" || check.InstanceID != instance || len(check.Version) > 20 || len(check.Platform) > 30 || !validRevision(check.Revision) {
+	if instance == "" || check.InstanceID != instance || !executorVersionPattern.MatchString(check.Version) || (check.Platform != "linux/amd64" && check.Platform != "linux/arm64") || !validRevision(check.Revision) {
 		return ErrInvalidTarget
 	}
 	result := s.db.Model(&models.UpdateExecutorCredential{}).Where("id = ? AND revoked_at IS NULL AND superseded_at IS NULL AND (expires_at IS NULL OR expires_at > ?)", id, time.Now().UTC()).Updates(map[string]any{

@@ -35,6 +35,17 @@ func TestInstallationRequiresFreshPairedSupportedDeployment(t *testing.T) {
 	if err := s.RecordDeploymentCheck(c.ID, bad); err == nil {
 		t.Fatal("unpaired check accepted")
 	}
+	for _, field := range []string{"version", "platform"} {
+		bad = check
+		if field == "version" {
+			bad.Version = "private host text"
+		} else {
+			bad.Platform = "private host text"
+		}
+		if err := s.RecordDeploymentCheck(c.ID, bad); err == nil {
+			t.Fatalf("free text accepted as %s", field)
+		}
+	}
 	if err := s.RecordDeploymentCheck(c.ID, check); err != nil {
 		t.Fatal(err)
 	}
