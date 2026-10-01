@@ -53,6 +53,8 @@ CI 曾实际暴露抽取 fixture 后 registry 变量缺失、root 构建目录�
 
 个人配置、来源路径、token 文件、启动 argv、日志、容量/文件证据与恢复单保存在私有环境目录，不进公开仓库。后台只显示任务 ID、有限阶段和有限错误码；管理凭据未交给应用。日常执行、调度及恢复在 NAS，Windows 不需常驻。
 
+最终复验时 GitHub 匿名版本源返回 403。NAS 同出口响应头确认 X-RateLimit-Remaining=0 / Limit=60，重置时间为 2026-10-02 06:46:48（北京时间）；因此“源码状态”暂时显示检查失败。已安装身份、GHCR 渠道/固定 digest、任务 succeeded、健康和分钟能力检查均独立核实通过，此处不写成源码查询成功。配额重置后再检查；未把管理员 gh token 注入业务或绕过原错误提示。
+
 ## 停用、恢复与 U7
 
 从 Dagu 固定任务移除 schedule 并禁用 Webhook，再按业务策略撤销 executor；未结任务先依 U4 处理。保持原 active.json、token 引用与备份，容器重建使用固定配置先 run 恢复。新版曾启动且结果不明时不自动重装、降级、启动旧容器或恢复旧库；人工结案按 [主说明](../scripts/update/README.md)。
