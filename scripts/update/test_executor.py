@@ -74,6 +74,17 @@ class RecoveryTests(unittest.TestCase):
             "instance_id": self.cfg["instance_id"], "version": executor.VERSION,
             "platform": "linux/amd64", "revision": "1" * 40, "ok": True})])
 
+    def test_filesystem_check_failure_invalidates_previous_success_without_claim(self):
+        self.ex.preflight = lambda: (self.ex.check_space() or {"Id": "old", "Image": "old"})
+        self.ex.check_deployment()
+        Path(self.cfg["backup_dir"]).rmdir()
+        with self.assertRaisesRegex(executor.Stop, "deployment_check_failed"):
+            self.ex.claim()
+        self.assertEqual([body["ok"] for path, body in self.calls
+                          if path == "/api/updates/executor/check"], [True, False])
+        self.assertFalse(any(path.endswith("claim") for path, _ in self.calls))
+        self.assertFalse(self.ex.journal.exists())
+
     def test_claim_response_loss_retries_same_server_task(self):
         normal = self.api
         def lost(method, path, body=None, token=None):

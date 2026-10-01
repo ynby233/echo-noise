@@ -174,6 +174,11 @@ const server = http.createServer(async (req, res) => {
       record(await run.snapshot('opened-notifications'))
       await page.getByRole('button', { name: '信息流', exact: true }).click()
       await page.waitForSelector('.feed-list-wrap')
+      // The feed layout intentionally conceals the overlapping toolbar. Use
+      // its visible reveal control rather than clicking an offscreen button.
+      if (await page.locator('.floating-sidebar-shell.is-avoidance-concealed').count()) {
+        await page.locator('.sidebar-avoidance-handle').click()
+      }
       await page.getByRole('button', { name: '留言', exact: true }).click()
       await page.waitForSelector('.comment-board-wrap .builtin-comments')
       record(await run.snapshot('opened-feed-and-comments'))

@@ -3,6 +3,7 @@
     <AdminModuleHeader title="版本与更新" icon="i-heroicons-arrow-path" description="检查两渠道并查看宿主更新任务。" :theme="theme" />
     <div class="px-4 pb-4 space-y-4">
       <p v-if="error" role="alert" class="text-sm" :class="theme.mutedText">{{ error }}；等待服务恢复，只查询原任务。<UButton size="xs" variant="soft" @click="refresh">重试连接</UButton></p>
+      <p v-if="rejection" role="alert" class="text-sm" :class="theme.mutedText">{{ rejection }}</p>
       <div class="admin-settings-grid">
         <section class="admin-form-section"><div class="admin-section-heading"><h3>安装信息</h3></div>
           <div class="space-y-2 text-sm" :class="theme.text">
@@ -74,6 +75,7 @@ const guide = ref('')
 const installed = reactive({ version: '', revision: '', build_identity: '' })
 const channels = ref<any[]>([]), executor = ref<any>(null), task = ref<any>(null)
 const sourceStatus = ref(''), follow = ref('stable'), instanceID = ref(''), error = ref(''), token = ref('')
+const rejection = ref('')
 const installation = ref({ available: false, reason: 'deployment_unchecked' })
 const checking = ref(false), posting = ref(false), configuring = ref(false), syncing = ref(false), uncertain = ref(false), staticSync = ref(false)
 const selected = ref(''), target = ref<any>({}), draftConfirmed = ref(false), hasDraft = ref(false)
@@ -89,7 +91,16 @@ const phases: Record<string, string> = { pending: '等待执行器', claimed: '�
 const phaseText = computed(() => phases[task.value?.status] || '等待状态')
 const canInstall = (name: string) => isPrimaryAdmin.value && !busy.value && !error.value && !checking.value && !configuring.value && installation.value.available && channel(name).installable && channel(name).status === 'update_available'
 let disposed = false, timer: ReturnType<typeof setTimeout> | undefined, loading = false, generation = 0
-const applyState = (data: any) => { task.value = data.task || null; executor.value = data.executor || null; installation.value = data.installation || { available: false, reason: 'deployment_unchecked' }; if (data.installed) Object.assign(installed, data.installed); if (data.task) uncertain.value = false; error.value = uncertain.value ? '任务创建结果尚未确认，请勿再次安装' : '' }
+let previousTaskID = ''
+const applyState = (data: any) => {
+  task.value = data.task || null
+  executor.value = data.executor || null
+  installation.value = data.installation || { available: false, reason: 'deployment_unchecked' }
+  if (data.installed) Object.assign(installed, data.installed)
+  // An older completed task cannot settle the POST whose response was lost.
+  if (data.task && (data.task.id !== previousTaskID || !['succeeded', 'failed'].includes(data.task.status))) uncertain.value = false
+  error.value = uncertain.value ? '任务创建结果尚未确认，请勿再次安装' : ''
+}
 const refresh = async () => {
   if (loading || disposed || posting.value) return
   loading = true
@@ -122,6 +133,7 @@ const credential = async (revoke: boolean) => {
 const confirmInstall = (name: string) => {
   if (!canInstall(name)) return
   target.value = { ...channel(name) }; selected.value = name; draftConfirmed.value = false
+  rejection.value = ''
   hasDraft.value = [...drafts.values()].some((d: any) => JSON.stringify(d.value) !== JSON.stringify(d.base))
   try { hasDraft.value ||= !!JSON.parse(localStorage.getItem('addform_draft_v1') || 'null')?.content } catch { hasDraft.value = true }
 }
@@ -130,13 +142,25 @@ const install = async () => {
   posting.value = true
   ++generation
   const name = selected.value, owner = account.value
+  previousTaskID = task.value?.id || ''
   selected.value = ''
-  try { const body: any = await postRequest('updates/tasks', { channel: name, revision: target.value.revision, digest: target.value.digest }, { credentials: 'include', silent: true, timeout: 60000 }); if (disposed || owner !== account.value) return; if (body?.code !== 1) throw new Error(); task.value = body.data }
+  try {
+    const body: any = await postRequest('updates/tasks', { channel: name, revision: target.value.revision, digest: target.value.digest }, { credentials: 'include', silent: true, timeout: 60000 })
+    if (disposed || owner !== account.value) return
+    if (body?.code !== 1) {
+      if ([400, 401, 403, 409, 412].includes(body?.status)) {
+        rejection.value = body.msg || '服务器已拒绝创建，请重新检查并确认'
+        return
+      }
+      throw new Error()
+    }
+    task.value = body.data
+  }
   catch { if (!disposed && owner === account.value) { uncertain.value = true; error.value = '任务创建结果尚未确认，请勿再次安装' } }
   finally { posting.value = false; await refresh() }
 }
 const syncStatic = async () => { syncing.value = true; try { const body: any = await postRequest('version/static-sync', {}, { credentials: 'include', silent: true }); if (body?.code !== 1) throw new Error(); toast.add({ title: body.msg || '静态资源已同步', color: 'green' }) } catch { toast.add({ title: '静态资源同步失败', color: 'red' }) } finally { syncing.value = false } }
-watch(account, () => { ++generation; token.value = ''; guide.value = ''; selected.value = ''; task.value = null; channels.value = []; executor.value = null; installation.value.available = false; Object.assign(installed, { version: '', revision: '', build_identity: '' }); instanceID.value = ''; void checkChannels(); void refresh() })
+watch(account, () => { ++generation; token.value = ''; guide.value = ''; selected.value = ''; task.value = null; channels.value = []; executor.value = null; installation.value.available = false; uncertain.value = false; previousTaskID = ''; rejection.value = ''; Object.assign(installed, { version: '', revision: '', build_identity: '' }); instanceID.value = ''; void checkChannels(); void refresh() })
 onMounted(() => { void checkChannels(); void poll(); void getRequest<any>('version/runtime', undefined, { credentials: 'include', silent: true }).then(body => { if (!disposed && body?.code === 1) staticSync.value = !body.data?.isContainer }) })
 onUnmounted(() => { disposed = true; clearTimeout(timer); token.value = '' })
 </script>

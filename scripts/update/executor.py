@@ -209,10 +209,12 @@ class Executor:
             require(self.cfg["platform"] == "linux/amd64", "platform_not_accepted")
             old = self.preflight()
             require(self.data_protection_available(), "u4_backup_unavailable")
-        except Stop:
+        except (Stop, OSError, ValueError, KeyError) as error:
             with contextlib.suppress(Stop):
                 self.api("POST", "/api/updates/executor/check", check)
-            raise
+            if isinstance(error, Stop):
+                raise
+            raise Stop("deployment_check_failed") from None
         check["ok"] = True
         self.api("POST", "/api/updates/executor/check", check)
         return old

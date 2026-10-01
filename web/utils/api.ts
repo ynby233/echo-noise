@@ -114,7 +114,7 @@ export const postRequest = async <T>(url: string, body: object | FormData, optio
         if (!shouldSuppressToast(options)) {
             toast.add({ title: '请求失败', description: serverMsg || '网络异常或服务器不可用', color: 'red', timeout: 2000 });
         }
-        return { code: 0, msg: serverMsg, data: null } as any as Response<T>;
+        return { code: 0, status: Number(status || 0), msg: serverMsg, data: null } as any as Response<T>;
     }
 };
 

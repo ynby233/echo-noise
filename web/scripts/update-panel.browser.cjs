@@ -7,10 +7,11 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright')
 const output = path.resolve(process.env.TEST_OUTPUT_ROOT || path.join(__dirname, '../.output/public'))
 const revision = '2'.repeat(40), digest = 'sha256:' + 'b'.repeat(64)
 let task = null, offline = false, lostPost = false, posts = 0, follow = 'stable', reason = '', channelStatus = 'update_available', role = 1, credential = null
+let rejectPost = 0, delayPost = false, completeDelayedPost = null, stateReads = 0
 const state = () => ({ task: role === 1 ? task : task && { id: task.id, status: task.status, channel: task.channel }, installation: { available: !reason, reason }, executor: role === 1 ? credential : null, installed: { version: 'v1.0.0', ...(role === 1 ? { revision: '1'.repeat(40), build_identity: '111111111111' } : {}) } })
 const server = http.createServer(async (req, res) => {
   const p = new URL(req.url, 'http://local').pathname
-  const json = (data, status = 200) => res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }).end(JSON.stringify({ code: status < 300 ? 1 : 0, data }))
+  const json = (data, status = 200, msg = '') => res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }).end(JSON.stringify({ code: status < 300 ? 1 : 0, data, msg }))
   if (p.startsWith('/api/')) {
     if (p.endsWith('/setup/status')) return json({}, 404)
     if (p === '/api/updates/tasks' && req.method === 'POST') {
@@ -18,13 +19,18 @@ const server = http.createServer(async (req, res) => {
       const chunks = []; for await (const chunk of req) chunks.push(chunk)
       const body = JSON.parse(Buffer.concat(chunks).toString())
       assert.equal(body.revision, revision); assert.equal(body.digest, digest)
+      if (rejectPost) return json(null, rejectPost, '渠道或安装条件已变化，请重新检查并确认')
+      if (delayPost) {
+        completeDelayedPost = () => { task = { id: 'delayed-task-id', channel: body.channel, status: 'pending', target_revision: revision, target_digest: digest } }
+        res.destroy(); return
+      }
       task = { id: 'server-task-id', channel: body.channel, status: 'pending', target_revision: revision, target_digest: digest }
       if (lostPost) { offline = true; res.writeHead(201, { 'Content-Type': 'application/json' }); res.write('{"code":'); setImmediate(() => res.destroy()); return }
       return json(task, 201)
     }
     if (p === '/api/updates/state' || p === '/api/updates') {
       if (offline) return json({}, 503)
-      if (p.endsWith('/state')) return json(state())
+      if (p.endsWith('/state')) { stateReads++; return json(state()) }
       return json({ ...state(), follow_channel: follow, instance_id: role === 1 ? 'a'.repeat(32) : '', report: { channels: ['stable', 'edge'].map(name => ({ name, status: name === 'stable' ? 'no_release' : channelStatus, installable: name === 'edge' && channelStatus === 'update_available', version: name === 'edge' && role === 1 ? revision.slice(0, 12) : '', ...(role === 1 ? { revision, digest } : {}) })), latest_source: { status: 'source_skipped' } } })
     }
     if (p === '/api/updates/channel') { const chunks = []; for await (const c of req) chunks.push(c); follow = JSON.parse(Buffer.concat(chunks).toString()).channel; return json({ channel: follow }) }
@@ -58,6 +64,44 @@ const server = http.createServer(async (req, res) => {
   const install = edge.getByRole('button', { name: '安装测试版', exact: true })
   const text = async value => { await section.getByText(value, { exact: false }).first().waitFor() }
   try {
+    const scenario = process.env.UPDATE_PANEL_SCENARIO
+    if (!scenario || scenario === 'rejection') {
+      for (const status of [409, 412]) {
+        task = null; rejectPost = status
+        await open(); await page.waitForFunction(() => !document.querySelector('[data-channel="edge"] button:last-child').disabled)
+        await install.click(); await section.getByRole('checkbox').check()
+        await section.getByRole('button', { name: '确认创建任务', exact: true }).click()
+        await page.waitForFunction(() => document.querySelector('#version-section').textContent.includes('渠道或安装条件已变化，请重新检查并确认'), null, { timeout: 3000 })
+        await page.waitForFunction(() => !document.querySelector('[data-channel="edge"] button:last-child').disabled)
+        assert(await install.isEnabled(), `explicit ${status} must not leave an unknown creation locked`)
+        assert.equal(task, null)
+      }
+      rejectPost = 0
+      console.log('Passed: explicit 409/412 rejection remains recoverable without reload')
+    }
+    if (!scenario || scenario === 'delayed') {
+      task = { id: 'old-completed-task', status: 'failed', channel: 'edge' }; delayPost = true
+      await open(); await page.waitForFunction(() => !document.querySelector('[data-channel="edge"] button:last-child').disabled)
+      await text('old-completed-task')
+      await install.click(); await section.getByRole('checkbox').check()
+      const before = stateReads
+      await section.getByRole('button', { name: '确认创建任务', exact: true }).click()
+      for (let attempt = 0; attempt < 100 && (!completeDelayedPost || stateReads <= before); attempt++) await page.waitForTimeout(50)
+      assert(completeDelayedPost && stateReads > before, 'lost POST is followed by a state query')
+      await text('任务创建结果尚未确认')
+      const afterFailure = stateReads
+      for (let attempt = 0; attempt < 100 && stateReads <= afterFailure; attempt++) await page.waitForTimeout(50)
+      assert(stateReads > afterFailure, 'another poll still sees the old result')
+      assert(await install.isDisabled(), 'old terminal task cannot confirm a still processing POST')
+      const beforePosts = posts
+      completeDelayedPost(); delayPost = false
+      await text('delayed-task-id'); await text('等待执行器')
+      assert.equal(posts, beforePosts, 'recovery only queries the original request')
+      assert(await install.isDisabled())
+      console.log('Passed: old result does not unlock unknown POST; original new task restores')
+    }
+    if (scenario) return
+    task = null; posts = 0
     await open(); await text('已安装提交'); await text('尚无正式版')
     for (const [stateReason, expected] of [['executor_unconfigured', '执行器未配置'], ['executor_offline', '执行器离线'], ['executor_upgrade_required', '脚本过旧'], ['database_unsupported', '数据库不支持'], ['deployment_check_failed', '备份检查失败'], ['platform_unsupported', '当前架构不支持']]) {
       reason = stateReason; await section.getByRole('button', { name: '检查更新', exact: true }).click(); await text(expected); assert(await install.isDisabled())

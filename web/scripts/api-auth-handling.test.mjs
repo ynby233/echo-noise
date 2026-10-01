@@ -69,6 +69,18 @@ try {
   await api.getRequest('updates/state', undefined, { silent: true })
   assert.deepEqual(timeouts, [[60000, 0], [60000, 0], [8000, 0]], 'remote discovery gets enough time; no automatic POST retries; local polling remains bounded')
 
+  for (const status of [409, 412]) {
+    reset()
+    globalThis.__fetch = async () => {
+      const error = new Error('Rejected')
+      error.response = { status, _data: { msg: '请重新检查并确认' } }
+      throw error
+    }
+    const rejected = await api.postRequest('updates/tasks', {}, { silent: true })
+    assert.equal(rejected.status, status, 'known rejection must remain distinguishable from a lost response')
+    assert.equal(rejected.msg, '请重新检查并确认')
+  }
+
   reset()
   globalThis.__fetch = async () => {
     const err = new Error('Forbidden')
