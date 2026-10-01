@@ -96,11 +96,11 @@ Windows 开发环境可先执行 `. D:\ChatGPT\environments\echo-noise\env.ps1`�
 
 `main` 的非纯文档提交自动构建 `ghcr.io/ynby233/echo-noise:edge-mcp`；已发布且非 draft/prerelease 的 `vX.Y.Z` Release 构建 `stable-mcp`。工作流先发布唯一候选并通过健康检查，再移动渠道标签；完整 Git revision、构建时间和显示版本同时写入二进制及 OCI 元数据。`latest-mcp` 已退役，不再发布或参与发现。
 
-`GET /api/version/check` 只返回不含 revision/digest 的公开状态；登录后的 ID 1 站长可通过 `GET /api/version/channels` 查看两个渠道的固定目标。U2 已加入持久化任务协调，U3/U4 已交付宿主替换及旧镜像离线一致备份并完成隔离验收；生产安装仍等待 U5 能力判断及 U6 初次接入。正式 Release 和现有 NAS 替换仍需单独授权。
+`GET /api/version/check` 只返回不含 revision/digest 的公开状态；登录后的 ID 1 站长可通过 `GET /api/version/channels` 查看两个渠道的固定目标。U2 已加入持久化任务协调，U3/U4 已交付宿主替换及旧镜像离线一致备份并完成隔离验收；U5 已接通受能力判断保护的任务创建，实际宿主首次接入归 U6。正式 Release 和现有 NAS 替换仍需相应授权。
 
 ### 更新任务与执行器接口
 
-`GET /api/updates` 和 `GET /api/updates/tasks/:id` 是只读查询；受托管理员即使持有 `version.view`，也不会得到完整 revision、digest、执行器信息或宿主错误摘要。`PUT /api/updates/channel` 只修改后续跟随偏好，不创建任务。协调服务内的任务创建仅接受固定 ID 1 站长选择的、服务端发现的 `stable`/`edge` 后代目标；目标 digest/revision 在创建时固定，连续提交返回同一条活动任务。U3/U4 已完成隔离宿主执行/备份核验；等待 U5 能力判断时，生产 `POST /api/updates/tasks` 与旧 `POST /api/version/update` 均明确返回 501，不会创建任务；U5 能力判断和 U6 首次引导按各阶段完成后才开放实际安装。历史 `GET /api/version/update/stream` 已退役且无副作用。
+`GET /api/updates`、`GET /api/updates/state` 和 `GET /api/updates/tasks/:id` 是只读查询；受托管理员即使持有 `version.view`，也不会得到完整 revision、digest、执行器信息或宿主错误摘要。`PUT /api/updates/channel` 只修改后续跟随偏好，不创建任务。生产 `POST /api/updates/tasks` 仅接受固定 ID 1 站长选择的、服务端发现的 `stable`/`edge` 后代目标；要求近期同实例/u5-1/Linux amd64/SQLite 的实际部署检查，否则 412。目标 digest/revision 在创建时固定，连续提交返回同一条活动任务；确认目标变化返回 409。旧 `POST /api/version/update` 保持 501，历史 `GET /api/version/update/stream` 已退役且无副作用。实际 NAS 首次引导及安装归 U6。
 
 执行器凭据由站长在 `/api/updates/executor/credential` 创建、查看状态或撤销，明文只在创建响应中出现一次，数据库只存验证值。创建时生成持久的实例 ID；站长在 `/api/updates` 可见，宿主需在首次配对时人工核对，并从受限 `/api/updates/executor/runtime` 再次核对。执行器必须以 `Authorization: Bearer ...` 调用 `/api/updates/executor/claim`、`/api/updates/executor/tasks/:id/events` 和 `/api/updates/executor/runtime`；用户登录、普通管理员 token 与执行器 token 不互通。轮换后旧凭据只可完成已领取任务；任务结束后仅可重试该任务的最终回报，不能领取新任务或读取运行身份，过期或明确撤销仍立即失效。claim 响应丢失后，同一执行器再次领取会得到原任务；任务不会因心跳超时分配给另一执行器，状态只能按真实阶段前进或进入 `failed`/`needs_attention`。`needs_attention` 保留活动占位并可由原执行器取回；宿主核对本地记录和实际运行状态后只能继续 `verifying` 或确认 `failed`，不能退回替换阶段，结果明确前禁止创建第二个任务。空白及未知回报状态被拒绝。服务端不保存执行器回报的自由文本，避免将宿主路径或凭据写入任务/审计；详情查宿主日志。
 
@@ -182,6 +182,8 @@ node scripts/update-panel.browser.cjs
 通用 Docker/Compose 执行器、配置、旧镜像离线 SQLite 备份和人工结案见 [scripts/update](../scripts/update/README.md)。迁移后加载 `D:\ChatGPT\app\environments\echo-noise\env.ps1`，显式切回 `D:\ChatGPT\app\projects\echo-noise`，避免脚本内旧路径误导。阶段检查为 Python 标准库测试、更新/备份/同步相关 Go 测试、fixture 编译/vet 和 `Test external update executor` 真实隔离引擎测试。U5 接通能力判断和后台，只在近期实际部署检查通过时允许创建，否则 412；旧安装镜像无 update-tool 时停机前拒绝，不能用 fixture 绕过。旧自更新仍 501/410。实际 NAS 引导及调度安装归 U6。U4 证据和失败边界见 [U4 验收报告](u4-backup-failure-recovery-acceptance-2026-10-01.md)。
 
 U5 浏览器入口 `node scripts/update-panel.browser.cjs` 使用真实生产 Vue 组件、隔离状态 API 和 Chromium，覆盖两渠道空态/失败、安装条件、一次显示凭据、草稿确认、连点、创建响应丢失、停机重连、清缓存换浏览器任务恢复、人工处理占位、成功/失败、委派权限及 320/390/768/1440 明暗主题。它验证前端实际行为；真实容器替换由独立执行器 workflow 验证，NAS 接入留给 U6。
+
+独立复核增加明确 409/412 拒绝后无需刷新可恢复、已有旧终态时未知 POST 不解锁且只查询新任务的行为回归；Python 预检文件系统异常清除旧成功检查的回归也已加入。首页懒加载脚本在工具栏因重叠收起时正常点击可见展开手柄，再点击留言，不强制点击或移除加载断言。最新证据见 [U5 复核修复验收](u5-review-repairs-acceptance-2026-10-01.md)。
 
 2026-10-01 的实际提交、两项成功工作流、镜像 digest、NAS 只读核对与 U4 接口位置见 [U3 交付报告](u3-external-executor-acceptance-2026-10-01.md)。
 
