@@ -103,7 +103,7 @@ const checkChannels = async () => {
   if (checking.value || disposed) return
   checking.value = true
   const owner = account.value, request = generation
-  try { const body: any = await getRequest('updates', undefined, { credentials: 'include', silent: true }); if (disposed || owner !== account.value || request !== generation) return; if (body?.code !== 1) throw new Error(); channels.value = body.data.report?.channels || []; sourceStatus.value = body.data.report?.latest_source?.status || ''; follow.value = body.data.follow_channel; instanceID.value = body.data.instance_id || ''; guide.value = body.data.guide_url || ''; await refresh() }
+  try { const body: any = await getRequest('updates', undefined, { credentials: 'include', silent: true, timeout: 60000 }); if (disposed || owner !== account.value || request !== generation) return; if (body?.code !== 1) throw new Error(); channels.value = body.data.report?.channels || []; sourceStatus.value = body.data.report?.latest_source?.status || ''; follow.value = body.data.follow_channel; instanceID.value = body.data.instance_id || ''; guide.value = body.data.guide_url || ''; await refresh() }
   catch { if (!disposed && owner === account.value) error.value = '渠道检查失败，请重试' }
   finally { checking.value = false }
 }
@@ -131,7 +131,7 @@ const install = async () => {
   ++generation
   const name = selected.value, owner = account.value
   selected.value = ''
-  try { const body: any = await postRequest('updates/tasks', { channel: name, revision: target.value.revision, digest: target.value.digest }, { credentials: 'include', silent: true }); if (disposed || owner !== account.value) return; if (body?.code !== 1) throw new Error(); task.value = body.data }
+  try { const body: any = await postRequest('updates/tasks', { channel: name, revision: target.value.revision, digest: target.value.digest }, { credentials: 'include', silent: true, timeout: 60000 }); if (disposed || owner !== account.value) return; if (body?.code !== 1) throw new Error(); task.value = body.data }
   catch { if (!disposed && owner === account.value) { uncertain.value = true; error.value = '任务创建结果尚未确认，请勿再次安装' } }
   finally { posting.value = false; await refresh() }
 }

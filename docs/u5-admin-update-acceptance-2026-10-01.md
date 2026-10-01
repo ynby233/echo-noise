@@ -30,6 +30,10 @@ overview 返回活动任务优先、否则最近结果；`GET /api/updates/state
 
 ## 远端、部署与下一阶段
 
+补验：渠道发现串行访问 GitHub/GHCR，前端 API 的默认 8 秒短于后端单请求 10 秒。可运行 API 行为测试先 red（请求选项仍为 8000），增加现有请求的 timeout 选项后 green；仅渠道检查/任务创建使用 60000，本地轮询仍 8000，retry=0 保持。再次 typecheck/generate、118 项前端及 U5 生产浏览器通过。
+
+主体代码 `c07c54b02603b84bb4dc3aa8168a572db6df3778` 已推送 origin/main。[独立执行器运行 36820576608](https://github.com/ynby233/echo-noise/actions/runs/36820576608) 同 headSha、success；真实 Docker 与 Compose 停机/备份/替换/运行身份、回报丢失、轮换/撤销/锁以及 U4 空间/写入者/恢复/下载/备份/退出/核验/中断故障均通过。本次能力上报实际经真实认证/控制器到 SQLite，再由真实 TaskService 创建/领取，未用空备份或产品开关绕过。最后 timeout 补修仅前端/API 工具及文档，未修改此受验执行器/后端。
+
 代码提交、对应真实 Docker/Compose workflow、edge 镜像构建/smoke 结果待本次推送后补录。它们证明代码及隔离引擎/产物，不证明 NAS 已接入。本次没有 NAS 部署或实际任务计划验收，不发布正式 Release。
 
 U6 从首次引导继续：只读核对目标宿主/容器/数据/调度，先做隔离实例，再准备具体引导方案；授权边界仍按总交接。需要旧安装镜像包含 update-tool，宿主安装 u5-1 和受控配置/token，再设置每分钟 run；仅网页创建凭据不代表具备安装条件。U7 验收已实际接入的整条链和故障。

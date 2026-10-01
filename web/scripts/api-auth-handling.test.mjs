@@ -62,6 +62,14 @@ const reset = () => {
 
 try {
   reset()
+  const timeouts = []
+  globalThis.__fetch = async (_url, options) => { timeouts.push([options.timeout, options.retry]); return { code: 1, data: {} } }
+  await api.getRequest('updates', undefined, { silent: true, timeout: 60000 })
+  await api.postRequest('updates/tasks', { channel: 'edge' }, { silent: true, timeout: 60000 })
+  await api.getRequest('updates/state', undefined, { silent: true })
+  assert.deepEqual(timeouts, [[60000, 0], [60000, 0], [8000, 0]], 'remote discovery gets enough time; no automatic POST retries; local polling remains bounded')
+
+  reset()
   globalThis.__fetch = async () => {
     const err = new Error('Forbidden')
     err.status = 403

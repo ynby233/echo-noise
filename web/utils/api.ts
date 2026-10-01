@@ -81,7 +81,7 @@ const handleHttpStatusError = <T>(status: any, msg?: string, options?: { silent?
     return null
 }
 
-export const postRequest = async <T>(url: string, body: object | FormData, options?: { credentials?: RequestCredentials; silent?: boolean; signal?: AbortSignal }) => {
+export const postRequest = async <T>(url: string, body: object | FormData, options?: { credentials?: RequestCredentials; silent?: boolean; signal?: AbortSignal; timeout?: number }) => {
     const BASE_API = useRuntimeConfig().public.baseApi || '/api';
     const userStore = useUserStore();
     const token = userStore.token || "null";
@@ -98,7 +98,7 @@ export const postRequest = async <T>(url: string, body: object | FormData, optio
             headers,
             body: isFormData ? body : JSON.stringify(body),
             credentials: options?.credentials,
-            timeout: 8000,
+            timeout: options?.timeout ?? 8000,
             retry: 0,
             signal: options?.signal
         });
@@ -118,7 +118,7 @@ export const postRequest = async <T>(url: string, body: object | FormData, optio
     }
 };
 
-export const getRequest = async <T>(url: string, params?: any, options?: { credentials?: RequestCredentials; silent?: boolean; signal?: AbortSignal }) => {
+export const getRequest = async <T>(url: string, params?: any, options?: { credentials?: RequestCredentials; silent?: boolean; signal?: AbortSignal; timeout?: number }) => {
     const BASE_API = useRuntimeConfig().public.baseApi || '/api';
     const userStore = useUserStore();
     const token = userStore.token || "null";
@@ -134,7 +134,7 @@ export const getRequest = async <T>(url: string, params?: any, options?: { crede
                 'Pragma': 'no-cache'
             },
             credentials: options?.credentials,
-            timeout: 8000,
+            timeout: options?.timeout ?? 8000,
             retry: 0,
             signal: options?.signal
         });
