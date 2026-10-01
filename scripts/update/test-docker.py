@@ -451,7 +451,43 @@ def test_mode(mode, old_ref, new_ref, new_digest, attention=False, scenario=""):
         return
     if scenario:
         ex.claim()
-        if scenario == "download-failure":
+        if scenario == "space-failure":
+            # Pull really completes before the measured-space check refuses stop.
+            ex.phase("download_intent", "downloading")
+            ex.flush()
+            ex.record["download"] = ex.download()
+            ex.phase("downloaded")
+            ex.cfg["min_free_bytes"] = 10**30
+            rejected(ex.run, "disk_space")
+            assert_status(task["id"], "failed")
+            assert current_id(ex) == cid and ex.inspect(cid)["State"]["Running"]
+        elif scenario == "writer-conflict":
+            writer = docker("run", "--detach", "--name", prefix + "-second-writer", "--mount",
+                            "type=bind,source=" + str(data) + ",target=/data", "--entrypoint", "/bin/sh", old_ref,
+                            "-c", "echo writer > /data/second-writer; sleep 120")
+            containers.append(writer)
+            rejected(lambda: ex.check_writers(ex.inspect(cid), allow_old=True), "another_container_can_write_data")
+            docker("stop", writer)
+            docker("update", "--restart=always", writer)
+            rejected(lambda: ex.check_writers(ex.inspect(cid), allow_old=True), "another_container_can_write_data")
+            docker("update", "--restart=no", writer)
+            held = open(data / "sentinel", "rb")
+            def check_in_child():
+                # Parent holding the file remains an independently visible process.
+                held.close()
+                rejected(lambda: ex.check_writers(ex.inspect(cid), allow_old=True), "host_process_can_write_data")
+            child = multiprocessing.Process(target=check_in_child)
+            child.start(); child.join(30)
+            assert child.exitcode == 0
+            held.close()
+            assert current_id(ex) == cid and ex.inspect(cid)["State"]["Running"]
+        elif scenario == "pending-restore":
+            pending = data / ".echo-noise-restore-pending.zip"
+            pending.write_bytes(b"staged")
+            rejected(ex.data_protection_available, "u4_backup_unavailable")
+            assert current_id(ex) == cid and ex.inspect(cid)["State"]["Running"]
+            pending.unlink()
+        elif scenario == "download-failure":
             ex.download = lambda: (_ for _ in ()).throw(executor.Stop("fixture_download_failed"))
             rejected(ex.run, "fixture_download_failed")
             assert_status(task["id"], "failed")
@@ -480,7 +516,7 @@ def test_mode(mode, old_ref, new_ref, new_digest, attention=False, scenario=""):
             wait()
             ex.flush()
             assert_status(task["id"], "needs_attention")
-        elif scenario == "verify-failure":
+        elif scenario in ("verify-failure", "verify-reconcile"):
             (data / "fail-health").touch()
             ex.cfg["health_timeout"] = 3
             rejected(ex.run, "target_health_timeout")
@@ -490,6 +526,14 @@ def test_mode(mode, old_ref, new_ref, new_digest, attention=False, scenario=""):
             assert ex.inspect(cid)["HostConfig"]["RestartPolicy"]["Name"] == "no"
             with sqlite3.connect("file:" + str(data / "fixture.db") + "?mode=ro", uri=True) as db:
                 assert db.execute("SELECT content FROM messages WHERE id=2").fetchone()[0] == "new version write"
+            if scenario == "verify-reconcile":
+                (data / "fail-health").unlink()
+                ex.cfg["health_timeout"] = 120
+                ex.reconcile(task["id"], "verify", None)
+                assert ex.record["closed"]
+                assert_status(task["id"], "succeeded")
+                print("U4 verify-reconcile: real health/runtime checked, same task legally succeeded without reinstall", flush=True)
+                return
             # Revoked credentials cannot settle by HTTP. Explicit host authority
             # with the writer stopped settles the same task without restoring DB.
             request("/fixture/revoke")
@@ -698,7 +742,7 @@ if __name__ == "__main__":
             test_mode("docker", refs[0][0], refs[1][0], refs[1][1])
             test_mode("compose", refs[0][0], refs[1][0], refs[1][1])
             test_mode("docker", refs[0][0], refs[1][0], refs[1][1], attention=True)
-            for scenario in ("download-failure", "backup-failure", "forced-stop", "verify-failure", "stop-interruption"):
+            for scenario in ("space-failure", "writer-conflict", "pending-restore", "download-failure", "backup-failure", "forced-stop", "verify-failure", "verify-reconcile", "stop-interruption"):
                 test_mode("docker", refs[0][0], refs[1][0], refs[1][1], scenario=scenario)
         finally:
             for project, image_file, compose in compose_cleanup:
