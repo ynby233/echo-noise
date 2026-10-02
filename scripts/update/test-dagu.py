@@ -147,7 +147,18 @@ def test_case(root, refs, scenario):
         executor.atomic_write(config / "wake-token", webhook["token"])
         assert http(wake_url, "POST", token="wrong-token")[0] == 401
         docker("exec", scheduler, "dagu", "validate", "/var/lib/dagu/dags/" + task_name + ".yaml")
-        initial = subprocess.run(["docker", "exec", scheduler, "python3", str(script_root / "fixture/container-executor.py"), "check", str(control / "executor.json")], capture_output=True, text=True)
+        check_args = ["docker", "exec", scheduler, "python3", str(script_root / "fixture/container-executor.py"), "check", str(control / "executor.json")]
+        def check():
+            result = None
+            def invoke():
+                nonlocal result
+                result = subprocess.run(check_args, capture_output=True, text=True)
+                return "executor_already_running" not in result.stderr
+            eventually(invoke)
+            return result
+        # The real minute schedule may already own flock at this exact second.
+        # Retry only lock contention; every actual check result is still asserted.
+        initial = check()
         assert initial.returncode == 0, initial.stderr
         before = http("http://127.0.0.1:1314/fixture/state")[1]["data"]["executor"]["checked_at"]
         # No task exists. A later check must come from the actual minute schedule.
@@ -156,18 +167,17 @@ def test_case(root, refs, scenario):
         assert docker("inspect", app, "--format", "{{.Id}}") == old
         print("Dagu " + scenario + ": authenticated webhook rejects wrong token; scheduled idle check preserves old instance", flush=True)
         if scenario == "wake":
-            check_args = ["docker", "exec", scheduler, "python3", str(script_root / "fixture/container-executor.py"), "check", str(control / "executor.json")]
             writer = docker("run", "-d", "--name", fixture.prefix + "-writer", "--mount",
                             "type=bind,source=" + str(data) + ",target=/data", "--entrypoint", "/bin/sh", refs[0][0], "-c", "sleep 120")
             try:
-                result = subprocess.run(check_args, capture_output=True, text=True)
+                result = check()
                 assert result.returncode != 0 and "another_container_can_write_data" in result.stderr, result.stderr
             finally:
                 docker("rm", "-f", writer)
             with open(data / "sentinel", "rb"):
-                result = subprocess.run(check_args, capture_output=True, text=True)
+                result = check()
                 assert result.returncode != 0 and "host_process_can_write_data" in result.stderr, result.stderr
-            result = subprocess.run(check_args, capture_output=True, text=True)
+            result = check()
             assert result.returncode == 0, result.stderr
             print("Dagu: real host process and another writable container both block installation", flush=True)
         if scenario == "verify-failure":
