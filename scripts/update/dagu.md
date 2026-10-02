@@ -51,3 +51,5 @@ sudo -E python3 scripts/update/test-dagu.py
 ```
 
 容器用例复用真实协调服务、认证、备份工具和 registry。只在 fixture 中把目标仓库映射到回环 registry，产品脚本不含测试开关。用例核对错误 Webhook token、实际分钟检查、宿主和容器写入者、漏通知、并发唤醒、重建恢复及新版健康失败；个人 NAS 的后台触发、实际数据和部署身份另行验收。
+
+重建时旧 Dagu run 的 heartbeat/运行槽可能暂时保留；即使应用目标已 healthy，也要等待 Dagu 判定旧 run 陈旧后再次执行。U7 在真实嵌套 Engine 复现了 130 秒断言超时、约 133 秒自然完成补报，测试 restart 的等待因此为 300 秒，并覆盖秒 1/31/45 三种分钟位置。这个等待只用于测试，不调整 Dagu/执行器保护，也不能以 Dagu succeeded 代替原应用任务终态。设置 `U7_DAGU_EVIDENCE=/private/evidence` 可在清理前保留 journal 与全部实际步骤输出；该目录含私有调度配置，须限制访问，不上传公开 CI artifact。

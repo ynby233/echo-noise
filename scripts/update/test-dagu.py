@@ -9,6 +9,7 @@ from pathlib import Path
 import secrets
 import shutil
 import socket
+import sqlite3
 import subprocess
 import tempfile
 import time
@@ -59,7 +60,7 @@ def readiness():
     return http("http://127.0.0.1:1314/fixture/state")[1]["data"]["installation"]["available"]
 
 
-def test_case(root, refs, scenario):
+def test_case(root, refs, scenario, restart_second=None):
     case = root / scenario
     case.mkdir(mode=0o700)
     control, data, config, home = [case / name for name in ("control", "data", "config", "dagu")]
@@ -190,18 +191,26 @@ def test_case(root, refs, scenario):
                 list(pool.map(lambda _: http(wake_url, "POST", token=webhook["token"]), range(2)))
         if scenario == "restart":
             eventually(lambda: (control / "state/after-replace").exists())
+            if restart_second is not None:
+                eventually(lambda: int(time.time()) % 60 == restart_second, 65)
             installed = docker("inspect", app, "--format", "{{.Id}}")
             logs = [file.relative_to(home) for file in (home / "logs").rglob("*") if file.is_file()]
             assert logs
             docker("stop", "--time", "2", scheduler)
             docker("rm", scheduler)
+            restart_at = time.monotonic()
             docker(*scheduler_args, "echo-noise-update:u6-1")
             eventually(lambda: http(dagu_url + "/api/v1/health")[0] == 200)
             assert http(dagu_url + "/api/v1/dags", token=admin)[0] == 200
             assert (control / "state/active.json").exists()
             assert all((home / file).exists() for file in logs)
         status = "needs_attention" if scenario == "verify-failure" else "succeeded"
-        eventually(lambda: http("http://127.0.0.1:1314/fixture/tasks/" + task)[1]["data"]["status"] == status, 130)
+        # A killed Dagu run retains a fresh heartbeat and max_active_runs slot.
+        # Measured NAS recovery crossed the old 130s bound, then completed at
+        # 133s without intervention. Allow 90s stale + 3*45s detection + 60s
+        # minute dispatch + startup; do not alter Dagu or executor protection.
+        eventually(lambda: http("http://127.0.0.1:1314/fixture/tasks/" + task)[1]["data"]["status"] == status,
+                   300 if scenario == "restart" else 130)
         journal = control / "state/active.json"
         if not journal.exists():
             journal = control / ("state/" + task + ".json")
@@ -211,6 +220,24 @@ def test_case(root, refs, scenario):
         assert new_id != old
         if scenario == "restart":
             assert new_id == installed, "recovery replaced twice"
+            assert record["step"] == "complete" and record["closed"] and not record["pending"]
+            old_state = json.loads(docker("inspect", old))[0]
+            assert not old_state["State"]["Running"] and old_state["HostConfig"]["RestartPolicy"]["Name"] == "no"
+            db = sqlite3.connect((data / "fixture.db").as_uri() + "?mode=ro", uri=True)
+            try:
+                events = [row[0] for row in db.execute("SELECT status FROM update_task_events ORDER BY id")]
+                assert events == ["claimed", "downloading", "stopping", "backing_up", "replacing", "verifying", "succeeded"], events
+                assert db.execute("SELECT content FROM messages WHERE id=1").fetchone()[0] == "old WAL note"
+                assert db.execute("SELECT count(*) FROM update_tasks WHERE active_slot=1").fetchone()[0] == 0
+            finally:
+                db.close()
+            print("Dagu restart: recovery seconds=" + str(round(time.monotonic() - restart_at, 2)) +
+                  " trigger_second=" + str(restart_second) + " target=" + new_id +
+                  "; ordered events and unchanged target checked", flush=True)
+            before = http("http://127.0.0.1:1314/fixture/state")[1]["data"]["executor"]["checked_at"]
+            eventually(lambda: http("http://127.0.0.1:1314/fixture/state")[1]["data"]["executor"]["checked_at"] != before, 100)
+            assert readiness()
+            assert (control / ("state/" + task + ".json")).exists(), "closed journal not archived on next minute"
         with zipfile.ZipFile(Path(record["backup_path"]) / "backup.zip") as archive:
             assert archive.read("protected-config/runtime.env") == (config / "runtime.env").read_bytes()
             assert "database.db" in archive.namelist()
@@ -221,12 +248,18 @@ def test_case(root, refs, scenario):
             assert rejected.returncode != 0 and "http_401" in rejected.stderr
         print("Dagu " + scenario + ": task=" + task + " status=" + status + "; real backup, replacement, persistence and data checked", flush=True)
     finally:
+        evidence = os.environ.get("U7_DAGU_EVIDENCE")
+        if evidence:
+            destination = Path(evidence) / (fixture.prefix + "-" + root.name + "-" + scenario)
+            destination.mkdir(mode=0o700, parents=True, exist_ok=True)
+            for directory in (control / "state", home):
+                shutil.copytree(directory, destination / directory.name, dirs_exist_ok=True)
         if os.sys.exc_info()[0] is not None:
             print(docker("logs", "--tail", "35", scheduler), flush=True)
             diagnostic = subprocess.run(["docker", "exec", scheduler, "python3", str(script_root / "fixture/container-executor.py"), "check", str(control / "executor.json")], capture_output=True, text=True)
             print("isolated executor diagnostic:", diagnostic.stdout, diagnostic.stderr, flush=True)
-            for logfile in (home / "logs").rglob("*.log"):
-                if "echo-noise-update" in str(logfile):
+            for logfile in (home / "logs").rglob("*"):
+                if logfile.is_file() and logfile.suffix in (".log", ".out", ".err") and "echo-noise-update" in str(logfile):
                     print("isolated task log:", logfile.read_text(errors="replace")[-3000:], flush=True)
         for cid in docker("ps", "-aq", "--filter", "name=" + fixture.prefix + "-" + scenario).split():
             docker("rm", "-f", cid)
@@ -241,8 +274,12 @@ if __name__ == "__main__":
         fixture.root = Path(directory)
         try:
             refs = fixture.build_images()
-            for scenario in ("wake", "missed", "restart", "verify-failure"):
+            for scenario in ("wake", "missed", "verify-failure"):
                 test_case(fixture.root, refs, scenario)
+            for second in (1, 31, 45):
+                case_root = fixture.root / ("restart-at-" + str(second))
+                case_root.mkdir(mode=0o700)
+                test_case(case_root, refs, "restart", second)
         finally:
             for cid in docker("ps", "-aq", "--filter", "name=" + fixture.prefix).split():
                 docker("rm", "-f", cid)

@@ -15,6 +15,50 @@ import (
 	"gorm.io/gorm"
 )
 
+func TestRestoreMissingMediaDirectoryWithTrailingSeparator(t *testing.T) {
+	root := t.TempDir()
+	sourcePath := filepath.Join(root, "source.db")
+	db := openTestDatabase(t, sourcePath, "restored")
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sqlDB.Close()
+	media := filepath.Join(root, "source-images")
+	if err := os.Mkdir(media, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(media, "note.png"), []byte("attachment"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	archive := filepath.Join(root, "restore.zip")
+	if err := CreateArchive(archive, db, Layout{DatabasePath: sourcePath, Roots: []Root{{ArchiveName: "images", Path: media}}}); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(root, "empty", "images")
+	layout := Layout{DatabasePath: filepath.Join(root, "empty", "noise.db"), Roots: []Root{{ArchiveName: "images", Path: target + string(os.PathSeparator)}}}
+	if err := StageRestore(archive, layout); err != nil {
+		t.Fatal(err)
+	}
+	applied, err := ApplyPendingRestore(layout)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := applied.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	if got := databaseValue(t, layout.DatabasePath); got != "restored" {
+		t.Fatalf("database = %q", got)
+	}
+	if got, err := os.ReadFile(filepath.Join(target, "note.png")); err != nil || string(got) != "attachment" {
+		t.Fatalf("media = %q, %v", got, err)
+	}
+	entries, err := os.ReadDir(target)
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("temporary recovery directories leaked: %v %v", entries, err)
+	}
+}
+
 func openTestDatabase(t *testing.T, path, value string) *gorm.DB {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open("file:"+filepath.ToSlash(path)+"?_pragma=journal_mode(WAL)"), &gorm.Config{})

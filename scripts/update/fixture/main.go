@@ -31,10 +31,17 @@ import (
 )
 
 func main() {
+	identity := flag.Bool("build-info", false, "isolated executable identity")
 	health := flag.Bool("health", false, "container health probe")
 	restore := flag.String("restore", "", "isolated archive restore")
 	restoreOnly := flag.Bool("restore-only", false, "exit after isolated restore")
 	flag.Parse()
+	if *identity {
+		metadata, err := buildinfo.CompiledMetadata()
+		must(err)
+		must(json.NewEncoder(os.Stdout).Encode(metadata))
+		return
+	}
 	if *health {
 		client := &http.Client{Timeout: 2 * time.Second}
 		response, err := client.Get("http://127.0.0.1:1314/health")
@@ -93,6 +100,9 @@ func main() {
 	must(err)
 	must(os.WriteFile(filepath.Join(dir, "instance"), []byte(instance), 0600))
 	router := gin.New()
+	if proxy := os.Getenv("FIXTURE_CHANNEL_PROXY"); proxy != "" {
+		channelRoutes(router, db, proxy)
+	}
 	router.GET("/health", func(c *gin.Context) {
 		if _, err := os.Stat(filepath.Join(dir, "fail-health")); err == nil && buildinfo.CurrentMetadata().Revision == "2222222222222222222222222222222222222222" {
 			c.Status(http.StatusServiceUnavailable)

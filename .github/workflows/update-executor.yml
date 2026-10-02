@@ -55,3 +55,35 @@ jobs:
         run: |
           sudo -E docker build -f scripts/update/Dockerfile.dagu -t echo-noise-update:u6-1 .
           sudo -E python3 scripts/update/test-dagu.py
+      - name: Three revisions and real channel publication
+        env:
+          CGO_ENABLED: '0'
+        run: |
+          work="$(mktemp -d)"
+          mkdir "$work/git"
+          git -C "$work/git" init -q -b main
+          git -C "$work/git" config user.name U7
+          git -C "$work/git" config user.email u7@example.invalid
+          built_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          revisions=()
+          for name in A B C; do
+            echo "$name" > "$work/git/source"
+            git -C "$work/git" add source
+            git -C "$work/git" commit -qm "$name"
+            revision="$(git -C "$work/git" rev-parse HEAD)"
+            revisions+=("$revision")
+            version="${revision:0:12}"
+            if [[ "$name" == A ]]; then version=v1.0.0; fi
+            if [[ "$name" == C ]]; then version=v1.1.0; fi
+            go build -ldflags "-X github.com/rcy1314/echo-noise/internal/buildinfo.Revision=$revision -X github.com/rcy1314/echo-noise/internal/buildinfo.Version=$version -X github.com/rcy1314/echo-noise/internal/buildinfo.Identity=$version -X github.com/rcy1314/echo-noise/internal/buildinfo.BuiltAt=$built_at" -o "$work/coordinator-$name" ./scripts/update/fixture
+          done
+          git -C "$work/git" tag -a v1.0.0 "${revisions[0]}" -m A
+          git -C "$work/git" tag -a v1.1.0 "${revisions[2]}" -m C
+          rebuilt_at="$(date -u -d "$built_at + 1 second" +%Y-%m-%dT%H:%M:%SZ)"
+          go build -ldflags "-X github.com/rcy1314/echo-noise/internal/buildinfo.Revision=${revisions[2]} -X github.com/rcy1314/echo-noise/internal/buildinfo.Version=v1.1.0 -X github.com/rcy1314/echo-noise/internal/buildinfo.Identity=v1.1.0 -X github.com/rcy1314/echo-noise/internal/buildinfo.BuiltAt=$rebuilt_at" -o "$work/coordinator-D" ./scripts/update/fixture
+          printf '%s' "$built_at" > "$work/built-at"
+          printf '%s' "$rebuilt_at" > "$work/rebuilt-at"
+          printf '["%s","%s","%s"]' "${revisions[@]}" > "$work/revisions.json"
+          sudo chown -R root:root "$work"
+          sudo -E env U7_CHANNEL_FIXTURES="$work" python3 scripts/update/test-channels.py
+          rm -rf "$work"

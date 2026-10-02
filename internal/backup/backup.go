@@ -586,6 +586,7 @@ func applyPendingRestore(layout Layout) (*AppliedRestore, error) {
 }
 
 func prepareReplacement(source, target string) (preparedReplacement, error) {
+	target = filepath.Clean(target)
 	sourceInfo, err := os.Stat(source)
 	if err != nil {
 		return preparedReplacement{}, err

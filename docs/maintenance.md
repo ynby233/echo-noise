@@ -187,6 +187,8 @@ U5 浏览器入口 `node scripts/update-panel.browser.cjs` 使用真实生产 Vu
 
 U7 的矩阵、故障注入、实际运行证据和未验现场项见 [U7 验收报告](u7-end-to-end-acceptance-2026-10-02.md)。现有 `test-docker.py` 增加真实 registry 超时、新版启动退出、迁移部分写入后失败、运行提交/实例不匹配，断言保留备份与人工处理占位、旧容器不自动重启、修复后同目标显式结案；`test-dagu.py` 保留分钟/唤醒/漏通知/重建全链。发布策略运行检查为 `sh scripts/release/test-release-policy.sh`，已加入执行器 workflow；缓存镜像的 `RepoDigests` 顺序不能当作刚推送标签的身份。上述引擎脚本含容器替换和故障操作，只在独立 Engine/runner 运行，禁止将它们直接对准个人业务 Engine。
 
+后续定位与隔离真实备份恢复见 [U7 补修记录](u7-recovery-and-acceptance-2026-10-02.md)：重建测试按 Dagu 的实测恢复时序等待，并验证三个分钟位置；恢复目标带尾部分隔符时先规范化路径，避免将临时目录建到尚不存在的目标内部。`test-channels.py` 和执行器 workflow 编译三提交/同源重建产物，通过真实 registry、现有发现/任务控制器、容器更新和原发布 shell 验证渠道及故障；GitHub Release 事件 HTTP 在本地提供，不能据此宣称远端发布已验。
+
 现场观察或诊断读取 SQLite 后必须关闭连接/文件描述符再等待下一采样；Python 的 `with sqlite3.connect(...)` 只管理事务，不自动关闭连接。持续持有业务文件会被既有宿主写入者检查拒绝，不能为诊断脚本增加豁免。Dagu 重建后先核对实际检查及同一 instance，不仅检查容器 running；新版曾启动时按原 `reconcile` 流程保留现场并受权结案。个人 NAS/Docker 重启、运行库恢复和正式 Release 发布仍需各自的明确授权，独立 CI/恢复实验不替代现场验收。
 
 独立复核增加明确 409/412 拒绝后无需刷新可恢复、已有旧终态时未知 POST 不解锁且只查询新任务的行为回归；Python 预检文件系统异常清除旧成功检查的回归也已加入。首页懒加载脚本在工具栏因重叠收起时正常点击可见展开手柄，再点击留言，不强制点击或移除加载断言。最新证据见 [U5 复核修复验收](u5-review-repairs-acceptance-2026-10-01.md)。
