@@ -248,7 +248,7 @@ def test_case(root, refs, scenario, restart_second=None):
         assert (data / "sentinel").read_bytes() == b"preserved attachment"
         if scenario == "wake":
             assert http("http://127.0.0.1:1314/fixture/revoke", "POST")[0] == 200
-            rejected = subprocess.run(["docker", "exec", scheduler, "python3", str(script_root / "fixture/container-executor.py"), "check", str(control / "executor.json")], capture_output=True, text=True)
+            rejected = check()
             assert rejected.returncode != 0 and "http_401" in rejected.stderr
         print("Dagu " + scenario + ": task=" + task + " status=" + status + "; real backup, replacement, persistence and data checked", flush=True)
     finally:
