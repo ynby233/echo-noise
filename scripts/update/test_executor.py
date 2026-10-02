@@ -292,6 +292,27 @@ class RecoveryTests(unittest.TestCase):
         self.assertEqual(len(self.removals), 1)
         self.assertTrue(self.ex.record["closed"])
 
+    def test_check_after_cleanup_uses_current_writer_and_keeps_historical_backup_plan(self):
+        self.cleanup_fixture()
+        self.ex.run()
+        self.ex.record["backup_plan"] = {"database": "/old/database.db", "bytes": 123}
+        self.ex.save()
+        historical = copy.deepcopy(self.ex.record["backup_plan"])
+        self.current.update(Config={}, Mounts=[{"Source": str(self.root), "Destination": path}
+                                              for path in ("/app/data", "/app/config")])
+        def inspect(ref):
+            self.assertEqual(ref, self.cfg["container"], "checked deleted old writer")
+            return self.current
+        self.ex.inspect = inspect
+        self.ex.runtime = lambda: {"instance_id": self.cfg["instance_id"], "revision": self.task["target_revision"]}
+        self.ex.preflight = lambda: self.current
+        self.ex.check_writers = lambda current, **kwargs: self.assertEqual(current["Id"], "new-container")
+        self.ex.offline_tool = lambda current, action: {"version": 1, "database": "/app/data/noise.db", "roots": [], "bytes": 0}
+        del self.ex.data_protection_available
+        self.ex.check_deployment()
+        self.assertTrue(self.calls[-1][1]["ok"])
+        self.assertEqual(json.loads(self.ex.journal.read_text())["backup_plan"], historical)
+
     def test_product_requires_u4_before_stop(self):
         self.claim()
         self.ex.data_protection_available = types.MethodType(executor.Executor.data_protection_available, self.ex)

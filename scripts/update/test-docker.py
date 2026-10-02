@@ -460,7 +460,7 @@ def test_mode(mode, old_ref, new_ref, new_digest, attention=False, scenario=""):
         return
     if scenario:
         ex.claim()
-        if scenario in ("cleanup-failure", "cleanup-interruption"):
+        if scenario in ("cleanup-failure", "cleanup-interruption", "cleanup-check"):
             normal = executor.command
             def fault(args, **kwargs):
                 if args == ["docker", "rm", cid]:
@@ -469,7 +469,18 @@ def test_mode(mode, old_ref, new_ref, new_digest, attention=False, scenario=""):
                     normal(args, **kwargs)
                     os.kill(os.getpid(), signal.SIGKILL)
                 return normal(args, **kwargs)
-            if scenario == "cleanup-failure":
+            if scenario == "cleanup-check":
+                ex.run()
+                new_id = current_id(ex)
+                original_plan = copy.deepcopy(ex.record["backup_plan"])
+                checked = new_executor(cfg)
+                checked.load_record()
+                checked.check_deployment()
+                assert checked.record["backup_plan"] == original_plan
+                assert checked.record["old_container_cleanup"]["status"] == "removed"
+                assert current_id(checked) == new_id
+                assert json.loads(ex.journal.read_text())["backup_plan"] == original_plan
+            elif scenario == "cleanup-failure":
                 with unittest_patch.object(executor, "command", side_effect=fault):
                     ex.run()
                 assert ex.record["closed"] and ex.record["confirmed"] == "succeeded"
@@ -844,7 +855,7 @@ if __name__ == "__main__":
             test_mode("docker", refs[0][0], refs[1][0], refs[1][1])
             test_mode("compose", refs[0][0], refs[1][0], refs[1][1])
             test_mode("docker", refs[0][0], refs[1][0], refs[1][1], attention=True)
-            for scenario in ("cleanup-failure", "cleanup-interruption", "space-failure", "writer-conflict", "pending-restore", "download-failure", "registry-offline", "backup-failure", "forced-stop", "verify-failure", "verify-reconcile", "start-failure", "migration-failure", "runtime-revision-mismatch", "runtime-instance-mismatch", "stop-interruption"):
+            for scenario in ("cleanup-failure", "cleanup-interruption", "cleanup-check", "space-failure", "writer-conflict", "pending-restore", "download-failure", "registry-offline", "backup-failure", "forced-stop", "verify-failure", "verify-reconcile", "start-failure", "migration-failure", "runtime-revision-mismatch", "runtime-instance-mismatch", "stop-interruption"):
                 test_mode("docker", refs[0][0], refs[1][0], refs[1][1], scenario=scenario)
         finally:
             for project, image_file, compose in compose_cleanup:

@@ -478,7 +478,8 @@ class Executor:
                 "image_id": image["Id"], "repo_digests": image["RepoDigests"]}
 
     def data_protection_available(self):
-        current = self.inspect(self.record["old_container"] if self.record else self.container_id())
+        active = self.record and not self.record["closed"]
+        current = self.inspect(self.record["old_container"] if active else self.container_id())
         require(not current["Config"].get("Labels", {}).get("com.docker.swarm.service.id"), "swarm_writer_unsupported")
         env = dict(v.split("=", 1) for v in current["Config"].get("Env", []) if "=" in v)
         require(env.get("ECHO_NOISE_CONFIG_DIR", "/app/config") == "/app/config" and
@@ -497,7 +498,7 @@ class Executor:
                         Path(m["Source"]).is_dir() for m in current["Mounts"]), "backup_source_not_mounted")
         needed = max(self.cfg.get("min_free_bytes", 1024**3), 3 * plan["bytes"] + 64 * 1024**2)
         require(shutil.disk_usage(self.cfg["backup_dir"]).free >= needed, "backup_disk_space")
-        if self.record:
+        if active:
             self.record["backup_plan"] = plan
             self.save()
         return True
