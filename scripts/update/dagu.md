@@ -14,6 +14,8 @@
 
 若实测默认 AppArmor 阻止 SYS_PTRACE 读取宿主系统进程，可仅为执行容器配置 `security_opt: [apparmor=unconfined]`；先验证拒绝原因及真实写入者检测，不调整业务容器或其他服务，仍保留 seccomp、有限 capability、只读映射和所有执行器检查。个人接入中此权限差异已复现。离线工具只增加 `DAC_OVERRIDE`，用于读取 NAS 用户持有的文件；plan/backup 的业务映射仍只读，业务写入权限仅在受权 settle 时开放。
 
+重建必须保留实际登记的完整配置。部分容器管理页面只保留环境和挂载，可能丢失 `pid: host` 或 `security_opt`；已实际复现此类重建后分钟检查失败。出现 `host_view_unavailable_or_permission_denied` 时先核对实际 PID/安全配置及 `/proc` 可见性，恢复已实测参数后重新 check；不能通过删除宿主检查或清除运行历史消除错误。Dagu 的历史失败记录保留，恢复以新的实际运行结果为准。
+
 新应用要求执行器 `u6-1`；升级脚本后仍可读取 u3-1/u4-1/u5-1 原记录及原 token 引用。现有任务先按 U4 处置，不删除记录来解除占位。缺少唤醒代码的旧应用只需一次正常外部部署引导；旧镜像必须有 U4 update-tool。
 
 ## 固定任务、认证与配对

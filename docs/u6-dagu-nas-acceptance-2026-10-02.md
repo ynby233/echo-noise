@@ -57,6 +57,10 @@ CI 曾实际暴露抽取 fixture 后 registry 变量缺失、root 构建目录�
 
 ## 停用、恢复与 U7
 
+### 后续重建配置故障
+
+2026-10-02 后续实查发现 Dagu 被重新创建，丢失 `pid: host` 和已验收的 `apparmor=unconfined`，其分钟任务报 `host_view_unavailable_or_permission_denied`。同一真实 CLI 检查可稳定复现：业务宿主 PID 在容器的 `/proc` 不存在，业务路径 inode 核对因缺少该 PID 失败；业务挂载仍在，原安装任务 succeeded 且没有未结更新。恢复两项运行配置后同一检查通过，保留重新创建后的时区、账户、任务、状态及备份，不替换应用、不放宽执行器保护。完整私有 Compose 配置已保存并通过 `docker compose config --quiet`；后续经 NAS 管理页面或其他方式重建 Dagu 时应保留此配置，不能只保存镜像、环境和挂载。
+
 从 Dagu 固定任务移除 schedule 并禁用 Webhook，再按业务策略撤销 executor；未结任务先依 U4 处理。保持原 active.json、token 引用与备份，容器重建使用固定配置先 run 恢复。新版曾启动且结果不明时不自动重装、降级、启动旧容器或恢复旧库；人工结案按 [主说明](../scripts/update/README.md)。
 
 U7 仍负责全链矩阵：正式渠道追上/无降级、Release/标签和取消发布顺序、浏览器宽度/主题/草稿、长时间运行、NAS/Docker 真正重启、受权备份恢复往返及更多故障组合。本次个人实例未人为制造停机故障、重启 NAS/Docker 或还原业务库。仅 linux/amd64 + SQLite 实际验收；ARM、MySQL/PostgreSQL、远端附件、桌面/Android 不在本次证据范围。
