@@ -91,6 +91,15 @@ def current_id(ex):
     return ex.inspect(ex.container_id())["Id"]
 
 
+def assert_old_removed(ex):
+    old = ex.record["old_container"]
+    assert not docker("container", "ls", "--all", "--quiet", "--no-trunc", "--filter", "id=" + old)
+    assert ex.record["old_container_cleanup"]["status"] in ("removed", "absent")
+    assert Path(ex.record["backup_path"], "backup.zip").is_file()
+    assert Path(ex.record["backup_path"], "old-container.json").is_file()
+    docker("image", "inspect", ex.record["old_image"])
+
+
 def seed(ex):
     ex.check_deployment()  # Actual preflight/backup check through authenticated HTTP.
     return request("/fixture/create")["data"]
@@ -451,7 +460,42 @@ def test_mode(mode, old_ref, new_ref, new_digest, attention=False, scenario=""):
         return
     if scenario:
         ex.claim()
-        if scenario == "space-failure":
+        if scenario in ("cleanup-failure", "cleanup-interruption"):
+            normal = executor.command
+            def fault(args, **kwargs):
+                if args == ["docker", "rm", cid]:
+                    if scenario == "cleanup-failure":
+                        raise executor.Stop("command_failed:docker")
+                    normal(args, **kwargs)
+                    os.kill(os.getpid(), signal.SIGKILL)
+                return normal(args, **kwargs)
+            if scenario == "cleanup-failure":
+                with unittest_patch.object(executor, "command", side_effect=fault):
+                    ex.run()
+                assert ex.record["closed"] and ex.record["confirmed"] == "succeeded"
+                assert ex.record["old_container_cleanup"]["status"] == "failed"
+                assert not ex.inspect(cid)["State"]["Running"]
+                new_id = current_id(ex)
+                ex.archive_closed()
+                ex.record = json.loads((ex.state / (task["id"] + ".json")).read_text())
+                assert ex.record["old_container_cleanup"]["status"] == "removed"
+            else:
+                def interrupted():
+                    with unittest_patch.object(executor, "command", side_effect=fault):
+                        ex.run()
+                killed_child(interrupted)
+                ex.load_record()
+                assert ex.record["step"] == "complete" and ex.record["confirmed"] == "succeeded"
+                new_id = current_id(ex)
+                ex.run()
+                assert ex.record["closed"] and ex.record["old_container_cleanup"]["status"] == "absent"
+            assert_status(task["id"], "succeeded")
+            assert current_id(ex) == new_id
+            assert_old_removed(ex)
+            assert (data / "sentinel").read_text() == "preserved"
+            assert (external / "blob").read_bytes() == b"external-blob"
+            assert (app_config / "runtime.env").read_text().endswith("CONFIG_TEST_SECRET=private-fixture-value\n")
+        elif scenario == "space-failure":
             # Pull really completes before the measured-space check refuses stop.
             ex.phase("download_intent", "downloading")
             ex.flush()
@@ -552,6 +596,7 @@ def test_mode(mode, old_ref, new_ref, new_digest, attention=False, scenario=""):
             ex.reconcile(task["id"], "verify", None)
             assert ex.record["closed"] and current_id(ex) == new_id
             assert_status(task["id"], "succeeded")
+            assert_old_removed(ex)
         elif scenario in ("verify-failure", "verify-reconcile"):
             (data / "fail-health").touch()
             ex.cfg["health_timeout"] = 3
@@ -568,6 +613,7 @@ def test_mode(mode, old_ref, new_ref, new_digest, attention=False, scenario=""):
                 ex.reconcile(task["id"], "verify", None)
                 assert ex.record["closed"]
                 assert_status(task["id"], "succeeded")
+                assert_old_removed(ex)
                 print("U4 verify-reconcile: real health/runtime checked, same task legally succeeded without reinstall", flush=True)
                 return
             # Revoked credentials cannot settle by HTTP. Explicit host authority
@@ -666,6 +712,9 @@ def test_mode(mode, old_ref, new_ref, new_digest, attention=False, scenario=""):
     new_id = current_id(ex)
     assert new_id != cid
     assert ex.record["step"] == "complete" and ex.record["pending"] == ["succeeded"]
+    if mode == "docker":
+        assert not ex.inspect(cid)["State"]["Running"], "old removed before success ACK"
+        assert ex.inspect(cid)["HostConfig"]["RestartPolicy"]["Name"] == "no"
     assert (data / "sentinel").read_text() == "preserved"
     archive = Path(ex.record["backup_path"], "backup.zip")
     assert archive.exists() and ex.record["backup_complete"]
@@ -715,6 +764,8 @@ def test_mode(mode, old_ref, new_ref, new_digest, attention=False, scenario=""):
     recovered.run()
     assert recovered.record["closed"]
     assert current_id(recovered) == new_id
+    if mode == "docker":
+        assert_old_removed(recovered)
     try:
         recovered.runtime()
         raise AssertionError("rotated terminal token gained runtime access")
@@ -793,7 +844,7 @@ if __name__ == "__main__":
             test_mode("docker", refs[0][0], refs[1][0], refs[1][1])
             test_mode("compose", refs[0][0], refs[1][0], refs[1][1])
             test_mode("docker", refs[0][0], refs[1][0], refs[1][1], attention=True)
-            for scenario in ("space-failure", "writer-conflict", "pending-restore", "download-failure", "registry-offline", "backup-failure", "forced-stop", "verify-failure", "verify-reconcile", "start-failure", "migration-failure", "runtime-revision-mismatch", "runtime-instance-mismatch", "stop-interruption"):
+            for scenario in ("cleanup-failure", "cleanup-interruption", "space-failure", "writer-conflict", "pending-restore", "download-failure", "registry-offline", "backup-failure", "forced-stop", "verify-failure", "verify-reconcile", "start-failure", "migration-failure", "runtime-revision-mismatch", "runtime-instance-mismatch", "stop-interruption"):
                 test_mode("docker", refs[0][0], refs[1][0], refs[1][1], scenario=scenario)
         finally:
             for project, image_file, compose in compose_cleanup:

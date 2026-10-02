@@ -1,6 +1,7 @@
 """Run with python3 -m unittest discover -s scripts/update -p 'test_*.py'."""
 import copy
 import importlib.util
+import io
 import json
 from pathlib import Path
 import tempfile
@@ -138,6 +139,158 @@ class RecoveryTests(unittest.TestCase):
         self.ex.save()
         with self.assertRaises(executor.Stop):
             self.ex.load_record()
+
+    def cleanup_fixture(self):
+        self.claim()
+        self.ex.record.update(step="replaced", confirmed="replacing", backup_complete=True,
+                              download={"image_id": "new-image"})
+        self.old = {"Id": "old-container", "Image": self.ex.record["old_image"],
+                    "Name": "/isolated-app-previous-" + self.task["id"],
+                    "State": {"Running": False, "Status": "exited"},
+                    "HostConfig": {"RestartPolicy": {"Name": "no"}}}
+        self.current = {"Id": "new-container", "Image": "new-image"}
+        self.present = True
+        self.removals = []
+        self.ex.inspect = lambda ref: self.old if ref == "old-container" else self.current
+        self.ex.verify = lambda: None
+        self.ex.runtime = lambda: self.fail("completion cleanup called runtime")
+        self.ex.replace = lambda: self.fail("completion cleanup repeated replacement")
+        def command(args, **kwargs):
+            if args[1:3] == ["container", "ls"]:
+                self.assertEqual(args[-1], "id=old-container")
+                return "old-container\n" if self.present else ""
+            self.assertEqual(args, ["docker", "rm", "old-container"])
+            self.assertEqual(self.ex.record["confirmed"], "succeeded")
+            self.assertEqual(self.ex.record["pending"], [])
+            self.removals.append(args)
+            self.present = False
+            return "old-container\n"
+        self.command = command
+        self.addCleanup(patch.stopall)
+        self.run_command = patch.object(executor, "command", side_effect=command).start()
+
+    def test_success_removes_only_own_old_container_and_keeps_backup(self):
+        self.cleanup_fixture()
+        backup = Path(self.ex.record["backup_path"])
+        backup.mkdir()
+        (backup / "backup.zip").write_bytes(b"retained backup")
+        (backup / "old-container.json").write_text(json.dumps(self.old))
+        self.ex.run()
+        self.assertEqual(len(self.removals), 1)
+        self.assertEqual(self.ex.record["old_container_cleanup"], {"status": "removed"})
+        self.assertTrue(self.ex.record["closed"])
+        self.assertEqual((backup / "backup.zip").read_bytes(), b"retained backup")
+        self.ex.archive_closed()
+        self.assertEqual(len(self.removals), 1)
+
+    def test_lost_final_ack_preserves_old_until_terminal_retry(self):
+        self.cleanup_fixture()
+        def lost(method, path, body=None, token=None):
+            if body == {"status": "succeeded"}:
+                raise executor.Stop("http_transport")
+            return self.api(method, path, body, token)
+        self.ex.api = lost
+        with self.assertRaisesRegex(executor.Stop, "http_transport"):
+            self.ex.run()
+        self.assertEqual(self.removals, [])
+        self.assertTrue(self.present)
+        self.ex.load_record()
+        self.ex.api = self.api
+        self.ex.run()
+        self.assertEqual(len(self.removals), 1)
+        self.assertTrue(self.ex.record["closed"])
+
+    def test_interruption_after_rm_recovers_as_absent_without_reinstall(self):
+        self.cleanup_fixture()
+        def killed(args, **kwargs):
+            result = self.command(args, **kwargs)
+            if args[1] == "rm":
+                raise SystemExit("interrupted after removal")
+            return result
+        self.run_command.side_effect = killed
+        with self.assertRaises(SystemExit):
+            self.ex.run()
+        self.ex.load_record()
+        self.run_command.side_effect = self.command
+        self.ex.run()
+        self.assertEqual(len(self.removals), 1)
+        self.assertEqual(self.ex.record["old_container_cleanup"], {"status": "absent"})
+        self.assertTrue(self.ex.record["closed"])
+
+    def test_cleanup_failure_warns_and_retries_before_archive_without_failing_update(self):
+        self.cleanup_fixture()
+        def denied(args, **kwargs):
+            if args[1] == "rm":
+                raise executor.Stop("command_failed:docker")
+            return self.command(args, **kwargs)
+        self.run_command.side_effect = denied
+        with patch.object(executor.sys, "stderr", io.StringIO()) as warning:
+            self.ex.run()
+        self.assertIn("old_container_cleanup", warning.getvalue())
+        self.assertTrue(self.ex.record["closed"])
+        self.assertEqual(self.ex.record["confirmed"], "succeeded")
+        self.assertEqual(self.ex.record["old_container_cleanup"]["status"], "failed")
+        self.ex.load_record()
+        self.run_command.side_effect = self.command
+        self.ex.archive_closed()
+        archived = json.loads((self.ex.state / (self.task["id"] + ".json")).read_text())
+        self.assertEqual(archived["old_container_cleanup"], {"status": "removed"})
+
+    def test_persistent_cleanup_failure_does_not_block_archiving_success(self):
+        self.cleanup_fixture()
+        self.run_command.side_effect = executor.Stop("command_failed:docker")
+        with patch.object(executor.sys, "stderr", io.StringIO()):
+            self.ex.run()
+            self.ex.archive_closed()
+        self.assertIsNone(self.ex.record)
+        archived = json.loads((self.ex.state / (self.task["id"] + ".json")).read_text())
+        self.assertEqual(archived["confirmed"], "succeeded")
+        self.assertEqual(archived["old_container_cleanup"]["status"], "failed")
+
+    def test_cleanup_refuses_running_changed_or_current_old_container(self):
+        self.cleanup_fixture()
+        old, current = copy.deepcopy(self.old), copy.deepcopy(self.current)
+        changes = (("State", {"Running": True, "Status": "running"}),
+                   ("HostConfig", {"RestartPolicy": {"Name": "always"}}),
+                   ("Name", "/unrelated-container"), ("Image", "unrelated-image"))
+        for key, value in changes:
+            with self.subTest(key=key), patch.object(executor.sys, "stderr", io.StringIO()):
+                self.old = {**old, key: value}
+                self.ex.run()
+                self.assertEqual(self.ex.record["old_container_cleanup"]["status"], "failed")
+                self.ex.archive_closed()
+                self.assertEqual(self.removals, [])
+                self.ex.record = json.loads((self.ex.state / (self.task["id"] + ".json")).read_text())
+                self.ex.record["closed"] = False
+        self.old = old
+        for changed in ({**current, "Id": "old-container"}, {**current, "Image": "wrong-target"}):
+            self.current = changed
+            with patch.object(executor.sys, "stderr", io.StringIO()):
+                self.ex.run()
+            self.assertEqual(self.ex.record["old_container_cleanup"]["status"], "failed")
+            self.assertEqual(self.removals, [])
+            self.ex.record["closed"] = False
+
+    def test_failed_attention_and_compose_do_not_remove_old(self):
+        self.cleanup_fixture()
+        for step, status in (("failed", "failed"), ("attention", "needs_attention")):
+            self.ex.record.update(step=step, confirmed=status, closed=False)
+            try:
+                self.ex.run()
+            except executor.Stop:
+                self.assertEqual(step, "attention")
+            self.assertEqual(self.removals, [])
+        self.ex.cfg["mode"] = "compose"
+        self.ex.record.update(step="complete", confirmed="succeeded", closed=False)
+        self.ex.run()
+        self.run_command.assert_not_called()
+
+    def test_manual_verify_success_cleans_old_without_replacing(self):
+        self.cleanup_fixture()
+        self.ex.record.update(step="attention", confirmed="needs_attention")
+        self.ex.reconcile(self.task["id"], "verify", None)
+        self.assertEqual(len(self.removals), 1)
+        self.assertTrue(self.ex.record["closed"])
 
     def test_product_requires_u4_before_stop(self):
         self.claim()

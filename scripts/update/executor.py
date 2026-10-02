@@ -677,6 +677,37 @@ class Executor:
             self.flush()
         raise Stop(code)
 
+    def cleanup_previous(self):
+        if (self.cfg["mode"] != "docker" or self.record["step"] != "complete" or
+                self.record["confirmed"] != "succeeded" or self.record["pending"] or
+                self.record.get("old_container_cleanup", {}).get("status") in ("removed", "absent")):
+            return
+        try:
+            require(self.record.get("backup_complete"), "cleanup_backup_unconfirmed")
+            old_id = self.record["old_container"]
+            ids = command(["docker", "container", "ls", "--all", "--quiet", "--no-trunc",
+                           "--filter", "id=" + old_id]).split()
+            if not ids:
+                result = {"status": "absent"}
+            else:
+                require(ids == [old_id], "cleanup_old_container_changed")
+                old = self.inspect(old_id)
+                current = self.inspect(self.container_id())
+                require(old["Id"] == old_id and old_id != current["Id"] and
+                        current["Image"] == self.record["download"]["image_id"], "cleanup_target_changed")
+                require(old["Name"] == "/" + self.cfg["container"] + "-previous-" + self.record["task"]["id"] and
+                        old["Image"] == self.record["old_image"], "cleanup_old_container_changed")
+                require(not old["State"]["Running"] and old["State"]["Status"] == "exited" and
+                        old["HostConfig"]["RestartPolicy"]["Name"] == "no", "cleanup_old_container_not_stopped")
+                # Exact old ID only; never force-stop or remove data volumes/images.
+                command(["docker", "rm", old_id])
+                result = {"status": "removed"}
+        except (Stop, OSError, ValueError, KeyError) as error:
+            result = {"status": "failed", "error_code": str(error) if isinstance(error, Stop) else "cleanup_evidence_invalid"}
+            print("executor: warning old_container_cleanup " + result["error_code"], file=sys.stderr)
+        self.record["old_container_cleanup"] = result
+        self.save()
+
     def run(self):
         if self.record is None:
             self.load_record()
@@ -688,6 +719,7 @@ class Executor:
         self.flush()
         if self.record["step"] in ("complete", "failed"):
             require(self.record["confirmed"] == ("succeeded" if self.record["step"] == "complete" else "failed"), "journal_terminal_unconfirmed")
+            self.cleanup_previous()
             self.record["closed"] = True
             self.save()
             return
@@ -781,11 +813,13 @@ class Executor:
             self.attention(str(error))
         self.phase("complete", "succeeded")
         self.flush()
+        self.cleanup_previous()
         self.record["closed"] = True
         self.save()
 
     def archive_closed(self):
         if self.record and self.record["closed"]:
+            self.cleanup_previous()  # One final retry; cleanup failure cannot hold the next task.
             os.replace(self.journal, self.state / (self.record["task"]["id"] + ".json"))
             self.record = None
 
@@ -802,6 +836,7 @@ class Executor:
             self.flush()
             self.phase("complete", "succeeded")
             self.flush()
+            self.cleanup_previous()
             self.record["closed"] = True
             self.save()
             return

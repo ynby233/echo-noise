@@ -210,8 +210,7 @@ with tempfile.TemporaryDirectory(prefix="echo-noise-u7-channels-") as temp:
             ex.run(); assert ex.record["closed"] and ex.record["confirmed"] == "succeeded"
             assert ex.runtime()["revision"] == revisions[expected] and (data / "instance").read_text() == instance
             assert (data / "sentinel").read_bytes() == b"same-instance-attachment"
-            old = json.loads(docker("inspect", ex.record["old_container"]))[0]
-            assert not old["State"]["Running"] and old["HostConfig"]["RestartPolicy"]["Name"] == "no"
+            f.assert_old_removed(ex)
             db = sqlite3.connect((data / "fixture.db").as_uri() + "?mode=ro", uri=True)
             try:
                 assert db.execute("SELECT content FROM messages WHERE id=1").fetchone()[0] == "old WAL note"

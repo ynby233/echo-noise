@@ -80,6 +80,10 @@ python3 executor.py run /absolute/executor.json     # 先恢复，再检查/上�
 
 最终 ACK 丢失保留 `step=complete/failed` 和待报 `succeeded/failed`，下次用原 token 引用补报，不先要求旧 token 调用 claim/runtime。轮换按 U2 范围接受自己最终回报；撤销/过期 401，记录保留、非零退出。已确认结束记录在下次领取前按任务 ID 归档；旧镜像/备份不全局 prune。
 
+Docker 模式在新版镜像/挂载/健康/runtime 验证通过、原任务 succeeded 回报获确认后，只删除该任务记录的旧容器 ID。删除前确认备份已完成、当前容器仍是目标镜像、旧容器名称/镜像与本任务一致且 exited/restart=no；使用普通 `docker rm`，不强制停止，不删除卷、镜像、备份、配置或业务目录。正常完成、最终 ACK 补报和人工 verify 成功均执行同一清理；失败/needs_attention/未确认终态不清理。Compose 仍由原 up 流程处理服务替换，不另删容器。
+
+清理结果写入原 journal 的 `old_container_cleanup`（removed/absent/failed），告警只含有限错误码。删除后执行器被杀，下次确认旧 ID 不存在即可结案，不重复替换。清理失败不改变 succeeded；下次归档前再尝试一次，持续失败仍归档，按记录人工定点处理，不阻塞后续更新、不扫描清理历史 previous。已归档的旧任务与实验/手工维护容器不追溯删除。本逻辑由外部执行器执行，个人 Dagu 必须交付新脚本或重建对应执行器镜像才生效；仅更新业务镜像不会替换已部署的 Dagu 脚本。协议能力版本仍为 u6-1。
+
 `needs_attention` 保留服务端活动占位。保存日志、记录、新旧镜像、备份及数据库现场，通过下述受权人工结案。禁止删除记录、手工改库或用新 token 冒认原执行器解除占位。
 
 异常 step、有限错误码与待报 needs_attention 同一次原子写入。旧版 attention/pending=[] 记录在 run/report 通过原 token、原任务事件接口补报；需本地旧容器/image 证据及合法 downloading/stopping/backing_up/replacing/verifying 状态。服务端仍校验任务归属和状态转换，409/401/传输失败保留记录；无法证明合法来源返回 `attention_evidence_requires_reconciliation`，无本地证据的 claim 保持 `manual_reconciliation_required`。补报不会 stop/replace，不解除活动占位。

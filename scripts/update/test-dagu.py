@@ -218,11 +218,15 @@ def test_case(root, refs, scenario, restart_second=None):
         assert record["task"]["id"] == task and record["backup_complete"]
         new_id = docker("inspect", app, "--format", "{{.Id}}")
         assert new_id != old
+        if status == "succeeded":
+            eventually(lambda: not docker("container", "ls", "--all", "--quiet", "--no-trunc", "--filter", "id=" + old), 20)
+        else:
+            old_state = json.loads(docker("inspect", old))[0]
+            assert not old_state["State"]["Running"] and old_state["HostConfig"]["RestartPolicy"]["Name"] == "no"
         if scenario == "restart":
             assert new_id == installed, "recovery replaced twice"
             assert record["step"] == "complete" and record["closed"] and not record["pending"]
-            old_state = json.loads(docker("inspect", old))[0]
-            assert not old_state["State"]["Running"] and old_state["HostConfig"]["RestartPolicy"]["Name"] == "no"
+            assert record["old_container_cleanup"]["status"] in ("removed", "absent")
             db = sqlite3.connect((data / "fixture.db").as_uri() + "?mode=ro", uri=True)
             try:
                 events = [row[0] for row in db.execute("SELECT status FROM update_task_events ORDER BY id")]
