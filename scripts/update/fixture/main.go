@@ -46,6 +46,10 @@ func main() {
 	}
 	gin.SetMode(gin.ReleaseMode)
 	dir := "/data"
+	newBuild := buildinfo.CurrentMetadata().Revision == "2222222222222222222222222222222222222222"
+	if _, err := os.Stat(filepath.Join(dir, "start-failure")); newBuild && err == nil {
+		os.Exit(70)
+	}
 	must(config.LoadConfig())
 	if *restore != "" {
 		layout := backup.DefaultLayout()
@@ -63,6 +67,11 @@ func main() {
 	sqlDB, err := db.DB()
 	must(err)
 	sqlDB.SetMaxOpenConns(1)
+	if _, err := os.Stat(filepath.Join(dir, "migration-failure")); newBuild && err == nil {
+		must(db.Exec("CREATE TABLE IF NOT EXISTS migration_probe(value TEXT)").Error)
+		must(db.Exec("INSERT INTO migration_probe VALUES('partial migration')").Error)
+		must(db.Exec("INTENTIONALLY INVALID MIGRATION SQL").Error)
+	}
 	must(db.AutoMigrate(&models.UpdatePreference{}, &models.UpdateExecutorCredential{}, &models.UpdateTask{}, &models.UpdateTaskEvent{}))
 	for _, statement := range []string{"CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY, username TEXT, password TEXT, is_admin INTEGER)", "CREATE TABLE IF NOT EXISTS messages(id INTEGER PRIMARY KEY, content TEXT, user_id INTEGER)", "CREATE TABLE IF NOT EXISTS site_configs(id INTEGER PRIMARY KEY)", "INSERT OR IGNORE INTO messages VALUES(1, 'old WAL note', 1)"} {
 		must(db.Exec(statement).Error)
@@ -92,7 +101,21 @@ func main() {
 		c.Status(http.StatusOK)
 	})
 	executor := router.Group("/api/updates/executor", middleware.UpdateExecutorAuthMiddleware())
-	executor.GET("/runtime", controllers.GetExecutorRuntime)
+	executor.GET("/runtime", func(c *gin.Context) {
+		for _, fault := range []string{"runtime-revision-mismatch", "runtime-instance-mismatch"} {
+			if _, err := os.Stat(filepath.Join(dir, fault)); newBuild && err == nil {
+				identity := gin.H{"instance_id": instance, "revision": buildinfo.CurrentMetadata().Revision}
+				if fault == "runtime-revision-mismatch" {
+					identity["revision"] = "1111111111111111111111111111111111111111"
+				} else {
+					identity["instance_id"] = "wrong-instance"
+				}
+				c.JSON(http.StatusOK, dto.OK(identity, "isolated runtime fault"))
+				return
+			}
+		}
+		controllers.GetExecutorRuntime(c)
+	})
 	executor.POST("/check", controllers.RecordExecutorDeploymentCheck)
 	executor.POST("/claim", controllers.ClaimUpdateTask)
 	executor.POST("/tasks/:id/events", controllers.RecordUpdateTaskEvent)

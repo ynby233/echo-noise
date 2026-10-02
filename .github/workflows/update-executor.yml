@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'scripts/update/**'
+      - 'scripts/release/**'
       - 'internal/updates/**'
       - 'internal/backup/**'
       - 'internal/syncmanager/**'
@@ -35,6 +36,7 @@ jobs:
           go-version-file: go.mod
       - name: Recovery and protocol checks
         run: |
+          sh scripts/release/test-release-policy.sh
           python3 -m unittest discover -s scripts/update -p 'test_*.py' -v
           go test ./internal/updates ./internal/controllers ./internal/middleware ./internal/routers -run 'Update|Executor|Task|Overview|Rotated' -count=1 -timeout=8m
           go test ./internal/backup ./internal/syncmanager -count=1 -timeout=8m

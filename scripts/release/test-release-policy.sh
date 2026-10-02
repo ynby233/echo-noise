@@ -48,6 +48,7 @@ printf '%s\n' '#!/bin/sh' 'case "$FAKE_MODE" in' \
   'missing) echo "manifest unknown" >&2; exit 1 ;;' \
   '*) echo "network timeout" >&2; exit 1 ;;' \
   'esac' > "$work/bin/docker"
+chmod +x "$work/bin/docker"
 metadata="$(FAKE_MODE=exists PATH="$work/bin:$PATH" sh "$root/scripts/release/image-metadata.sh" example)"
 printf '%s\n' "$metadata" | grep -qx 'STATE=exists'
 printf '%s\n' "$metadata" | grep -qx 'REVISION=1111111111111111111111111111111111111111'

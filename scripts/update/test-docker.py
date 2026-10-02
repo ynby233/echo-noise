@@ -492,6 +492,15 @@ def test_mode(mode, old_ref, new_ref, new_digest, attention=False, scenario=""):
             rejected(ex.run, "fixture_download_failed")
             assert_status(task["id"], "failed")
             assert current_id(ex) == cid and ex.inspect(cid)["State"]["Running"]
+        elif scenario == "registry-offline":
+            docker("pause", prefix + "-registry")
+            ex.manifest = lambda reference: json.loads(executor.command(["docker", "manifest", "inspect", "--insecure", "--verbose", reference], timeout=3))
+            try:
+                rejected(ex.run, "command_unavailable_or_timeout")
+            finally:
+                docker("unpause", prefix + "-registry")
+            assert_status(task["id"], "failed")
+            assert current_id(ex) == cid and ex.inspect(cid)["State"]["Running"]
         elif scenario == "backup-failure":
             # Invoke the real tool with a read-only destination; the old image
             # and writer are still unchanged, so recovery may restart it.
@@ -516,6 +525,33 @@ def test_mode(mode, old_ref, new_ref, new_digest, attention=False, scenario=""):
             wait()
             ex.flush()
             assert_status(task["id"], "needs_attention")
+        elif scenario in ("start-failure", "migration-failure", "runtime-revision-mismatch", "runtime-instance-mismatch"):
+            marker = data / scenario
+            marker.touch()
+            ex.cfg["health_timeout"] = 5
+            expected = {"runtime-revision-mismatch": "runtime_revision_mismatch", "runtime-instance-mismatch": "instance_mismatch"}.get(scenario, "target_health_timeout")
+            rejected(ex.run, expected)
+            new_id = current_id(ex)
+            assert new_id != cid and ex.record["step"] == "attention" and not ex.record["closed"]
+            assert ex.record["backup_complete"] and Path(ex.record["backup_path"], "backup.zip").exists()
+            assert not ex.inspect(cid)["State"]["Running"]
+            assert ex.inspect(cid)["HostConfig"]["RestartPolicy"]["Name"] == "no"
+            if scenario == "migration-failure":
+                with sqlite3.connect(data / "fixture.db") as db:
+                    assert db.execute("SELECT value FROM migration_probe").fetchone()[0] == "partial migration"
+            # An operator repairs the isolated target; automatic run must retain
+            # attention, the backup and the same container until explicit verify.
+            marker.unlink()
+            if not ex.inspect(new_id)["State"]["Running"]:
+                docker("start", new_id)
+            wait()
+            rejected(ex.run, "manual_reconciliation_required")
+            assert_status(task["id"], "needs_attention")
+            assert request("/fixture/create")["data"]["id"] == task["id"]
+            ex.cfg["health_timeout"] = 120
+            ex.reconcile(task["id"], "verify", None)
+            assert ex.record["closed"] and current_id(ex) == new_id
+            assert_status(task["id"], "succeeded")
         elif scenario in ("verify-failure", "verify-reconcile"):
             (data / "fail-health").touch()
             ex.cfg["health_timeout"] = 3
@@ -708,6 +744,7 @@ def build_images():
     containers.append(registry)
     registry_port = json.loads(docker("inspect", registry))[0]["NetworkSettings"]["Ports"]["5000/tcp"][0]["HostPort"]
     registry_image = "127.0.0.1:" + registry_port + "/echo-noise-u3"
+    manifest_url = "http://127.0.0.1:" + registry_port + "/v2/echo-noise-u3/manifests/"
     refs = []
     for i in (1, 2):
         context = root / ("image-" + str(i))
@@ -723,10 +760,11 @@ def build_images():
         tag = registry_image + ":fixture-" + str(i)
         docker("build", "--build-arg", "REVISION=" + str(i) * 40, "--tag", tag, str(context))
         docker("push", tag)
-        digest = json.loads(docker("image", "inspect", tag))[0]["RepoDigests"][0].split("@", 1)[1]
+        # Cached images can retain foreign repository and index digests.
+        with urllib.request.urlopen(urllib.request.Request(manifest_url + "fixture-" + str(i), headers={"Accept": "application/vnd.docker.distribution.manifest.v2+json, application/vnd.oci.image.manifest.v1+json"})) as response:
+            digest = response.headers["Docker-Content-Digest"]
         refs.append((registry_image + "@" + digest, digest))
     # Real OCI index digest differs from the selected platform manifest and image ID.
-    manifest_url = "http://127.0.0.1:" + registry_port + "/v2/echo-noise-u3/manifests/"
     with urllib.request.urlopen(urllib.request.Request(manifest_url + refs[1][1], headers={"Accept": "application/vnd.docker.distribution.manifest.v2+json, application/vnd.oci.image.manifest.v1+json"})) as response:
         manifest = response.read()
         media_type = response.headers["Content-Type"]
@@ -755,7 +793,7 @@ if __name__ == "__main__":
             test_mode("docker", refs[0][0], refs[1][0], refs[1][1])
             test_mode("compose", refs[0][0], refs[1][0], refs[1][1])
             test_mode("docker", refs[0][0], refs[1][0], refs[1][1], attention=True)
-            for scenario in ("space-failure", "writer-conflict", "pending-restore", "download-failure", "backup-failure", "forced-stop", "verify-failure", "verify-reconcile", "stop-interruption"):
+            for scenario in ("space-failure", "writer-conflict", "pending-restore", "download-failure", "registry-offline", "backup-failure", "forced-stop", "verify-failure", "verify-reconcile", "start-failure", "migration-failure", "runtime-revision-mismatch", "runtime-instance-mismatch", "stop-interruption"):
                 test_mode("docker", refs[0][0], refs[1][0], refs[1][1], scenario=scenario)
         finally:
             for project, image_file, compose in compose_cleanup:
