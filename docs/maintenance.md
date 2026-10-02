@@ -185,6 +185,10 @@ U5 浏览器入口 `node scripts/update-panel.browser.cjs` 使用真实生产 Vu
 
 2026-10-02 U6 已完成：复用用户现有 Dagu 2.18.1，执行器 u6-1 的可重建环境、宿主路径/磁盘/进程视图、固定认证唤醒和分钟检查/领取/恢复已通过隔离及 NAS 后台完整更新。保留原 claim/events、flock、active.json 和三分钟能力窗口；业务与 Engine 根只读挂载，独立控制目录持久化。交付 [Dagu 说明](../scripts/update/dagu.md)，容器验收入口 `sudo -E python3 scripts/update/test-dagu.py`（先编译 README 中 fixture/update-tool 并构建派生镜像），CI 同时保留原 `test-docker.py` 全部回归。实测 NAS 默认 AppArmor、私有文件及固定主机名差异和处理边界见 [U6 验收报告](u6-dagu-nas-acceptance-2026-10-02.md)。下一阶段 U7 从全链矩阵接手，不重新初始化配对或退回原计划。
 
+U7 的矩阵、故障注入、实际运行证据和未验现场项见 [U7 验收报告](u7-end-to-end-acceptance-2026-10-02.md)。现有 `test-docker.py` 增加真实 registry 超时、新版启动退出、迁移部分写入后失败、运行提交/实例不匹配，断言保留备份与人工处理占位、旧容器不自动重启、修复后同目标显式结案；`test-dagu.py` 保留分钟/唤醒/漏通知/重建全链。发布策略运行检查为 `sh scripts/release/test-release-policy.sh`，已加入执行器 workflow；缓存镜像的 `RepoDigests` 顺序不能当作刚推送标签的身份。上述引擎脚本含容器替换和故障操作，只在独立 Engine/runner 运行，禁止将它们直接对准个人业务 Engine。
+
+现场观察或诊断读取 SQLite 后必须关闭连接/文件描述符再等待下一采样；Python 的 `with sqlite3.connect(...)` 只管理事务，不自动关闭连接。持续持有业务文件会被既有宿主写入者检查拒绝，不能为诊断脚本增加豁免。Dagu 重建后先核对实际检查及同一 instance，不仅检查容器 running；新版曾启动时按原 `reconcile` 流程保留现场并受权结案。个人 NAS/Docker 重启、运行库恢复和正式 Release 发布仍需各自的明确授权，独立 CI/恢复实验不替代现场验收。
+
 独立复核增加明确 409/412 拒绝后无需刷新可恢复、已有旧终态时未知 POST 不解锁且只查询新任务的行为回归；Python 预检文件系统异常清除旧成功检查的回归也已加入。首页懒加载脚本在工具栏因重叠收起时正常点击可见展开手柄，再点击留言，不强制点击或移除加载断言。最新证据见 [U5 复核修复验收](u5-review-repairs-acceptance-2026-10-01.md)。
 
 2026-10-01 的实际提交、两项成功工作流、镜像 digest、NAS 只读核对与 U4 接口位置见 [U3 交付报告](u3-external-executor-acceptance-2026-10-01.md)。
