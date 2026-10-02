@@ -211,10 +211,19 @@ def test_case(root, refs, scenario, restart_second=None):
         # minute dispatch + startup; do not alter Dagu or executor protection.
         eventually(lambda: http("http://127.0.0.1:1314/fixture/tasks/" + task)[1]["data"]["status"] == status,
                    300 if scenario == "restart" else 130)
-        journal = control / "state/active.json"
-        if not journal.exists():
-            journal = control / ("state/" + task + ".json")
-        record = json.loads(journal.read_text())
+        def local_record():
+            path = control / "state/active.json"
+            if not path.exists():
+                path = control / ("state/" + task + ".json")
+            return path, json.loads(path.read_text())
+        if status == "succeeded":
+            # The server ACK precedes local cleanup/close writes. Read a fresh
+            # completed journal rather than asserting on the earlier snapshot.
+            def closed():
+                _, result = local_record()
+                return result["closed"] and not result["pending"] and result.get("old_container_cleanup", {}).get("status") in ("removed", "absent")
+            eventually(closed, 20)
+        journal, record = local_record()
         assert record["task"]["id"] == task and record["backup_complete"]
         new_id = docker("inspect", app, "--format", "{{.Id}}")
         assert new_id != old
