@@ -4,6 +4,8 @@
 
 实验跨北京时间 2026-10-02 至 2026-10-03；本文沿用交接日期命名。私有原始证据位于本机环境 `u7` 和 NAS `/var/lib/echo-noise-u7-tests/follow-up-evidence`，均不进入公开仓库。真实恢复原始目录留在专属测试 Engine，实验结束后该 Engine 已停止，保留数据卷；无全局 prune 或其他服务清理。
 
+2026-10-03 用户另行要求落实更新成功后的旧容器清理，并将结果交接给最终 U7 验证会话。该新增实现与证据见第 7 节，最终会话操作入口见第 8 节；第 1–6 节保留当时的实现与现场事实，不将旧任务的“旧容器保留”改写为已自动删除。
+
 ## 1. Dagu 重建超时的确定分歧
 
 在同一 NAS 专属嵌套 Engine 中复用旧缓存、同一暂停位置重新实验。私有 `p1-evidence` 保存清理前完整 journal、Dagu 配置/持久运行记录、实际 `.out/.err/.log`、PID/PPID、锁持有者、namespace、容器状态和有限 HTTP 调用结果。
@@ -111,3 +113,66 @@ U7 仍有独立远端 Release 事件和个人 Docker/NAS 真重启待分别授�
 old FinishedAt 为 2026-10-02T16:51:11.222979092Z，新 StartedAt 为 16:51:21.273769432Z，相差 10.05 秒；stopping→succeeded 16.71 秒。事件补报在恢复后按序写入，backing_up/replacing/verifying 时间不是实际操作起止测量；这也不是对所有客户端 HTTP 不可达时长的逐秒探测。页面实际加载 `/_nuxt/BYLfsjyv.js` 的 317801 bytes 与新容器 `/app/public` 对应资源完整字节相等，配合真实运行镜像及编译身份证明页面来源；未增加持久 hash 门禁。确认/完成截图与完整私有 task/备份/数据证据留环境目录。
 
 升级后至 2026-10-02 16:59:26 UTC，五个不同分钟的只读样本均为新 revision/check_ok/healthy、0 重启、无活动槽、完成 journal 已归档；Dagu 00:52–00:59 的每分钟步骤文件持续生成。样本 checked_at 为 16:53:03、16:54:02、16:56:02、16:57:02、16:59:02 UTC，保留采样间隙，不伪造逐分钟采样。本项是新目标约 8 分钟运行核验，升级前 124.25 分钟窗口不能转写成新目标长期运行证明。U7 尚不能完全关闭：仅剩个人 NAS/Docker 真重启与独立远端 Release 事件矩阵待对应授权/现场执行。
+
+## 7. 2026-10-03 新增：成功后清理旧业务容器
+
+### 实现与清理边界
+
+用户查看 NAS 容器列表发现已退出的 `Note2-previous-*`，明确要求将成功后删除旧容器的逻辑落实。原 Docker 更新保留旧容器且没有自动清理；旧容器与新容器共用数据/配置挂载，不是一份独立备份，也不能作为直接启动旧版的安全回滚方式。
+
+产品提交 `c5f4c8e21e16305dd627de6e457ac70c7937ad1f`：在现有 `scripts/update/executor.py` 增加一个共享 `cleanup_previous`，复用原 journal、成功回报及归档流程，无新服务、配置项、源码 hash/baseline 或冻结门禁。正常更新完成、最终 ACK 补报后的终态恢复、受权 `reconcile --outcome verify` 成功均走同一清理。
+
+清理只在 Docker 模式、本地 step=complete、confirmed=succeeded、pending 为空且备份已完成时执行。先确认当前容器与记录的目标 image ID 一致、旧 ID 不等于当前 ID；旧容器的完整 ID、名称 `登记名-previous-本任务ID`、旧 image ID 与本任务一致，并且 exited/restart=no。仅 `docker rm 旧ID`，不使用 force 或删除卷选项，不删除镜像、正式备份、配置、业务目录、其他服务或其他任务的 previous。Compose 保持原指定服务 up 的替换行为，不另删容器。
+
+结果写入原 journal 的 `old_container_cleanup`，status 为 removed/absent/failed。最终成功 ACK 未确认、failed 或 needs_attention 不清理；服务端已成功但响应丢失也必须等原任务 ACK 补报确认。删除后进程被杀、尚未保存结果时，下次用真实 Engine 列表确认旧 ID 不存在即可结案，不重装、不重新领取、不要求旧凭据先调用 runtime。运行中或被更名/改镜像/恢复 restart 策略的旧容器只告警保留。
+
+清理失败不改变 succeeded，也不启动旧版或回滚数据库；告警只输出有限错误码。下一次 closed journal 归档前再尝试一次，持续失败仍归档并保留错误，由管理员依该任务记录定点处理，不让清理阻塞以后更新，不无限重试或全局扫描历史资源。备份和原容器 inspect 已在任务私有备份目录保存；仍按原 U4 方法进行受权恢复。
+
+已归档历史任务不会被本逻辑追溯清理。本次没有删除个人 NAS 的历史 `Note2-previous-3099c35a687640949d77e2c56eeb93d0`、`dagu-before-hostview-fix-*` 或专属测试 Engine；后两者分别属于人工维护/隔离实验，不属于业务更新成功收尾。
+
+### 回归与真实实验
+
+在改产品前加入行为回归，旧实现运行红：应删除旧容器的正常完成、终态补报、人工 verify 等路径没有删除，清理结果不存在，删除后中断场景也不能触发。后续又为完成后能力检查的失效引用加一项先红后绿回归；最终 Windows 与 NAS 独立 Linux Engine 均通过完整 61 项 Python 回归（原 52 项 + 新增 9 项）；Python 编译、diff 检查和相关 Go 更新/控制器/认证/路由回归通过。未改 Go/前端产品，不宣称本轮重复执行完整前端/浏览器验收。
+
+| 层次 / 场景 | 实际断言及证据范围 |
+| --- | --- |
+| 单元：成功与保护条件 | 成功 ACK 后按旧 ID 删除；备份保持；当前容器、运行中/可自动重启/名称或镜像变化的旧容器拒绝删除；failed/attention/Compose 不额外清理。 |
+| 单元：丢失/中断/清理失败 | 丢失最终 ACK 时不删，原任务补报后删除；删除后中断恢复为 absent；删除失败只告警，归档前重试成功；持续失败仍归档 succeeded。 |
+| NAS 专属 Engine：正常 Docker/Compose | 真实 registry、TaskService、认证、离线备份、容器替换及 runtime；Docker 最终响应丢失时旧容器仍 stopped/restart=no，轮换凭据后的原任务终态补报确认后删除。Compose 仍保持其他服务 ID/挂载及固定镜像再 up。 |
+| NAS 专属 Engine：清理失败 | 仅在本任务真实 rm 命令边界注入拒绝，实际容器/回报/备份流程继续执行；原任务 closed/succeeded、旧容器保留，归档前解除拒绝后删除；当前容器 ID、数据、附件、配置、旧镜像和备份保持。 |
+| NAS 专属 Engine：删除后 SIGKILL | 先真实 rm 旧容器再 SIGKILL 执行器；journal complete/confirmed=succeeded，原进程恢复后识别 absent、closed，目标容器 ID 不变，无第二次替换。 |
+| NAS 专属 Engine：失败和人工结案 | 健康/运行版本失败维持 needs_attention，旧容器停止保留；受权人工 verify 同一任务成功后删除。原备份 ZIP、old-container.json 和旧 image 可读，业务附件/配置保持。 |
+| NAS 专属 Engine：完成后手工 check | 新进程加载 closed、尚未归档的原 journal；真实检查当前已安装容器及其离线工具并上报 check_ok，原备份计划保持，旧容器仍已删除，目标 ID 不变。 |
+
+上述 Docker/Compose 七条实际链及完成后 check 新链完整退出 0；不是用 fake Docker 代替真实替换。私有 `cleanup-python-red.log`、`cleanup-python-green.log`、`cleanup-check-red.log`、`cleanup-python-final.log`、`cleanup-go-focused.log` 与 NAS `cleanup-python-final-linux.log`、`cleanup-docker.log`、`cleanup-check.log` 保存原始输出；合成任务 journal/备份/恢复文件另存专属 Engine 的 `/work/cleanup-docker-evidence`、`/work/cleanup-check-evidence`。
+
+本轮 Dagu wake 初次真实实验在撤销凭据检查处失败。失败日志显示分钟调度正在持有 flock，手工检查实际返回 executor_already_running，原断言却要求该次立即出现 http_401；业务任务已经 complete，实际问题是 fixture 在尚未取得执行锁时断言认证结果。保留 `cleanup-dagu-red.log` 和失败持久数据，不改写历史为通过。测试修订 `7ea0cccb` 仅将该处调用改为复用已有 `check()`：有限等待只针对 executor_already_running，拿到实际检查结果后仍要求非零且 http_401。没有修改产品 flock、凭据校验或调度配置。
+
+修订后 wake 原任务 `6f4925cd1a8636c38454cdf112cfbdee` succeeded、旧 ID 删除，verify-failure 原任务 `4933f5bbff8c093ff93724959a303e70` needs_attention、旧 ID 停止保留。restart 初次又捕获测试快照竞态：服务端 succeeded 后、本地清理/closed 写盘前就读取 record，之后等待旧 ID 消失却仍断言先前 record；保存现场实际已经 complete/succeeded/pending=[]/closed=true/cleanup=removed。保留 `cleanup-dagu-snapshot-red.log`；测试修订 `74e12c943478022b608f8bda8a0ec99967dfb73b` 在成功后有限等待本地收尾并重新读取当前 active/归档 journal。复验秒 45 重建原任务 `67f5306a9bfd5b658c3f12f558391dac` 134.66 秒恢复，原目标 ID 不变、事件顺序/数据/分钟能力/归档通过，旧 ID 已删除；真实核心清理仍是 c5f4c8e2 的产品逻辑。
+
+诊断同时确认产品的完成后 check 仍无条件引用 record.old_container。旧容器删除后、closed journal 尚未归档时该引用失效。最终产品修订 `fc0a89aadd94bd6c8bf178092dd381c48b017913` 只在任务仍 active 时使用旧 writer 并保存 backup_plan；closed/空闲检查改用当前登记容器，不改历史备份计划。新增单元先红后绿，最终源码在 NAS 的真实 cleanup-check 链通过；该修订与三次真实 Dagu 重建的完整回归由下述精确 SHA CI 再验证。
+
+### 交付状态与现场差异
+
+最终实现提交为 `fc0a89aadd94bd6c8bf178092dd381c48b017913`，已推送 origin/main，包含核心清理、两处 fixture 时序修订和 closed check 修复。对应自动工作流，不重复 dispatch：
+
+- [执行器完整 CI 37045155977](https://github.com/ynby233/echo-noise/actions/runs/37045155977)：2026-10-02 18:22:58 UTC 完整 success，headSha 精确匹配 fc0a89aa。61 项 Python、相关 Go/备份/同步回归、真实 Docker/Compose 及独立 runner daemon restart、所有启动/迁移/健康/身份/认证故障、清理拒绝重试/删除后 SIGKILL/完成后 check、Dagu 唤醒/漏送/失败保留和三次重建、渠道/发布 shell 故障矩阵与清理全部通过。三次秒 1/31/45 重建恢复分别 119.30/88.26/135.33 秒，原任务事件有序、目标 ID 不变、旧 ID 删除、备份/数据保持、分钟能力及归档通过；不能用该 runner 结果代替个人 NAS/Docker 真重启。
+- [自动镜像 37045155938](https://github.com/ynby233/echo-noise/actions/runs/37045155938)：2026-10-02 18:09:16 UTC 完整 success，候选及最终 smoke、可执行身份拒绝回归、固定产物发布与 edge 移动通过。固定 ref 为 `ghcr.io/ynby233/echo-noise:sha-fc0a89aadd94bd6c8bf178092dd381c48b017913-mcp`，digest 为 `sha256:c580887fefee3a584f50bd05969c569079b99ea7ea299e84e946f4c311c45210`；不创建正式 Release。
+
+NAS 专属 Engine 的最终渠道矩阵退出 0：edge 原任务 `f5f7ef8e5a738dbe43a1ea94cfae16a6`、stable 原任务 `81921f9a6596fe6a67712cc513b6bbbb` 两次实际升级均确认旧容器删除、原备份及旧 image 保留，笔记/附件/同实例保持；同源/落后/分叉/无证明等拒绝和本地发布失败/取消/晚完成仍全部通过。身份沿用第 3 节隔离 A/B/C/D，不能当正式 Release；该结果补验了连续更新清理，不新增远端 GitHub 事件证明。
+
+2026-10-02 18:11:08 UTC 最终只读现场核对：个人 Note2/Dagu 的容器 ID、image、完整 Config/HostConfig、按目标排序的 Mounts、RestartCount、StartedAt 均与开工前一致，业务 healthy；147 messages/34 blobs/50 refs、integrity_check=ok、活动槽 0、无 active.json。读取个人 Dagu `/opt/echo-noise-update/executor.py` 与最终源码按 LF 规范化比较，**确认为未安装新脚本**。个人业务运行镜像仍为第 6 节 69535120；新增清理由外部执行器执行，更新业务镜像不会自动替换已部署的 Dagu 脚本，协议能力版本仍 u6-1，不能仅凭该版本号宣称已安装新逻辑。本次开发与隔离验证不消耗或复用已经完成的 U6→69535120 单次业务替换授权。
+
+完成实验后，先将合成 Docker/完成后 check/渠道 journal 与备份、Dagu 持久记录、失败/通过日志及最终摘要复制到 NAS 受限 `/var/lib/echo-noise-u7-tests/cleanup-evidence`，有限日志与摘要也导出到本机私有 u7。重新核对专属 Engine 的标签、既有 Engine ID、无业务 bind/无发布端口、内部无运行容器和 Python 实验进程后停止；保留原测试卷/真实恢复副本及证据，不修改个人 Dagu 或清理历史业务容器。新失败日志保持原 verdict；本节最终工作流成功只证明最终提交，不覆盖中间失败。
+
+## 8. 最终 U7 验证会话入口
+
+先读本报告第 7 节的最终提交/CI/现场交付状态，再刷新 HEAD、origin/main、个人业务镜像与 Dagu 的实际执行器脚本；保留当前配对、任务历史和第 1–6 节证据。旧报告中成功后保留容器的断言属于历史实现；新成功场景应断言旧容器已删除且备份、旧镜像、配置和数据保持，失败/未确认/needs_attention 则仍断言旧容器停止保留。
+
+关闭 U7 前仍须逐项完成：
+
+1. **新增逻辑的个人交付闭环。** 核对个人 Dagu 运行的脚本确为第 7 节产品提交，交付时保留既有 host PID、SYS_PTRACE、安全选项、挂载、调度/唤醒及持久配置；避免仅改容器内文件导致 Dagu 重建后丢失。再次真实业务替换须有对应目标和单次授权，不能套用第 6 节已经执行完的授权。核验原任务 succeeded、journal 清理结果、旧 ID 消失、备份/配置/数据保持、分钟能力恢复；已有历史 previous 不自动追溯删除。
+2. **个人 Docker daemon 与 NAS 真重启。** 按第 4 节私有操作单分别取得维护窗口/授权后执行，二者分别记录，不用 Ubuntu runner daemon 或嵌套 Dagu 重建替代；确认只有一个业务写入者、当前固定镜像与实例、数据/设备/网络保持，Dagu 恢复分钟检查。不得启动共享原数据的旧容器。
+3. **独立远端 Release/取消/旧任务晚完成矩阵。** 按第 4 节独立私有测试仓库/包/Release 操作单取得对应授权，使用真实 GitHub 事件与 Actions runner；本地 HTTP 响应/registry/发布 shell 矩阵仍只计其已证明范围，不对正式项目制造验收 Release。
+
+没有事实证据的项保持待验；个人运行库回滚、其他架构/数据库/外部附件或桌面/Android 不追加为默认关闭条件。关闭时交付各项实际结果、精确提交/任务/固定镜像和剩余限制，明确区分仓库代码、自动 CI、隔离 Engine 与个人 NAS。以上三项达到对应证据后才能宣布 U7 及整条任务结束；本次成功后清理实现不能替代尚未执行的整机重启或远端事件。
