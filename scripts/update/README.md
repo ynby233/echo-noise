@@ -1,12 +1,14 @@
 # 外部更新执行器与 U4 数据保护
 
-Linux 宿主或 Dagu 容器执行器，更新一个管理员登记的 Docker 容器或 Compose 服务。程序不在应用容器中运行，应用不挂 Docker socket。U5 已接通受控 `POST /api/updates/tasks`；没有近期部署检查返回 412，不能仅凭有效 token 安装。Dagu 接入见下文；通用主动领取仍可单独使用。旧镜像没有 `/app/update-tool` 时，停机前返回 `u4_backup_unavailable`。
+通用外部执行器，更新一个管理员登记的 Docker 容器或 Compose 服务。程序不在应用容器中运行，应用不挂 Docker socket。U5 已接通受控 `POST /api/updates/tasks`；没有近期部署检查返回 412，不能仅凭有效 token 安装。开源接入边界为下述 API、可选认证唤醒钩子及通用执行器；调度工具和个人 NAS 部署由使用者自行配置，不交付特定调度器镜像或任务。旧镜像没有 `/app/update-tool` 时，停机前返回 `u4_backup_unavailable`。
 
 依赖为 Linux、Python 3.9+ 标准库、Docker CLI/本地 Engine、curl；Compose 模式另需 Compose v2（`config --format json`、`up --pull never`）。锁用 `fcntl.flock`，与宿主 flock 相同；不新增服务或 Python 包、不自动安装依赖。非回环地址必须使用 HTTPS，保留系统证书验证，不跟随认证请求重定向。实际验收架构是 linux/amd64；arm64 配置/manifest 判断可识别，但尚无 ARM 运行验收。
 
 ## 配对与固定配置
 
-Dagu 的可重建镜像、宿主视图、固定认证 Webhook 和分钟调度见 [Dagu 接入说明](dagu.md)。
+执行器可由部署者选择的调度工具调用。空闲时每分钟运行 `run`，维持近期能力检查、领取任务并恢复原记录；所有入口使用同一配置和状态目录，不并行重装。应用不持有宿主 SSH 凭据，也不负责配置调度工具。
+
+若需要加速领取，可在受信部署配置中设置 `UPDATE_EXECUTOR_WAKE_URL` 和 `UPDATE_EXECUTOR_WAKE_TOKEN_FILE`。应用在任务成功创建后向固定地址发送带 Bearer token 的 POST，不附带命令、镜像或路径参数；超时或失败仍返回原任务 ID，由定时领取补偿。钩子接收端的认证和调度接入由部署者实现，主动领取无需配置该钩子。
 
 站长必须是固定 ID 1，使用现有登录认证调用 API。管理员 JWT/密码不能当长期 executor token；初次接口请求使用现有站长客户端的认证方式，不在终端参数填管理员 token。
 
@@ -82,7 +84,7 @@ python3 executor.py run /absolute/executor.json     # 先恢复，再检查/上�
 
 Docker 模式在新版镜像/挂载/健康/runtime 验证通过、原任务 succeeded 回报获确认后，只删除该任务记录的旧容器 ID。删除前确认备份已完成、当前容器仍是目标镜像、旧容器名称/镜像与本任务一致且 exited/restart=no；使用普通 `docker rm`，不强制停止，不删除卷、镜像、备份、配置或业务目录。正常完成、最终 ACK 补报和人工 verify 成功均执行同一清理；失败/needs_attention/未确认终态不清理。Compose 仍由原 up 流程处理服务替换，不另删容器。
 
-清理结果写入原 journal 的 `old_container_cleanup`（removed/absent/failed），告警只含有限错误码。删除后执行器被杀，下次确认旧 ID 不存在即可结案，不重复替换。清理失败不改变 succeeded；下次归档前再尝试一次，持续失败仍归档，按记录人工定点处理，不阻塞后续更新、不扫描清理历史 previous。已归档的旧任务与实验/手工维护容器不追溯删除。本逻辑由外部执行器执行，个人 Dagu 必须交付新脚本或重建对应执行器镜像才生效；仅更新业务镜像不会替换已部署的 Dagu 脚本。协议能力版本仍为 u6-1。
+清理结果写入原 journal 的 `old_container_cleanup`（removed/absent/failed），告警只含有限错误码。删除后执行器被杀，下次确认旧 ID 不存在即可结案，不重复替换。清理失败不改变 succeeded；下次归档前再尝试一次，持续失败仍归档，按记录人工定点处理，不阻塞后续更新、不扫描清理历史 previous。已归档的旧任务与实验/手工维护容器不追溯删除。本逻辑由外部执行器执行，部署者须更新实际调用的脚本；仅更新业务镜像不会替换外部执行器。协议能力版本仍为 u6-1。
 
 `needs_attention` 保留服务端活动占位。保存日志、记录、新旧镜像、备份及数据库现场，通过下述受权人工结案。禁止删除记录、手工改库或用新 token 冒认原执行器解除占位。
 
@@ -114,7 +116,7 @@ sudo -E python3 scripts/update/test-docker.py
 
 F1–F6 补验包含真实 network connect、自定义 hostname/domain 拒绝及 host 成功、两种多副本文件加单副本覆盖启动、create 后 SIGKILL/回执丢失重试与他人/运行中探测保留、真实 UID/mode/链接与 UNIX/Engine socket 检查，以及异常首次写入 SIGKILL 后真实协调数据库 needs_attention/活动占位。均使用空数据隔离实例，不操作 NAS。
 
-隔离数据与实际生产业务恢复、NAS scheduler 接入分别验收。U5 已接后台恢复和能力判断，U6 接入 Dagu 容器调度；旧自更新入口仍 501/410，不作为 fallback。
+隔离数据、实际生产业务恢复及部署者选择的调度接入分别验收。后台恢复、能力检查和可选认证唤醒保持；旧自更新入口仍 501/410，不作为 fallback。docs 中既有个人部署验收报告是历史证据，不作为当前开源调度器接入说明。
 
 ## U5 后台与能力检查
 

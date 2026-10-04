@@ -51,10 +51,6 @@ jobs:
           go build -o update-tool ./cmd/update-tool
       - name: Real registry and Docker/Compose replacement
         run: sudo -E python3 scripts/update/test-docker.py
-      - name: Rebuildable Dagu container and scheduled recovery
-        run: |
-          sudo -E docker build -f scripts/update/Dockerfile.dagu -t echo-noise-update:u6-1 .
-          sudo -E python3 scripts/update/test-dagu.py
       - name: Three revisions and real channel publication
         env:
           CGO_ENABLED: '0'

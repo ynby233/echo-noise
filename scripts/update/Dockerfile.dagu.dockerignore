@@ -1,5 +1,0 @@
-# This image only needs the executor; the app's root ignore excludes scripts/.
-**
-!scripts/
-!scripts/update/
-!scripts/update/executor.py
