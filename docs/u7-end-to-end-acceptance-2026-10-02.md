@@ -1,5 +1,7 @@
 # U7：直接更新全链实验与交付验收
 
+> 2026-10-04 接入范围调整：本文保留历史验收证据；Dagu 专用镜像、任务示例、接入说明及 CI 已从当前开源交付移除。下列旧实现链接固定到历史提交，不能作为当前部署步骤。当前接入使用 [通用 API/钩子和执行器](../scripts/update/README.md)，个人部署维护在私有环境。
+
 按 [实施交接第 12 节](direct-update-implementation-handoff-2026-09-11.md#12-u7验收矩阵与交付) 执行。起始 HEAD `45b7b273e41e83e8f24e222edc27192c52264012`，origin/main 已通过 GitHub API 和 fetch 刷新核对；保留未跟踪的前期评估文档。U1–U6 已交付行为不重做，不重新配对或修改 NAS 业务部署。
 
 ## 结论与边界
@@ -62,7 +64,7 @@ Docker stats 实测应用内存 106.6–110.8 MiB、期末 109.3 MiB，25 个进
 
 ## 运维与剩余现场操作
 
-复用 [主执行器说明](../scripts/update/README.md) 和 [Dagu 重建说明](../scripts/update/dagu.md)。每次 Dagu 重建保留 PID/security/capability、同绝对路径只读业务/Engine 挂载、独立可写控制和持久目录；仅网页/容器 running 不足，必须看到真实近期部署检查通过。Webhook 和 schedule 是同一任务通道的触发，应用停机时仍按原 active.json 恢复。
+复用 [主执行器说明](../scripts/update/README.md) 和 [Dagu 重建说明](https://github.com/ynby233/echo-noise/blob/fc0a89aadd94bd6c8bf178092dd381c48b017913/scripts/update/dagu.md)。每次 Dagu 重建保留 PID/security/capability、同绝对路径只读业务/Engine 挂载、独立可写控制和持久目录；仅网页/容器 running 不足，必须看到真实近期部署检查通过。Webhook 和 schedule 是同一任务通道的触发，应用停机时仍按原 active.json 恢复。
 
 故障先保留任务、原记录、目标/旧 image ID、image 真源和备份。新版曾启动或可能写库时不自动启动旧容器、回滚数据库或重新安装。修复目标后执行原任务 `reconcile --outcome verify`；撤销/过期或记录丢失时，按 README 受权停止写入者、禁用 restart，再执行离线失败结案。正常轮换与撤销/过期不能混同。结案后才能创建下一条更新。
 

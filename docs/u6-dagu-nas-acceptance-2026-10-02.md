@@ -1,12 +1,14 @@
 # U6：Dagu 容器与 NAS 接入验收
 
+> 2026-10-04 接入范围调整：本文保留历史验收证据；Dagu 专用镜像、任务示例、接入说明及 CI 已从当前开源交付移除。下列旧实现链接固定到历史提交，不能作为当前部署步骤。当前接入使用 [通用 API/钩子和执行器](../scripts/update/README.md)，个人部署维护在私有环境。
+
 ## 交付范围
 
 按 [实施交接第 11 节](direct-update-implementation-handoff-2026-09-11.md#11-u6dagu-容器执行与-nas-首次接入) 实施。保留 U1–U5 的渠道、任务协议、固定 ID 1 权限、近期能力判断、数据保护、恢复记录及人工结案；未改前端。Dagu 是可选接入，未配置唤醒仍可主动领取，不引入 fnOS 任务、任意命令平台或自动安装。
 
 代码分为容器交付 `22c88c6f`、已复现 NAS 配置修复与创建后唤醒 `6fd49a5d`、权限回归 `805ba575`、完整仓库构建上下文修复 `ba4ef8b7`。最终产品代码为 `ba4ef8b7f493f39d2378f01ba0eb691f5721a6f2`；后续验收文档提交不改变镜像运行身份。所有提交推送至 origin/main，未发布正式 Release 或标签。
 
-交付 [派生镜像](../scripts/update/Dockerfile.dagu)、专用 Docker ignore、[Compose 示例](../scripts/update/dagu.compose.example.yml)、[固定任务](../scripts/update/dagu.example.yaml) 和 [配对/恢复说明](../scripts/update/dagu.md)。实测 Dagu 2.18.1，基础镜像固定版本与 digest；Python 3.12.3、curl 8.5.0、Docker CLI 28.5.1、Compose 2.40.3 可在重建后恢复。产品执行器 u6-1 兼容原 u3/u4/u5 恢复记录。
+交付 [派生镜像](https://github.com/ynby233/echo-noise/blob/fc0a89aadd94bd6c8bf178092dd381c48b017913/scripts/update/Dockerfile.dagu)、专用 Docker ignore、[Compose 示例](https://github.com/ynby233/echo-noise/blob/fc0a89aadd94bd6c8bf178092dd381c48b017913/scripts/update/dagu.compose.example.yml)、[固定任务](https://github.com/ynby233/echo-noise/blob/fc0a89aadd94bd6c8bf178092dd381c48b017913/scripts/update/dagu.example.yaml) 和 [配对/恢复说明](https://github.com/ynby233/echo-noise/blob/fc0a89aadd94bd6c8bf178092dd381c48b017913/scripts/update/dagu.md)。实测 Dagu 2.18.1，基础镜像固定版本与 digest；Python 3.12.3、curl 8.5.0、Docker CLI 28.5.1、Compose 2.40.3 可在重建后恢复。产品执行器 u6-1 兼容原 u3/u4/u5 恢复记录。
 
 ## 实现与真实差异
 

@@ -183,7 +183,7 @@ node scripts/update-panel.browser.cjs
 
 U5 浏览器入口 `node scripts/update-panel.browser.cjs` 使用真实生产 Vue 组件、隔离状态 API 和 Chromium，覆盖两渠道空态/失败、安装条件、一次显示凭据、草稿确认、连点、创建响应丢失、停机重连、清缓存换浏览器任务恢复、人工处理占位、成功/失败、委派权限及 320/390/768/1440 明暗主题。它验证前端实际行为；真实容器替换由独立执行器 workflow 验证，NAS 接入留给 U6。
 
-2026-10-02 U6 已完成：复用用户现有 Dagu 2.18.1，执行器 u6-1 的可重建环境、宿主路径/磁盘/进程视图、固定认证唤醒和分钟检查/领取/恢复已通过隔离及 NAS 后台完整更新。保留原 claim/events、flock、active.json 和三分钟能力窗口；业务与 Engine 根只读挂载，独立控制目录持久化。交付 [Dagu 说明](../scripts/update/dagu.md)，容器验收入口 `sudo -E python3 scripts/update/test-dagu.py`（先编译 README 中 fixture/update-tool 并构建派生镜像），CI 同时保留原 `test-docker.py` 全部回归。实测 NAS 默认 AppArmor、私有文件及固定主机名差异和处理边界见 [U6 验收报告](u6-dagu-nas-acceptance-2026-10-02.md)。下一阶段 U7 从全链矩阵接手，不重新初始化配对或退回原计划。
+2026-10-02 U6 已完成：复用用户现有 Dagu 2.18.1，执行器 u6-1 的可重建环境、宿主路径/磁盘/进程视图、固定认证唤醒和分钟检查/领取/恢复已通过隔离及 NAS 后台完整更新。保留原 claim/events、flock、active.json 和三分钟能力窗口；业务与 Engine 根只读挂载，独立控制目录持久化。交付 [Dagu 说明](https://github.com/ynby233/echo-noise/blob/fc0a89aadd94bd6c8bf178092dd381c48b017913/scripts/update/dagu.md)，容器验收入口 `sudo -E python3 scripts/update/test-dagu.py`（先编译 README 中 fixture/update-tool 并构建派生镜像），CI 同时保留原 `test-docker.py` 全部回归。实测 NAS 默认 AppArmor、私有文件及固定主机名差异和处理边界见 [U6 验收报告](u6-dagu-nas-acceptance-2026-10-02.md)。下一阶段 U7 从全链矩阵接手，不重新初始化配对或退回原计划。
 
 U7 的矩阵、故障注入、实际运行证据和未验现场项见 [U7 验收报告](u7-end-to-end-acceptance-2026-10-02.md)。现有 `test-docker.py` 增加真实 registry 超时、新版启动退出、迁移部分写入后失败、运行提交/实例不匹配，断言保留备份与人工处理占位、旧容器不自动重启、修复后同目标显式结案；`test-dagu.py` 保留分钟/唤醒/漏通知/重建全链。发布策略运行检查为 `sh scripts/release/test-release-policy.sh`，已加入执行器 workflow；缓存镜像的 `RepoDigests` 顺序不能当作刚推送标签的身份。上述引擎脚本含容器替换和故障操作，只在独立 Engine/runner 运行，禁止将它们直接对准个人业务 Engine。
 
@@ -206,3 +206,5 @@ U7 的矩阵、故障注入、实际运行证据和未验现场项见 [U7 验收
 ## 7. 清理规则
 
 临时数据库、Blob、浏览器 profile、构建对照和性能产物放在本次独立目录，不提交到生产路径。源码只保留能稳定复现真实失败的测试；一次性日志、overlay 探针和临时对照组件验证结束后删除。删除或移动 Windows 路径前先核实绝对路径，禁止触碰共享或 NAS 数据。
+
+2026-10-04 更新接入范围调整：开源保留 [API、认证唤醒钩子与通用 Docker/Compose 执行器](../scripts/update/README.md)，移除 Dagu 专用镜像、任务/Compose 示例、接入文档及专用 CI。上文 Dagu/NAS 验收为历史证据，其旧实现链接固定到历史提交；个人部署和清理策略在私有环境维护。

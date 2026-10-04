@@ -1,5 +1,7 @@
 # U7 后续推进交接：恢复超时定位与剩余验收
 
+> 2026-10-04 接入范围调整：本文保留历史验收证据；Dagu 专用镜像、任务示例、接入说明及 CI 已从当前开源交付移除。下列旧实现链接固定到历史提交，不能作为当前部署步骤。当前接入使用 [通用 API/钩子和执行器](../scripts/update/README.md)，个人部署维护在私有环境。
+
 日期：2026-10-02。用途：交给继续推进 U7 的会话，直接排查、修复和补验收。
 
 2026-10-03 后续结果见 [U7 补修与验收](u7-recovery-and-acceptance-2026-10-02.md)：首要重建超时已在同种 NAS 环境定位并三次复验，真实备份恢复产品问题已最小修复，真实渠道/发布 shell 矩阵及精确提交自动 CI 通过；用户已明确授权个人业务升级，69535120 现场同实例更新及数据/浏览器核验通过。本文保留开工时的要求与授权边界；继续时先读补修结果，不重做已完成实验，也不把剩余现场/远端项记为已验。
@@ -44,7 +46,7 @@ U7 已合入的修改主要是 fixture、故障实验和 CI：registry 的刚推
 | --- | --- |
 | 历史实验及未通过项 | [U7 验收报告](u7-end-to-end-acceptance-2026-10-02.md)。 |
 | 原产品决策和矩阵 | [总实施交接](direct-update-implementation-handoff-2026-09-11.md)，重点第 0、1、11、12 节。 |
-| 真实执行及恢复规则 | [执行器说明](../scripts/update/README.md)、[Dagu 说明](../scripts/update/dagu.md)。 |
+| 真实执行及恢复规则 | [执行器说明](../scripts/update/README.md)、[Dagu 说明](https://github.com/ynby233/echo-noise/blob/fc0a89aadd94bd6c8bf178092dd381c48b017913/scripts/update/dagu.md)。 |
 | 恢复状态与按序补报 | `scripts/update/executor.py`：`run`、`flush`、`load_record`、`target_running`、`reconcile` 及调用链。 |
 | 重建实验与停顿注入 | `scripts/update/test-dagu.py`、`scripts/update/fixture/container-executor.py`。 |
 | 真实引擎/registry/数据实验 | `scripts/update/test-docker.py`、`scripts/update/fixture/main.go`。 |
