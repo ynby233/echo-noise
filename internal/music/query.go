@@ -85,8 +85,14 @@ func (s *Service) GetAdminConfig(ctx context.Context) (AdminConfig, error) {
 	}
 	s.mu.Lock()
 	ready := s.toolsReady
+	toolStatus := "checking"
+	if ready {
+		toolStatus = "ready"
+	} else if s.toolError != "" {
+		toolStatus = "unavailable"
+	}
 	s.mu.Unlock()
-	return AdminConfig{Version: cfg.Version, FrontendSettings: frontendSettings(site, cfg.Source, false), ScanIntervalMinutes: cfg.ScanIntervalMinutes, Playlist: playlist.Items, Scan: s.GetScanStatus(), RootReadable: rootErr == nil, ToolsReady: ready, Counts: counts}, nil
+	return AdminConfig{Version: cfg.Version, FrontendSettings: frontendSettings(site, cfg.Source, false), ScanIntervalMinutes: cfg.ScanIntervalMinutes, Playlist: playlist.Items, Scan: s.GetScanStatus(), RootReadable: rootErr == nil, ToolsReady: ready, ToolsStatus: toolStatus, Counts: counts}, nil
 }
 
 func (s *Service) ListLibrary(ctx context.Context, q LibraryQuery) (LibraryPage, error) {

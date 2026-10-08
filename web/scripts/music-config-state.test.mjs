@@ -484,3 +484,24 @@ test('public local projection keeps literal metadata and segment representation,
   harness.window.dispatchEvent(new Event('focus')); await harness.advance(60000)
   assert.equal(calls.length, stopped); assert.equal(harness.timers.size, 0)
 })
+
+test('startup tool checking refreshes until ready without rescan or rebasing a draft', async t => {
+  let checked = false
+  const panel = workbench({ io: async call => {
+    if (call.url.pathname.endsWith('/library')) return ok({ items: [track('b')], total: 1, page: 1, pageSize: 25 })
+    if (call.url.pathname.endsWith('/refresh-status')) return ok({ state: 'succeeded' })
+    return ok(config({ toolsReady: checked, toolsStatus: checked ? 'ready' : 'checking' }))
+  } })
+  t.after(panel.dispose)
+  await panel.mount()
+  assert.equal(panel.config.value.toolsStatus, 'checking')
+  panel.addTrack(track('b'))
+  checked = true
+  await panel.advance(2000)
+  assert.equal(panel.config.value.toolsStatus, 'ready')
+  assert.equal(panel.config.value.toolsReady, true)
+  assert.deepEqual(plain(panel.draft.value.trackIDs), ['a', 'b'])
+  assert.equal(panel.draft.value.version, 7)
+  assert.equal(panel.writes().length, 0)
+  assert.equal(panel.timers.size, 0)
+})

@@ -28,6 +28,10 @@ func (f *fixtureTools) Run(ctx context.Context, executable string, args []string
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	if len(args) > 1 && args[1] == "-encoders" {
+		_, err := io.WriteString(out, "libmp3lame")
+		return err
+	}
 	if strings.Contains(executable, "ffprobe") {
 		f.mu.Lock()
 		f.probes++
@@ -259,4 +263,33 @@ func TestManualRefreshSingleRunAndMissingRootKeepsIndex(t *testing.T) {
 	if count != int64(len(tracks)) {
 		t.Fatal("failed scan replaced index")
 	}
+}
+
+func TestStartChecksToolsWithoutRescanningFreshIndex(t *testing.T) {
+	s, _ := musicFixture(t)
+	now := time.Now().UTC()
+	if err := s.db.Model(&models.MusicScanState{}).Where("id = ?", 1).Updates(map[string]interface{}{
+		"state": "succeeded", "run_id": "previous-success", "last_success_at": now, "next_auto_scan_at": now.Add(time.Hour),
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	s.toolsReady = false
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	s.Start(ctx)
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		config, err := s.GetAdminConfig(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if config.ToolsReady {
+			if config.Scan.RunID != "previous-success" || config.Scan.State != "succeeded" {
+				t.Fatal("fresh index was unnecessarily replaced", config.Scan)
+			}
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatal("installed media tools stayed unavailable after restart")
 }

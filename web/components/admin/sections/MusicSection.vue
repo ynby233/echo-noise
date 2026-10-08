@@ -32,7 +32,7 @@
           <div class="music-toolbar">
             <span class="music-badge">{{ config?.rootReadable ? '目录可读' : '目录不可读' }}</span>
             <span class="music-badge">{{ scanLabel }}</span>
-            <span v-if="!config?.toolsReady" class="music-badge">音频解析工具不可用</span>
+            <span v-if="!config?.toolsReady" class="music-badge">{{ config?.toolsStatus === 'checking' ? '正在检查音频解析工具' : '音频解析工具不可用' }}</span>
             <span>{{ config?.counts.available ?? 0 }} 首可用 · {{ config?.counts.unavailable ?? 0 }} 首失效</span>
             <span v-if="config?.scan.state === 'running'">已处理 {{ config.scan.processed ?? 0 }} 首</span>
           </div>

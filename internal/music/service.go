@@ -83,6 +83,9 @@ func (s *Service) Start(ctx context.Context) {
 			})
 			return
 		}
+		// Tool availability is process state, independent of the persisted scan schedule.
+		// Probe after every restart even when the last successful index is still fresh.
+		_ = s.checkTools(ctx)
 		s.autoScan()
 		ticker := time.NewTicker(time.Minute)
 		defer ticker.Stop()

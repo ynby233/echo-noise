@@ -32,6 +32,7 @@ export interface AdminConfig {
   scan: ScanStatus
   rootReadable: boolean
   toolsReady: boolean
+  toolsStatus: 'checking' | 'ready' | 'unavailable'
   counts: { total: number, available: number, unavailable: number }
 }
 export const musicDefaults = {
@@ -93,6 +94,7 @@ function parseConfig(input: unknown): AdminConfig {
   for (const key of ['total', 'available', 'unavailable']) if (!Number.isSafeInteger(counts[key]) || Number(counts[key]) < 0) throw new Error('音乐配置响应无效')
   return { version: Number(data.version), frontendSettings: normalizeSettings(data.frontendSettings as Record<string, unknown>), scanIntervalMinutes: Number(data.scanIntervalMinutes),
     playlist: data.playlist.map(parseTrack), scan: parseScan(data.scan), rootReadable: data.rootReadable, toolsReady: data.toolsReady,
+    toolsStatus: data.toolsStatus === 'checking' || data.toolsStatus === 'ready' || data.toolsStatus === 'unavailable' ? data.toolsStatus : data.toolsReady ? 'ready' : 'unavailable',
     counts: { total: Number(counts.total), available: Number(counts.available), unavailable: Number(counts.unavailable) } }
 }
 function parseLibrary(input: unknown) {
@@ -185,7 +187,7 @@ export function useMusicWorkbench(options: Options) {
   }
   const schedulePoll = () => {
     clearTimeout(poll); poll = undefined
-    if (active && options.canView.value && config.value?.scan.state === 'running') poll = window.setTimeout(() => { void pollScan() }, 2000)
+    if (active && options.canView.value && (config.value?.scan.state === 'running' || config.value?.toolsStatus === 'checking')) poll = window.setTimeout(() => { void pollScan() }, 2000)
   }
   const loadConfig = async ({ discard = false }: { discard?: boolean } = {}) => {
     if (!active || disposed || !options.canView.value || saving.value) return
@@ -227,7 +229,7 @@ export function useMusicWorkbench(options: Options) {
       if (!valid(epoch) || sequence !== sequences.scan) return
       const completed = config.value?.scan.state === 'running' && scan.state !== 'running'
       if (config.value) config.value.scan = scan
-      if (completed) { await loadConfig(); await loadLibrary() }
+      if (completed || config.value?.toolsStatus === 'checking') { await loadConfig(); if (completed) await loadLibrary() }
     } catch (cause: unknown) {
       if (valid(epoch) && !(cause instanceof Error && cause.name === 'AbortError')) error.value = cause instanceof Error ? cause.message : '获取刷新状态失败'
     } finally { if (valid(epoch)) schedulePoll() }

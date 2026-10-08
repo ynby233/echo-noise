@@ -117,6 +117,7 @@ type AdminConfig struct {
 	Scan                ScanStatus             `json:"scan"`
 	RootReadable        bool                   `json:"rootReadable"`
 	ToolsReady          bool                   `json:"toolsReady"`
+	ToolsStatus         string                 `json:"toolsStatus"`
 	Counts              LibraryCounts          `json:"counts"`
 }
 
