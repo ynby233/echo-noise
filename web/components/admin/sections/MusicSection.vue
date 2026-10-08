@@ -38,6 +38,7 @@
           </div>
           <p class="text-xs mt-2" :class="theme.mutedText">最近成功：{{ displayTime(config?.scan.lastSuccessAt) }} · 下次自动刷新：{{ displayTime(config?.scan.nextAutoScanAt) }}</p>
           <p v-if="scanError" class="text-sm mt-2" role="status">{{ scanError }}</p>
+          <p v-if="config?.scan.metadataFailed || config?.scan.invalidCUE" class="text-xs mt-2" :class="theme.mutedText" role="status">元数据读取失败 {{ config.scan.metadataFailed ?? 0 }} 首 · CUE 无法解析或引用音源缺失 {{ config.scan.invalidCUE ?? 0 }} 份。其他可用歌曲已正常收录。</p>
           <p v-if="ready && config?.rootReadable && config?.toolsReady && config.counts.total === 0 && config.scan.state !== 'running'" class="text-sm mt-2">目录中尚无已索引歌曲，可刷新目录后再选择。</p>
           <div class="music-toolbar mt-3">
             <label class="admin-labeled-field music-interval"><span>自动刷新周期</span><USelect v-model="draft.scanIntervalMinutes" class="admin-select" :options="intervalOptions" :disabled="writeDisabled" /></label>
@@ -208,7 +209,7 @@ const dropTrack = (index: number, event: DragEvent) => {
 const displayTime = (value: unknown) => {
   if (typeof value !== 'string' || !value) return '暂无'
   const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? '暂无' : date.toLocaleString()
+  return Number.isNaN(date.getTime()) || date.getUTCFullYear() < 1970 ? '暂无' : date.toLocaleString()
 }
 const duration = (milliseconds: number) => {
   const seconds = Math.max(0, Math.floor(milliseconds / 1000))

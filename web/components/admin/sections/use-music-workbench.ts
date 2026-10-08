@@ -19,6 +19,8 @@ export interface ScanStatus {
   lastSuccessAt?: string | null
   nextAutoScanAt?: string | null
   processed?: number
+  invalidCUE?: number
+  metadataFailed?: number
   errorCode?: string
   [key: string]: unknown
 }
@@ -79,6 +81,8 @@ function parseScan(input: unknown): ScanStatus {
     lastSuccessAt: typeof data.lastSuccessAt === 'string' ? data.lastSuccessAt : null,
     nextAutoScanAt: typeof data.nextAutoScanAt === 'string' ? data.nextAutoScanAt : null,
     processed: typeof data.processed === 'number' ? data.processed : 0,
+    invalidCUE: Number.isSafeInteger(data.invalidCUE) && Number(data.invalidCUE) >= 0 ? Number(data.invalidCUE) : 0,
+    metadataFailed: Number.isSafeInteger(data.metadataFailed) && Number(data.metadataFailed) >= 0 ? Number(data.metadataFailed) : 0,
     errorCode: typeof data.errorCode === 'string' ? data.errorCode : '' }
 }
 function parseConfig(input: unknown): AdminConfig {

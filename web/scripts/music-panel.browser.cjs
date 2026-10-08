@@ -18,7 +18,7 @@ const { chromium } = require(playwrightModule)
 const id = n => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`
 const maliciousTitle = '<img src=x onerror="window.tagExecuted=true"> 中文 & 标签'
 const tracks = Array.from({ length: 55 }, (_, i) => ({ trackID: id(i + 1), title: i === 1 ? maliciousTitle : `歌曲 ${String(i + 1).padStart(2, '0')} ${'长标题'.repeat(15)}`, artist: i === 1 ? '<script>bad()</script>' : '艺术家', album: '专辑 & 标签', durationMS: 3000, format: 'flac', coverURL: i === 2 ? 'https://evil.invalid/x.png' : `/fixture/api/music/library/${id(i + 1)}/cover`, cueTrackNumber: i === 1 ? 2 : 0, lyricsAvailable: i % 2 === 0, available: i !== 3 }))
-let config = { version: 7, frontendSettings: { musicSource: 'local', musicEnabled: true }, scanIntervalMinutes: 60, playlist: [tracks[0]], scan: { state: 'succeeded' }, rootReadable: true, toolsReady: true, counts: { total: 55, available: 54, unavailable: 1 } }
+let config = { version: 7, frontendSettings: { musicSource: 'local', musicEnabled: true }, scanIntervalMinutes: 60, playlist: [tracks[0]], scan: { state: 'succeeded', invalidCUE: 2, metadataFailed: 1, nextAutoScanAt: '0001-01-01T00:00:00Z' }, rootReadable: true, toolsReady: true, counts: { total: 55, available: 54, unavailable: 1 } }
 const calls = [], writes = []
 let rejectSave = false, readFailure = false
 const css = []
@@ -95,6 +95,9 @@ async function main() {
     const row = n => section.locator(`[data-track-id="${id(n)}"]`)
     await row(2).waitFor(); await button('music-save').waitFor({ state: 'visible' })
     await page.waitForFunction(() => !document.querySelector('[data-testid="music-save"]').disabled)
+    assert((await section.innerText()).includes('CUE 无法解析或引用音源缺失 2 份'))
+    assert((await section.innerText()).includes('元数据读取失败 1 首'))
+    assert((await section.innerText()).includes('下次自动刷新：暂无'), 'unset timestamp must not render year 1')
     assert.equal(await row(2).locator('.music-track-title').textContent(), maliciousTitle)
     assert.equal(await row(2).locator('script, .music-track-details img').count(), 0)
     assert.equal(await page.evaluate(() => Boolean(window.tagExecuted)), false)

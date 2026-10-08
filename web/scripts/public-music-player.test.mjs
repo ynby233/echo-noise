@@ -100,6 +100,7 @@ assert.match(indexPage, /musicEnabled: !!publicMusic\.state\.value\?\.frontendSe
 assert.match(reconcileBody, /const cfg = musicPlaybackConfig\.value/, 'reconcile must use the same public playback config as visibility')
 assert.match(reconcileBody, /const sourceStillCurrent = [^\n]*generation === nmpGeneration[^\n]*resolveMusicSource\(musicPlaybackConfig\.value\)\.kind === source\.kind/, 'async startup must reject stale or replaced sources')
 assert.match(reconcileBody, /await syncNmpSource\(el, player, source\)\s+if \(!sourceStillCurrent\(\)\) return false/, 'source completion must be guarded before theme or autoplay')
+assert.match(indexPage, /const getNmpPlayer[\s\S]*?nmpInstance = player[\s\S]*?await waitForNmpPlayerReady\(player\)[\s\S]*?if \(player.ready\) await player.ready/, 'initializing player must be held before awaits so source changes can cancel it')
 assert.match(indexPage, /cssCandidates = source === 'local' \? \[NMP_LOCAL_CSS\]/, 'local music must use bundled styles')
 assert.match(indexPage, /jsCandidates = source === 'local' \? \[NMP_LOCAL_JS\]/, 'local music must use the bundled player with the local source API')
 assert.match(indexPage, /source === 'local' && !loaded\.supportsLocalPlaylist/, 'local music must reject a player without the local source API')

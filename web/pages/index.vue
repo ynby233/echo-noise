@@ -1726,6 +1726,7 @@ const clearNmpRuntime = () => {
   const el = document.querySelector('.netease-mini-player') as any
   if (!el) return
   const player = el.neteasePlayer || el._neteasePlayer
+  try { player?.destroy?.() } catch {}
   try { player?.pause?.() } catch {}
   try { player?.audio?.pause?.() } catch {}
   try { el.removeAttribute('data-autoplay-tried') } catch {}
@@ -1831,9 +1832,9 @@ const getNmpPlayer = async (el: any, NMP: any) => {
   if (player) {
     try { el.neteasePlayer = player } catch {}
     try { el._neteasePlayer = player } catch {}
+    nmpInstance = player
     await waitForNmpPlayerReady(player)
     if (player.ready) await player.ready
-    nmpInstance = player
   }
   return player
 }
