@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 func MigrateDB(db *gorm.DB) error {
@@ -22,14 +23,14 @@ func MigrateDB(db *gorm.DB) error {
 	case "postgres":
 		err = db.Set("gorm:table_options", "").
 			Set("gorm:varchar_size", 255).
-			AutoMigrate(&User{}, &Message{}, &CloudAttachmentObject{}, &AttachmentBlob{}, &AttachmentReference{}, &LocalAttachmentGrant{}, &Comment{}, &UserNotification{}, &PasswordAlertCleanupTask{}, &WebPushSubscription{}, &WebPushPreference{}, &WebPushDelivery{}, &Announcement{}, &AnnouncementRead{}, &AnnouncementPushDelivery{}, &Setting{}, &SiteConfig{}, &NotifyConfig{}, &MessageLike{}, &UserLifeCountdownConfig{}, &UserFrontendPreference{}, &RegistrationApplication{}, &RegistrationApplicationSequence{}, &VoceChatProvisioningRun{}, &VoceChatProvisioningTask{}, &VoceChatContactCache{}, &FriendLink{}, &FriendLinkApply{}, &SecurityAttackLog{}, &SecurityIPBan{}, &SecurityConfig{}, &SecurityLoginAudit{}, &LoginAuditConfig{}, &SecurityAccessLog{}, &SecuritySiteVisitLog{}, &AdminCapabilityGrant{}, &AdminAuditLog{}, &AdminAuditConfig{}, &UpdatePreference{}, &UpdateExecutorCredential{}, &UpdateTask{}, &UpdateTaskEvent{})
+			AutoMigrate(&User{}, &Message{}, &CloudAttachmentObject{}, &AttachmentBlob{}, &AttachmentReference{}, &LocalAttachmentGrant{}, &Comment{}, &UserNotification{}, &PasswordAlertCleanupTask{}, &WebPushSubscription{}, &WebPushPreference{}, &WebPushDelivery{}, &Announcement{}, &AnnouncementRead{}, &AnnouncementPushDelivery{}, &Setting{}, &SiteConfig{}, &NotifyConfig{}, &MessageLike{}, &UserLifeCountdownConfig{}, &UserFrontendPreference{}, &RegistrationApplication{}, &RegistrationApplicationSequence{}, &VoceChatProvisioningRun{}, &VoceChatProvisioningTask{}, &VoceChatContactCache{}, &FriendLink{}, &FriendLinkApply{}, &SecurityAttackLog{}, &SecurityIPBan{}, &SecurityConfig{}, &SecurityLoginAudit{}, &LoginAuditConfig{}, &SecurityAccessLog{}, &SecuritySiteVisitLog{}, &AdminCapabilityGrant{}, &AdminAuditLog{}, &AdminAuditConfig{}, &UpdatePreference{}, &UpdateExecutorCredential{}, &UpdateTask{}, &UpdateTaskEvent{}, &MusicConfig{}, &MusicTrack{}, &MusicPlaylistItem{}, &MusicScanState{})
 	case "mysql":
 		err = db.Set("gorm:table_options", "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci").
 			Set("gorm:varchar_size", 191).
-			AutoMigrate(&User{}, &Message{}, &CloudAttachmentObject{}, &AttachmentBlob{}, &AttachmentReference{}, &LocalAttachmentGrant{}, &Comment{}, &UserNotification{}, &PasswordAlertCleanupTask{}, &WebPushSubscription{}, &WebPushPreference{}, &WebPushDelivery{}, &Announcement{}, &AnnouncementRead{}, &AnnouncementPushDelivery{}, &Setting{}, &SiteConfig{}, &NotifyConfig{}, &MessageLike{}, &UserLifeCountdownConfig{}, &UserFrontendPreference{}, &RegistrationApplication{}, &RegistrationApplicationSequence{}, &VoceChatProvisioningRun{}, &VoceChatProvisioningTask{}, &VoceChatContactCache{}, &FriendLink{}, &FriendLinkApply{}, &SecurityAttackLog{}, &SecurityIPBan{}, &SecurityConfig{}, &SecurityLoginAudit{}, &LoginAuditConfig{}, &SecurityAccessLog{}, &SecuritySiteVisitLog{}, &AdminCapabilityGrant{}, &AdminAuditLog{}, &AdminAuditConfig{}, &UpdatePreference{}, &UpdateExecutorCredential{}, &UpdateTask{}, &UpdateTaskEvent{})
+			AutoMigrate(&User{}, &Message{}, &CloudAttachmentObject{}, &AttachmentBlob{}, &AttachmentReference{}, &LocalAttachmentGrant{}, &Comment{}, &UserNotification{}, &PasswordAlertCleanupTask{}, &WebPushSubscription{}, &WebPushPreference{}, &WebPushDelivery{}, &Announcement{}, &AnnouncementRead{}, &AnnouncementPushDelivery{}, &Setting{}, &SiteConfig{}, &NotifyConfig{}, &MessageLike{}, &UserLifeCountdownConfig{}, &UserFrontendPreference{}, &RegistrationApplication{}, &RegistrationApplicationSequence{}, &VoceChatProvisioningRun{}, &VoceChatProvisioningTask{}, &VoceChatContactCache{}, &FriendLink{}, &FriendLinkApply{}, &SecurityAttackLog{}, &SecurityIPBan{}, &SecurityConfig{}, &SecurityLoginAudit{}, &LoginAuditConfig{}, &SecurityAccessLog{}, &SecuritySiteVisitLog{}, &AdminCapabilityGrant{}, &AdminAuditLog{}, &AdminAuditConfig{}, &UpdatePreference{}, &UpdateExecutorCredential{}, &UpdateTask{}, &UpdateTaskEvent{}, &MusicConfig{}, &MusicTrack{}, &MusicPlaylistItem{}, &MusicScanState{})
 	default: // sqlite
 		err = db.Set("gorm:varchar_size", 255).
-			AutoMigrate(&User{}, &Message{}, &CloudAttachmentObject{}, &AttachmentBlob{}, &AttachmentReference{}, &LocalAttachmentGrant{}, &Comment{}, &UserNotification{}, &PasswordAlertCleanupTask{}, &WebPushSubscription{}, &WebPushPreference{}, &WebPushDelivery{}, &Announcement{}, &AnnouncementRead{}, &AnnouncementPushDelivery{}, &Setting{}, &SiteConfig{}, &NotifyConfig{}, &MessageLike{}, &UserLifeCountdownConfig{}, &UserFrontendPreference{}, &RegistrationApplication{}, &RegistrationApplicationSequence{}, &VoceChatProvisioningRun{}, &VoceChatProvisioningTask{}, &VoceChatContactCache{}, &FriendLink{}, &FriendLinkApply{}, &SecurityAttackLog{}, &SecurityIPBan{}, &SecurityConfig{}, &SecurityLoginAudit{}, &LoginAuditConfig{}, &SecurityAccessLog{}, &SecuritySiteVisitLog{}, &AdminCapabilityGrant{}, &AdminAuditLog{}, &AdminAuditConfig{}, &UpdatePreference{}, &UpdateExecutorCredential{}, &UpdateTask{}, &UpdateTaskEvent{})
+			AutoMigrate(&User{}, &Message{}, &CloudAttachmentObject{}, &AttachmentBlob{}, &AttachmentReference{}, &LocalAttachmentGrant{}, &Comment{}, &UserNotification{}, &PasswordAlertCleanupTask{}, &WebPushSubscription{}, &WebPushPreference{}, &WebPushDelivery{}, &Announcement{}, &AnnouncementRead{}, &AnnouncementPushDelivery{}, &Setting{}, &SiteConfig{}, &NotifyConfig{}, &MessageLike{}, &UserLifeCountdownConfig{}, &UserFrontendPreference{}, &RegistrationApplication{}, &RegistrationApplicationSequence{}, &VoceChatProvisioningRun{}, &VoceChatProvisioningTask{}, &VoceChatContactCache{}, &FriendLink{}, &FriendLinkApply{}, &SecurityAttackLog{}, &SecurityIPBan{}, &SecurityConfig{}, &SecurityLoginAudit{}, &LoginAuditConfig{}, &SecurityAccessLog{}, &SecuritySiteVisitLog{}, &AdminCapabilityGrant{}, &AdminAuditLog{}, &AdminAuditConfig{}, &UpdatePreference{}, &UpdateExecutorCredential{}, &UpdateTask{}, &UpdateTaskEvent{}, &MusicConfig{}, &MusicTrack{}, &MusicPlaylistItem{}, &MusicScanState{})
 	}
 
 	if err != nil {
@@ -61,6 +62,13 @@ func MigrateDB(db *gorm.DB) error {
 
 	// 使用事务进行初始化操作
 	if err := db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&MusicConfig{ID: 1, Source: "netease", ScanIntervalMinutes: 60, Version: 1}).Error; err != nil {
+			return fmt.Errorf("initialize music config: %w", err)
+		}
+		if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&MusicScanState{ID: 1, State: "idle"}).Error; err != nil {
+			return fmt.Errorf("initialize music scan state: %w", err)
+		}
+
 		if err := migrateRuntimePolicyData(tx); err != nil {
 			return err
 		}

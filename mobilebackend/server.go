@@ -10,13 +10,16 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/rcy1314/echo-noise/config"
+	backupservice "github.com/rcy1314/echo-noise/internal/backup"
 	"github.com/rcy1314/echo-noise/internal/database"
+	"github.com/rcy1314/echo-noise/internal/music"
 	"github.com/rcy1314/echo-noise/internal/routers"
 	"github.com/rcy1314/echo-noise/internal/services"
 )
 
 var srv *http.Server
 var workerCancel context.CancelFunc
+var musicService *music.Service
 
 func ensureDirs() {
 	_ = os.MkdirAll("data", 0755)
@@ -53,6 +56,12 @@ func Start(workDir string) error {
 	}
 	workerCtx, cancelWorkers := context.WithCancel(context.Background())
 	workerCancel = cancelWorkers
+	excludedMusicRoots := make([]string, 0)
+	for _, root := range backupservice.DefaultLayout().Roots {
+		excludedMusicRoots = append(excludedMusicRoots, root.Path)
+	}
+	musicService = music.NewService(database.DB, music.Options{RootDir: "/app/music", CacheDir: filepath.Join("data", "music-cache"), ExcludedRoots: excludedMusicRoots})
+	musicService.Start(workerCtx)
 	services.StartLogRetentionWorker(workerCtx, database.DB)
 	mode := config.Config.Server.Mode
 	if mode == "debug" {
@@ -62,7 +71,7 @@ func Start(workDir string) error {
 	} else {
 		gin.SetMode(gin.DebugMode)
 	}
-	r := routers.SetupRouter()
+	r := routers.SetupRouter(musicService)
 	srv = &http.Server{
 		Addr:         config.Config.Server.Host + ":" + config.Config.Server.Port,
 		Handler:      r,
@@ -85,4 +94,11 @@ func Stop() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_ = srv.Shutdown(ctx)
+	if musicService != nil {
+		waitCtx, cancelWait := context.WithTimeout(context.Background(), 5*time.Second)
+		_ = musicService.Wait(waitCtx)
+		cancelWait()
+		musicService = nil
+	}
+	srv = nil
 }

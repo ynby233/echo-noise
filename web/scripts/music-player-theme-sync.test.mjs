@@ -1,6 +1,9 @@
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import strictAssert from 'node:assert/strict'
+import vm from 'node:vm'
+import ts from 'typescript'
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const homePage = readFileSync(join(root, 'pages/index.vue'), 'utf8')
@@ -51,5 +54,48 @@ assert(
     !homePage.includes("player.setTheme?.(theme === 'auto' ?"),
   'music player reconcile and theme observers must use the same immediate theme application path'
 )
+
+// Execute the page helpers so assertions cover their effect, not just spelling.
+const applyNmpThemeStart = homePage.indexOf('const applyNmpTheme =')
+const applyNmpThemeEnd = homePage.indexOf('const shouldShowMusicPlayer =', applyNmpThemeStart)
+strictAssert.ok(applyNmpThemeStart >= 0 && applyNmpThemeEnd > applyNmpThemeStart)
+const contentTheme = { value: 'light' }
+let htmlDark = false
+const attributes = new Map()
+const applied = []
+const player = { config: { theme: 'auto' }, setTheme: theme => applied.push(theme) }
+const element = {
+  getAttribute: name => attributes.get(name),
+  setAttribute: (name, value) => attributes.set(name, value),
+  neteasePlayer: player,
+}
+const sandbox = vm.createContext({
+  contentTheme, frontendConfig: { value: { musicTheme: 'dark' } },
+  document: {
+    documentElement: { classList: { contains: name => name === 'dark' && htmlDark } },
+    querySelector: () => element,
+  },
+})
+const helpers = ts.transpileModule(`${resolveNmpThemeBody}\n${homePage.slice(applyNmpThemeStart, applyNmpThemeEnd)}\nglobalThis.helpers = { resolveNmpTheme, applyNmpTheme }`, {
+  compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+}).outputText
+vm.runInContext(helpers, sandbox)
+const { resolveNmpTheme, applyNmpTheme } = sandbox.helpers
+strictAssert.equal(resolveNmpTheme({ musicTheme: 'dark' }), 'light')
+applyNmpTheme(element, { musicTheme: 'dark' }, player)
+strictAssert.equal(attributes.get('data-theme'), 'light')
+strictAssert.equal(player.config.theme, 'light')
+contentTheme.value = 'dark'
+applyNmpTheme()
+strictAssert.equal(attributes.get('data-theme'), 'dark')
+strictAssert.equal(player.config.theme, 'dark')
+contentTheme.value = 'light'
+htmlDark = true
+strictAssert.equal(resolveNmpTheme({ musicTheme: 'light' }), 'dark')
+htmlDark = false
+applyNmpTheme(element, { musicTheme: 'auto' }, player)
+strictAssert.equal(attributes.get('data-theme'), 'light')
+strictAssert.equal(player.config.theme, 'light')
+strictAssert.deepEqual(applied, ['light', 'dark', 'light'])
 
 console.log('music player theme sync checks passed')

@@ -9,6 +9,7 @@ const webRoot = join(repoRoot, 'web')
 const indexPage = await readFile(join(webRoot, 'pages/index.vue'), 'utf8')
 const router = await readFile(join(repoRoot, 'internal/routers/routers.go'), 'utf8')
 const settingService = await readSettingServiceSource()
+const publicMusicHook = await readFile(join(webRoot, 'composables/usePublicMusic.ts'), 'utf8')
 
 assert.match(
   router,
@@ -38,6 +39,7 @@ assert.ok(computedMatch, 'home page must define shouldShowMusicPlayer computed g
 const guardBody = computedMatch[1]
 
 assert.match(guardBody, /musicConfigLoaded\.value/, 'music player should wait until frontend config has loaded')
+assert.match(guardBody, /const cfg(?::\s*any)?\s*=\s*musicPlaybackConfig\.value/, 'visibility must use the authoritative public music playback config')
 assert.match(guardBody, /!!cfg\.musicEnabled/, 'music player should still respect the administrator enable switch')
 assert.match(guardBody, /source\.hasSource/, 'music player should require a configured playlist or song source')
 assert.match(guardBody, /musicHideOnMobile/, 'music player should still respect the mobile hiding switch')
@@ -75,7 +77,7 @@ assert.match(
 )
 assert.match(
   reconcileBody,
-  /syncNmpAttributes\(el, cfg\)[\s\S]*?loadNMPAssets\(\)/,
+  /syncNmpAttributes\(el, cfg\)[\s\S]*?loadNMPAssets\(source\.kind\)/,
   'the reconciler must write public music attributes before loading the self-initializing NMP script'
 )
 assert.match(
@@ -90,9 +92,25 @@ assert.match(
 )
 assert.match(
   indexPage,
+  /const\s+syncNmpSource[\s\S]*?if \(source\.kind === 'local'\)[\s\S]*?await player\.setLocalPlaylist\(source\.tracks, sourceKey\)[\s\S]*?return !!player\.currentSong/,
+  'local playlists must synchronize through the local source API before the NetEase source branch'
+)
+assert.match(indexPage, /hasSource: kind === 'local' \? tracks\.length > 0 : !!playlistId \|\| !!songId/, 'local visibility requires tracks while legacy visibility requires a playlist or song')
+assert.match(indexPage, /musicEnabled: !!publicMusic\.state\.value\?\.frontendSettings\.musicEnabled/, 'playback must stop when public music authorization is absent')
+assert.match(reconcileBody, /const cfg = musicPlaybackConfig\.value/, 'reconcile must use the same public playback config as visibility')
+assert.match(reconcileBody, /const sourceStillCurrent = [^\n]*generation === nmpGeneration[^\n]*resolveMusicSource\(musicPlaybackConfig\.value\)\.kind === source\.kind/, 'async startup must reject stale or replaced sources')
+assert.match(reconcileBody, /await syncNmpSource\(el, player, source\)\s+if \(!sourceStillCurrent\(\)\) return false/, 'source completion must be guarded before theme or autoplay')
+assert.match(indexPage, /cssCandidates = source === 'local' \? \[NMP_LOCAL_CSS\]/, 'local music must use bundled styles')
+assert.match(indexPage, /jsCandidates = source === 'local' \? \[NMP_LOCAL_JS\]/, 'local music must use the bundled player with the local source API')
+assert.match(indexPage, /source === 'local' && !loaded\.supportsLocalPlaylist/, 'local music must reject a player without the local source API')
+assert.match(publicMusicHook, /\$fetch<unknown>\(`\$\{baseApi\}\/music\/public`,\s*\{\s*method: 'GET'/, 'public music must use the dedicated guest GET API')
+assert.doesNotMatch(publicMusicHook, /userStore|isLoggedIn|isOnline|Authorization/, 'public music requests must not require authenticated or online context')
+assert.match(
+  indexPage,
   /watch\(\(\) => \[[\s\S]*?musicConfigLoaded\.value[\s\S]*?frontendConfig\.value\.musicEnabled[\s\S]*?scheduleMusicPlayerReconcile\('public-config'\)/,
   'public music config changes must trigger the same reconciler'
 )
+assert.match(indexPage, /watch\(\(\) => \[[\s\S]*?publicMusic\.state\.value\?\.revision[\s\S]*?scheduleMusicPlayerReconcile\('public-config'\)/, 'public revision changes must reconcile local playlists')
 assert.match(
   indexPage,
   /watch\(\(\) => \[isLoggedIn\.value, isOnline\.value, route\.fullPath, activeTab\.value\][\s\S]*?scheduleMusicPlayerReconcile\('context-change'\)/,
@@ -105,6 +123,20 @@ assert.match(
 )
 
 const nmpScript = await readFile(join(webRoot, 'public/assets/netease-mini-player/netease-mini-player-v2.js'), 'utf8')
+assert.match(nmpScript, /async apiRequest\(endpoint, params = \{\}\)\s*\{\s*if \(this\.destroyed \|\| this\.config\.source === 'local'\) throw/, 'local players must never issue NetEase API requests')
+assert.match(nmpScript, /const baseUrl = 'https:\/\/api\.hypcvgm\.top\/NeteaseMiniPlayer\/nmp\.php'[\s\S]*?fetch\(url, \{ signal: controller\.signal \}\)/, 'online NetEase requests must retain their endpoint and cancellation')
+assert.match(nmpScript, /async loadCurrentSong\(\)[\s\S]*?if \(this\.config\.source === 'local'\) return this\.loadLocalSong\(this\.playlist\[this\.currentIndex\]\)/, 'local current-song playback must branch before online lookup')
+assert.match(nmpScript, /this\.destroyed \|\| this\.config\.source === 'local' \|\| String\(this\.currentSong\?\.id\) !== String\(songId\)/, 'late online song responses must reject local or replaced songs')
+assert.match(
+  nmpScript,
+  /async prepareLocalMedia\(url, controller, generation\)[\s\S]*?controller\.signal\.addEventListener\('abort', cancelRequest[\s\S]*?method: 'HEAD', credentials: 'same-origin', cache: 'no-store', signal: request\.signal/,
+  'local preparation must probe media with HEAD and retain cancellation and same-origin credentials'
+)
+assert.match(
+  nmpScript,
+  /while \(!this\.destroyed && generation === this\.loadGeneration && !controller\.signal\.aborted\)/,
+  'local media polling must stop when the player, source generation, or request is invalidated'
+)
 assert.match(
   nmpScript,
   /setMinimized\(minimized, userInitiated = false\)[\s\S]*?const shouldMinimize = minimized !== false[\s\S]*?this\.element\.classList\.toggle\('minimized', shouldMinimize\)/,

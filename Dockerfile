@@ -89,6 +89,7 @@ RUN set -eux; \
       nasm \
       pkgconf \
       x264-dev \
+      lame-dev \
       wget \
       xz \
       tar; \
@@ -102,18 +103,20 @@ RUN set -eux; \
       --disable-debug \
       --disable-doc \
       --disable-ffplay \
-      --disable-ffprobe \
       --disable-network \
       --disable-autodetect \
       --disable-shared \
       --enable-static \
       --enable-gpl \
       --enable-libx264 \
+      --enable-libmp3lame \
       --extra-cflags="-Os"; \
     make -j"$(getconf _NPROCESSORS_ONLN)"; \
     make install; \
-    strip /opt/ffmpeg/bin/ffmpeg; \
-    /opt/ffmpeg/bin/ffmpeg -version
+    strip /opt/ffmpeg/bin/ffmpeg /opt/ffmpeg/bin/ffprobe; \
+    /opt/ffmpeg/bin/ffmpeg -version; \
+    /opt/ffmpeg/bin/ffprobe -version; \
+    /opt/ffmpeg/bin/ffmpeg -hide_banner -encoders 2>/dev/null | grep -q libmp3lame
 
 # 运行时阶段
 FROM docker.io/library/alpine:3.21 AS final
@@ -170,6 +173,8 @@ RUN set -eux; \
     if [ "$INSTALL_FFMPEG" = "1" ]; then \
       apk add --no-cache ffmpeg; \
       ffmpeg -version >/dev/null; \
+      ffprobe -version >/dev/null; \
+      ffmpeg -hide_banner -encoders 2>/dev/null | grep -q libmp3lame; \
     fi; \
     rm -rf /usr/share/man /usr/share/doc /usr/share/licenses /usr/share/locale; \
     rm -rf /var/cache/apk/*; \
@@ -208,10 +213,13 @@ CMD ["/app/noise"]
 # 用法：docker build --target final-ffmpeg ...
 FROM final AS final-ffmpeg
 COPY --from=ffmpeg-build /opt/ffmpeg/bin/ffmpeg /usr/local/bin/ffmpeg
+COPY --from=ffmpeg-build /opt/ffmpeg/bin/ffprobe /usr/local/bin/ffprobe
 RUN set -eux; \
-    apk add --no-cache x264-libs; \
-    chmod +x /usr/local/bin/ffmpeg; \
-    /usr/local/bin/ffmpeg -version >/dev/null
+    apk add --no-cache x264-libs lame-libs; \
+    chmod +x /usr/local/bin/ffmpeg /usr/local/bin/ffprobe; \
+    /usr/local/bin/ffmpeg -version >/dev/null; \
+    /usr/local/bin/ffprobe -version >/dev/null; \
+    /usr/local/bin/ffmpeg -hide_banner -encoders 2>/dev/null | grep -q libmp3lame
 
 FROM final AS final-mcp
 RUN apk update && \

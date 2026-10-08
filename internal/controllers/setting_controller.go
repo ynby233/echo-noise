@@ -11,8 +11,11 @@ import (
 	"github.com/rcy1314/echo-noise/internal/authorization"
 	"github.com/rcy1314/echo-noise/internal/database"
 	"github.com/rcy1314/echo-noise/internal/dto"
+	"github.com/rcy1314/echo-noise/internal/middleware"
 	"github.com/rcy1314/echo-noise/internal/models"
+	"github.com/rcy1314/echo-noise/internal/music"
 	"github.com/rcy1314/echo-noise/internal/services"
+	"gorm.io/gorm"
 )
 
 func hasAdminOnlySettingFields(setting dto.SettingDto) bool {
@@ -69,20 +72,45 @@ func hasLoginExpirySettings(frontendSettings map[string]interface{}) bool {
 }
 
 func UpdateMusicSetting(c *gin.Context) {
-	_, err := checkUser(c)
+	actorID, err := musicActor(c)
 	if err != nil {
-		c.JSON(http.StatusOK, dto.Fail[any](err.Error()))
+		musicFailure(c, err, false)
 		return
 	}
 	var request widgetPreferencesRequest
-	if err := c.ShouldBindJSON(&request); err != nil || !services.IsMusicSettingsOnly(request.FrontendSettings) {
-		c.JSON(http.StatusOK, dto.Fail[any]("音乐配置格式无效"))
+	if err := decodeMusicJSON(c, &request); err != nil || !services.IsMusicSettingsOnly(request.FrontendSettings) {
+		musicFailure(c, music.ErrInvalid, false)
 		return
 	}
-	if err := services.UpdateFrontendSetting(0, map[string]interface{}{"frontendSettings": request.FrontendSettings}); err != nil {
-		c.JSON(http.StatusOK, dto.Fail[any]("保存音乐配置失败: "+err.Error()))
+	db, err := database.GetDB()
+	if err != nil {
+		musicFailure(c, err, false)
 		return
 	}
+	err = db.WithContext(c.Request.Context()).Transaction(func(tx *gorm.DB) error {
+		if !authorization.New(tx).Authorize(actorID, authorization.CapabilityMusicManage, nil).Allowed {
+			return music.ErrForbidden
+		}
+		var site models.SiteConfig
+		if err := tx.First(&site).Error; err != nil && err != gorm.ErrRecordNotFound {
+			return err
+		}
+		version, err := music.UpdateFrontendSettingsTx(tx, &site, request.FrontendSettings, nil)
+		if err != nil {
+			return err
+		}
+		changes, _ := json.Marshal(map[string]interface{}{"version": version})
+		return authorization.New(tx).WriteAudit(models.AdminAuditLog{
+			ActorUserID: actorID, Capability: string(authorization.CapabilityMusicManage),
+			Module: "music", Action: "update_config", TargetType: "music_config", TargetID: "1",
+			Result: "success", Summary: "updated music settings", ChangesJSON: string(changes),
+		})
+	})
+	if err != nil {
+		musicFailure(c, err, false)
+		return
+	}
+	middleware.MarkSemanticAuditWritten(c)
 	c.JSON(http.StatusOK, dto.OK[any](nil, "音乐配置已保存"))
 }
 
@@ -350,9 +378,12 @@ func UpdateSetting(c *gin.Context) {
 	}
 
 	if hasSiteConfigUpdate {
-		if err := services.UpdateFrontendSetting(0, settingMap); err != nil {
+		if err := services.UpdateFrontendSetting(user.ID, settingMap); err != nil {
 			c.JSON(http.StatusOK, dto.Fail[string]("保存前端配置失败: "+err.Error()))
 			return
+		}
+		if services.HasMusicSettings(frontendSettings) {
+			middleware.MarkSemanticAuditWritten(c)
 		}
 		if setting.RecycleBinRetentionDays != nil {
 			changes, _ := json.Marshal(map[string]int{"from": oldRetention, "to": *setting.RecycleBinRetentionDays})

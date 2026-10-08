@@ -25,12 +25,12 @@ function component(name, expose, options = {}) {
   const props = vue.reactive({ theme: { text: 'light', mutedText: 'muted' }, adminShellCardClass: ['light'], adminPanelCardClass: ['light'], adminSubtleCardClass: ['light'] })
   const scope = vue.effectScope()
   const sandbox = vm.createContext({
-    ...vue, console, exports: {}, Event, AbortSignal, URL, Date, Intl,
+    ...vue, console, exports: {}, Event, AbortSignal, AbortController, URL, URLSearchParams, Date, Intl,
     defineProps: () => props,
     defineEmits: () => () => {},
     useToast: () => ({ add() {} }),
     useRuntimeConfig: () => ({ public: { baseApi: '/api' } }),
-    useAdminCapabilities: () => ({ isPrimaryAdmin: vue.ref(true), can: () => true }),
+    useAdminCapabilities: () => ({ isPrimaryAdmin: vue.ref(true), can: () => true, refreshCapabilities: async () => {} }),
     inject: key => key.description === 'admin drafts' ? drafts : account,
     onMounted: fn => hooks.mounted.push(fn),
     onActivated: fn => hooks.activated.push(fn),
@@ -42,6 +42,7 @@ function component(name, expose, options = {}) {
     }),
     setInterval: fn => { timers.set(++timerID, fn); return timerID },
     clearInterval: id => timers.delete(id),
+    clearTimeout: id => timers.delete(id),
     resolveManagedAttachmentURL: (_base, value) => value,
     resolveUploadedMediaUrl: value => value,
     booleanSetting: (value, fallback = false) => value == null ? fallback : [true, 'true', 1, '1'].includes(value),
@@ -53,10 +54,17 @@ function component(name, expose, options = {}) {
     const code = ts.transpileModule(source.replace(/^import .*$/gm, ''), {
       compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
     }).outputText
-    scope.run(() => vm.runInContext(code, sandbox, { filename }))
+    scope.run(() => vm.runInContext(`{\n${code}\n}`, sandbox, { filename }))
   }
   run(readFileSync(new URL('config-draft.ts', directory), 'utf8'), 'config-draft.ts')
   sandbox.useConfigDraft = sandbox.exports.useConfigDraft
+  sandbox.adminDraftsKey = sandbox.exports.adminDraftsKey
+  sandbox.adminDraftAccountKey = sandbox.exports.adminDraftAccountKey
+  if (name === 'MusicSection') {
+    run(readFileSync(new URL('use-music-workbench.ts', directory), 'utf8'), 'use-music-workbench.ts')
+    sandbox.useMusicWorkbench = sandbox.exports.useMusicWorkbench
+    sandbox.conflictMessage = sandbox.exports.conflictMessage
+  }
   const source = readFileSync(new URL(`${name}.vue`, directory), 'utf8').split('<script setup lang="ts">')[1].split('</script>')[0]
   // A block avoids colliding with the composable module's local variables.
   run(`{\n${source}\nglobalThis.subject = { ${expose} }\n}`, `${name}.vue`)
@@ -252,22 +260,77 @@ test('storage save rereads configured flags and clears submitted secrets without
   panel.dispose()
 })
 
-test('music custom CDN draft and preset selection survive eviction together', async () => {
+test('music custom CDN draft and preset selection survive eviction together and save through music API', async () => {
   const drafts = new Map()
-  const io = { loadFrontendSettings: async () => ({ frontendSettings: {} }) }
-  const first = component('MusicSection', 'form, cdnPreset, load', { drafts, io })
-  await first.load()
-  first.cdnPreset.value = 'jsdelivr'
+  const calls = []
+  let stored = {
+    version: 1, frontendSettings: { musicCssCdnURL: 'https://cdn.example/music.css', musicJsCdnURL: 'https://cdn.example/music.js' },
+    scanIntervalMinutes: 60, playlist: [], scan: { state: 'idle' }, rootReadable: true, toolsReady: true,
+    counts: { total: 0, available: 0, unavailable: 0 },
+  }
+  const io = {
+    loadFrontendSettings: async () => { throw new Error('music must use its dedicated API') },
+    saveFrontendSettings: async () => { throw new Error('music must use its dedicated API') },
+    fetch: async (url, init) => {
+      calls.push({ url, init })
+      assert.equal(init.credentials, 'include')
+      assert.ok(init.signal instanceof AbortSignal)
+      let data
+      if (url === '/api/music/config') {
+        if (init.method === 'PUT') {
+          const submitted = JSON.parse(init.body)
+          assert.equal(init.headers['Content-Type'], 'application/json')
+          assert.equal(submitted.version, stored.version)
+          assert.deepEqual(submitted.trackIDs, [])
+          stored = { ...stored, ...submitted, version: stored.version + 1 }
+        } else assert.equal(init.method || 'GET', 'GET')
+        data = plain(stored)
+      } else {
+        assert.ok(url.startsWith('/api/music/library?'), `unexpected music endpoint: ${url}`)
+        assert.equal(init.method || 'GET', 'GET')
+        data = { items: [], total: 0, page: 1, pageSize: 25 }
+      }
+      return { ok: true, status: 200, json: async () => ({ code: 1, data }) }
+    },
+  }
+  const expose = 'draft, cdnPreset, loadConfig, save, ready, dirty'
+  const first = component('MusicSection', expose, { drafts, io })
+  await first.activate()
+  assert.equal(first.ready.value, true)
+  assert.equal(first.cdnPreset.value, 'custom')
+  first.draft.value.frontendSettings.musicJsCdnURL = 'https://custom.example/player.js'
+  first.draft.value.frontendSettings.musicCssCdnURL = 'https://custom.example/player.css'
   await flush()
-  const expected = first.form.musicJsCdnURL
-  assert.match(expected, /npm\/netease-mini-player@2\.0\.4/)
+  assert.equal(first.dirty.value, true)
   first.dispose()
-  const next = component('MusicSection', 'form, cdnPreset, load', { drafts, io })
-  await next.load()
+  const custom = component('MusicSection', expose, { drafts, io })
+  await custom.activate()
+  assert.equal(custom.cdnPreset.value, 'custom')
+  assert.equal(custom.draft.value.frontendSettings.musicJsCdnURL, 'https://custom.example/player.js')
+  assert.equal(custom.draft.value.frontendSettings.musicCssCdnURL, 'https://custom.example/player.css')
+  custom.cdnPreset.value = 'jsdelivr'
   await flush()
+  const expected = plain(custom.draft.value.frontendSettings)
+  assert.match(expected.musicJsCdnURL, /npm\/netease-mini-player@2\.0\.4/)
+  assert.match(expected.musicCssCdnURL, /npm\/netease-mini-player@2\.0\.4/)
+  custom.dispose()
+  const next = component('MusicSection', expose, { drafts, io })
+  await next.activate()
   assert.equal(next.cdnPreset.value, 'jsdelivr')
-  assert.equal(next.form.musicJsCdnURL, expected)
+  assert.deepEqual(plain(next.draft.value.frontendSettings), expected)
+  await next.save()
+  await flush()
+  assert.equal(calls.filter(call => call.init.method === 'PUT').length, 1)
+  assert.deepEqual(stored.frontendSettings, expected)
+  assert.equal(next.draft.value.version, 2)
+  assert.equal(next.dirty.value, false)
   next.dispose()
+  const saved = component('MusicSection', expose, { drafts, io })
+  await saved.activate()
+  assert.equal(saved.cdnPreset.value, 'jsdelivr')
+  assert.deepEqual(plain(saved.draft.value.frontendSettings), expected)
+  assert.equal(saved.dirty.value, false)
+  saved.dispose()
 })
 
 test('async dashboard refreshes on its first return even without an initial activated callback', async () => {

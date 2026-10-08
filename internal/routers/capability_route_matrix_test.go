@@ -67,7 +67,7 @@ func TestStatusVoceChatFieldVisibilityHTTPMatrix(t *testing.T) {
 		ordinaryB.ID:                 ordinaryB.VoceChatNotificationEnabled,
 	}
 
-	r := SetupRouter()
+	r := SetupRouter(nil)
 	r.GET("/__test/status-session/:id", func(c *gin.Context) {
 		id := c.Param("id")
 		session := sessions.Default(c)
@@ -236,7 +236,7 @@ func TestDelegatedAdminCannotReplacePrimaryAdminThroughRoleEndpoint(t *testing.T
 	request := httptest.NewRequest(http.MethodPut, "/api/user/admin?id=1", nil)
 	request.Header.Set("Authorization", "Bearer "+delegated.Token)
 	response := httptest.NewRecorder()
-	SetupRouter().ServeHTTP(response, request)
+	SetupRouter(nil).ServeHTTP(response, request)
 	if response.Code != http.StatusForbidden {
 		t.Fatalf("role endpoint http=%d body=%s", response.Code, response.Body.String())
 	}
@@ -322,7 +322,7 @@ func TestUserPasswordResetRouteOnlyResetsOrdinaryUsersAndRechecksGrants(t *testi
 		t.Fatalf("create VoceChat config: %v", err)
 	}
 
-	r := SetupRouter()
+	r := SetupRouter(nil)
 	r.GET("/__test/password-reset-session/:id", func(c *gin.Context) {
 		session := sessions.Default(c)
 		session.Set("user_id", c.Param("id"))
@@ -425,6 +425,7 @@ func TestProtectedAdminRouteMatrixRejectsDelegatedAdministratorWithoutRequiredGr
 	}
 	if err := db.AutoMigrate(
 		&models.User{}, &models.Setting{}, &models.SiteConfig{}, &models.SecurityConfig{}, &models.AdminCapabilityGrant{}, &models.AdminAuditLog{}, &models.AdminAuditConfig{}, &models.UpdateTask{}, &models.UpdatePreference{}, &models.UpdateExecutorCredential{},
+		&models.MusicConfig{}, &models.MusicTrack{}, &models.MusicPlaylistItem{}, &models.MusicScanState{},
 	); err != nil {
 		t.Fatalf("migrate route matrix database: %v", err)
 	}
@@ -446,7 +447,7 @@ func TestProtectedAdminRouteMatrixRejectsDelegatedAdministratorWithoutRequiredGr
 		t.Fatalf("create delegated administrator: %v", err)
 	}
 
-	r := SetupRouter()
+	r := SetupRouter(nil)
 	r.GET("/__test/route-matrix-session", func(c *gin.Context) {
 		session := sessions.Default(c)
 		session.Set("user_id", delegated.ID)
@@ -603,7 +604,7 @@ func TestProtectedAdminRouteMatrixRejectsDelegatedAdministratorWithoutRequiredGr
 	}
 	mixedMusicResponse := httptest.NewRecorder()
 	r.ServeHTTP(mixedMusicResponse, mixedMusicRequest)
-	if mixedMusicResponse.Code != http.StatusOK || !bytes.Contains(mixedMusicResponse.Body.Bytes(), []byte("音乐配置格式无效")) {
+	if mixedMusicResponse.Code != http.StatusBadRequest || !bytes.Contains(mixedMusicResponse.Body.Bytes(), []byte("音乐请求参数无效")) {
 		t.Fatalf("mixed music payload status=%d body=%s", mixedMusicResponse.Code, mixedMusicResponse.Body.String())
 	}
 

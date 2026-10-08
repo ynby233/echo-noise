@@ -11,7 +11,7 @@ import (
 func TestSetupRouterDoesNotTrustForwardedIPByDefault(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	t.Setenv("TRUSTED_PROXIES", "")
-	r := SetupRouter()
+	r := SetupRouter(nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/.env", nil)
 	req.RemoteAddr = "198.51.100.40:4321"

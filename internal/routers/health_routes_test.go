@@ -51,7 +51,7 @@ func TestLivenessProbeDoesNotWaitForBusyDatabase(t *testing.T) {
 	}
 	defer releaseConnection()
 
-	r := SetupRouter()
+	r := SetupRouter(nil)
 	started := time.Now()
 	completed := make(chan *httptest.ResponseRecorder, 1)
 	go func() {
@@ -115,7 +115,7 @@ func TestReadinessProbeFailsFastWhenDatabaseIsBusyAndRecovers(t *testing.T) {
 	}
 	defer releaseConnection()
 
-	r := SetupRouter()
+	r := SetupRouter(nil)
 	completed := make(chan *httptest.ResponseRecorder, 1)
 	go func() {
 		response := httptest.NewRecorder()

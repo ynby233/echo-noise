@@ -77,6 +77,7 @@ func HasLifeCountdownSettings(frontendSettings map[string]interface{}) bool {
 }
 
 var musicSettingKeys = map[string]struct{}{
+	"musicSource":  {},
 	"musicEnabled": {}, "musicPlaylistId": {}, "musicSongId": {}, "musicPosition": {}, "musicTheme": {},
 	"musicLyric": {}, "musicAutoplay": {}, "musicDefaultMinimized": {}, "musicEmbed": {}, "musicHideOnMobile": {},
 	"musicCssCdnURL": {}, "musicJsCdnURL": {},

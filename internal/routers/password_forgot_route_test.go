@@ -11,7 +11,7 @@ func TestLegacyPasswordForgotRouteIsUnavailable(t *testing.T) {
 	t.Setenv("SESSION_SECRET", "password-forgot-route-test-secret-32")
 	t.Chdir(t.TempDir())
 
-	r := SetupRouter()
+	r := SetupRouter(nil)
 	response := httptest.NewRecorder()
 	r.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/password/forgot", nil))
 	if response.Code != http.StatusNotFound {

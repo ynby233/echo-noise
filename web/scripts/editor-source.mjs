@@ -5,4 +5,4 @@ import { readFileSync } from 'node:fs'
 export const readEditorSource = () => [
   '../components/index/VditorEditor.vue',
   '../utils/editor-dom-session.ts',
-].map(path => readFileSync(new URL(path, import.meta.url), 'utf8')).join('\n')
+].map(path => readFileSync(new URL(path, import.meta.url), 'utf8').replace(/\r\n?/g, '\n')).join('\n')

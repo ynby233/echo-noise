@@ -3,8 +3,10 @@ package services
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/rcy1314/echo-noise/internal/authorization"
 	"github.com/rcy1314/echo-noise/internal/database"
 	"github.com/rcy1314/echo-noise/internal/models"
+	"github.com/rcy1314/echo-noise/internal/music"
 	"github.com/rcy1314/echo-noise/internal/syncmanager"
 	"io"
 	"net/http"
@@ -15,6 +17,11 @@ import (
 	"strings"
 	"time"
 )
+
+var genericMusicColumns = []string{
+	"MusicEnabled", "MusicPlaylistId", "MusicSongId", "MusicPosition", "MusicTheme", "MusicLyric",
+	"MusicAutoplay", "MusicDefaultMinimized", "MusicEmbed", "MusicHideOnMobile", "MusicCssCdnURL", "MusicJsCdnURL",
+}
 
 // Frontend configuration writes validate and persist the supported site-setting fields.
 func UpdateFrontendSetting(userID uint, settingMap map[string]interface{}) error {
@@ -34,6 +41,9 @@ func UpdateFrontendSetting(userID uint, settingMap map[string]interface{}) error
 
 	// 开启事务
 	tx := db.Begin()
+	if tx.Error != nil {
+		return fmt.Errorf("开始配置事务失败: %w", tx.Error)
+	}
 	defer func() {
 		if r := recover(); r != nil {
 			tx.Rollback()
@@ -350,54 +360,31 @@ func UpdateFrontendSetting(userID uint, settingMap map[string]interface{}) error
 		config.WelcomeUseAdmin = (strings.EqualFold(strings.TrimSpace(vs), "true"))
 	}
 
-	// 音乐播放器设置
-	if vb, ok := frontendSettings["musicEnabled"].(bool); ok {
-		config.MusicEnabled = vb
-	} else if vs, ok := frontendSettings["musicEnabled"].(string); ok {
-		config.MusicEnabled = (vs == "true")
-	}
-	if v, ok := frontendSettings["musicPlaylistId"].(string); ok {
-		config.MusicPlaylistId = v
-	}
-	if v, ok := frontendSettings["musicSongId"].(string); ok {
-		config.MusicSongId = v
-	}
-	if v, ok := frontendSettings["musicPosition"].(string); ok {
-		config.MusicPosition = v
-	}
-	if v, ok := frontendSettings["musicTheme"].(string); ok {
-		config.MusicTheme = v
-	}
-	if vb, ok := frontendSettings["musicLyric"].(bool); ok {
-		config.MusicLyric = vb
-	} else if vs, ok := frontendSettings["musicLyric"].(string); ok {
-		config.MusicLyric = (vs == "true")
-	}
-	if vb, ok := frontendSettings["musicAutoplay"].(bool); ok {
-		config.MusicAutoplay = vb
-	} else if vs, ok := frontendSettings["musicAutoplay"].(string); ok {
-		config.MusicAutoplay = (vs == "true")
-	}
-	if vb, ok := frontendSettings["musicDefaultMinimized"].(bool); ok {
-		config.MusicDefaultMinimized = vb
-	} else if vs, ok := frontendSettings["musicDefaultMinimized"].(string); ok {
-		config.MusicDefaultMinimized = (vs == "true")
-	}
-	if vb, ok := frontendSettings["musicEmbed"].(bool); ok {
-		config.MusicEmbed = vb
-	} else if vs, ok := frontendSettings["musicEmbed"].(string); ok {
-		config.MusicEmbed = (vs == "true")
-	}
-	if vb, ok := frontendSettings["musicHideOnMobile"].(bool); ok {
-		config.MusicHideOnMobile = vb
-	} else if vs, ok := frontendSettings["musicHideOnMobile"].(string); ok {
-		config.MusicHideOnMobile = (vs == "true")
-	}
-	if v, ok := frontendSettings["musicCssCdnURL"].(string); ok {
-		config.MusicCssCdnURL = v
-	}
-	if v, ok := frontendSettings["musicJsCdnURL"].(string); ok {
-		config.MusicJsCdnURL = v
+	// Music writes share one revision transaction and never flow through Save.
+	if HasMusicSettings(frontendSettings) {
+		if !authorization.New(tx).Authorize(userID, authorization.CapabilityMusicManage, nil).Allowed {
+			tx.Rollback()
+			return fmt.Errorf("需要音乐配置权限")
+		}
+		fields := map[string]interface{}{}
+		for key, value := range frontendSettings {
+			if _, ok := musicSettingKeys[key]; ok {
+				fields[key] = value
+			}
+		}
+		var musicSite models.SiteConfig
+		if _, err := music.UpdateFrontendSettingsTx(tx, &musicSite, fields, nil); err != nil {
+			tx.Rollback()
+			return err
+		}
+		if err := authorization.New(tx).WriteAudit(models.AdminAuditLog{
+			ActorUserID: userID, Capability: string(authorization.CapabilityMusicManage),
+			Module: "music", Action: "update_config", TargetType: "music_config", TargetID: "1",
+			Result: "success", Summary: "updated music settings",
+		}); err != nil {
+			tx.Rollback()
+			return err
+		}
 	}
 	if v, ok := frontendSettings["enableGithubCard"].(bool); ok {
 		config.EnableGithubCard = v
@@ -465,7 +452,7 @@ func UpdateFrontendSetting(userID uint, settingMap map[string]interface{}) error
 			return fmt.Errorf("创建配置失败: %v", err)
 		}
 	} else {
-		if err := tx.Table("site_configs").Save(&config).Error; err != nil {
+		if err := tx.Table("site_configs").Omit(genericMusicColumns...).Save(&config).Error; err != nil {
 			tx.Rollback()
 			return fmt.Errorf("更新配置失败: %v", err)
 		}
@@ -672,7 +659,7 @@ func UpdateFrontendSetting(userID uint, settingMap map[string]interface{}) error
 		}
 	}
 
-	if err := tx.Table("site_configs").Save(&config).Error; err != nil {
+	if err := tx.Table("site_configs").Omit(genericMusicColumns...).Save(&config).Error; err != nil {
 		tx.Rollback()
 		return fmt.Errorf("更新配置失败: %v", err)
 	}

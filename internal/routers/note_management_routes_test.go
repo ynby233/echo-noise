@@ -56,7 +56,7 @@ func TestNoteManagementRoutesEnforceViewPrerequisitesForSessionAndBearer(t *test
 		t.Fatalf("create recycle note: %v", err)
 	}
 
-	r := SetupRouter()
+	r := SetupRouter(nil)
 	r.GET("/__test/note-management-session", func(c *gin.Context) {
 		session := sessions.Default(c)
 		session.Set("user_id", delegated.ID)

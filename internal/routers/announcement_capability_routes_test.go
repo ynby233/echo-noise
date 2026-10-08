@@ -39,7 +39,7 @@ func TestAnnouncementRetryRouteRequiresPushCapabilityInAdditionToView(t *testing
 		t.Fatalf("grant announcement view: %v", err)
 	}
 
-	r := SetupRouter()
+	r := SetupRouter(nil)
 	r.GET("/test-seed-announcement-session", func(c *gin.Context) {
 		session := sessions.Default(c)
 		session.Set("user_id", delegated.ID)

@@ -21,6 +21,7 @@ import (
 	"github.com/rcy1314/echo-noise/internal/database"
 	"github.com/rcy1314/echo-noise/internal/middleware"
 	"github.com/rcy1314/echo-noise/internal/models"
+	"github.com/rcy1314/echo-noise/internal/music"
 	"github.com/rcy1314/echo-noise/internal/repository"
 	"github.com/rcy1314/echo-noise/internal/routers"
 	"github.com/rcy1314/echo-noise/internal/services"
@@ -151,11 +152,20 @@ func main() {
 		log.Printf("初始化默认数据警告: %v", err)
 	}
 	logLifecycleStage("startup", "default_data_seed", "completed", stageStarted)
+	excludedMusicRoots := make([]string, 0)
+	for _, root := range backupservice.DefaultLayout().Roots {
+		excludedMusicRoots = append(excludedMusicRoots, root.Path)
+	}
+	musicService := music.NewService(database.DB, music.Options{
+		RootDir: "/app/music", CacheDir: filepath.Join("data", "music-cache"),
+		ExcludedRoots: excludedMusicRoots,
+	})
 
 	stageStarted = time.Now()
 	logLifecycleStage("startup", "workers_start", "begin", stageStarted)
 	workerCtx, cancelWorkers := context.WithCancel(context.Background())
 	defer cancelWorkers()
+	musicService.Start(workerCtx)
 	services.StartAnnouncementPushDispatcher(workerCtx, database.DB)
 	services.StartWebPushDispatcher(workerCtx, database.DB)
 	services.StartVoceChatProvisioningWorker(workerCtx)
@@ -219,7 +229,7 @@ func main() {
 	// 设置路由
 	stageStarted = time.Now()
 	logLifecycleStage("startup", "router_setup", "begin", stageStarted)
-	r := routers.SetupRouter()
+	r := routers.SetupRouter(musicService)
 	logLifecycleStage("startup", "router_setup", "completed", stageStarted)
 
 	// Migrate historical public cloud-attachment URLs in the background. The
@@ -308,6 +318,17 @@ func main() {
 		logLifecycleStage("shutdown", "http_shutdown", "completed", stageStarted)
 	}
 	cancelShutdown()
+	stageStarted = time.Now()
+	logLifecycleStage("shutdown", "music_wait", "begin", stageStarted)
+	musicWaitCtx, cancelMusicWait := context.WithTimeout(context.Background(), 5*time.Second)
+	if err := musicService.Wait(musicWaitCtx); err != nil {
+		shutdownFailed = true
+		logLifecycleStage("shutdown", "music_wait", "failed", stageStarted)
+		log.Printf("音乐服务退出等待失败: %v", err)
+	} else {
+		logLifecycleStage("shutdown", "music_wait", "completed", stageStarted)
+	}
+	cancelMusicWait()
 
 	stageStarted = time.Now()
 	logLifecycleStage("shutdown", "access_log_flush", "begin", stageStarted)

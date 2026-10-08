@@ -26,7 +26,7 @@ func TestSetupRouterCompressesAndCachesFingerprintedNuxtAssets(t *testing.T) {
 		t.Fatalf("write asset: %v", err)
 	}
 
-	r := SetupRouter()
+	r := SetupRouter(nil)
 	request := httptest.NewRequest(http.MethodGet, "/_nuxt/app.hash.js", nil)
 	request.Header.Set("Accept-Encoding", "gzip")
 	response := httptest.NewRecorder()
@@ -71,7 +71,7 @@ func TestSetupRouterServesServiceWorkerWithRootScopeAndNoCache(t *testing.T) {
 		t.Fatalf("write service worker: %v", err)
 	}
 
-	r := SetupRouter()
+	r := SetupRouter(nil)
 	request := httptest.NewRequest(http.MethodGet, "/sw.js", nil)
 	response := httptest.NewRecorder()
 	r.ServeHTTP(response, request)
@@ -103,7 +103,7 @@ func TestSetupRouterServesPublicVendorAssetsNeededByServiceWorkerPrecache(t *tes
 		t.Fatalf("write public vendor asset: %v", err)
 	}
 
-	r := SetupRouter()
+	r := SetupRouter(nil)
 	request := httptest.NewRequest(http.MethodGet, "/vendor/netease-mini-player/netease-mini-player-v2.js", nil)
 	response := httptest.NewRecorder()
 	r.ServeHTTP(response, request)

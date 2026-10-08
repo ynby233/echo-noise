@@ -63,6 +63,7 @@ func getDefaultConfig() map[string]interface{} {
 			"homeLayoutDefault":      "three",
 			"announcementText":       neutralAnnouncement,
 			"announcementEnabled":    true,
+			"musicSource":            "netease",
 			"musicEnabled":           false,
 			"musicPlaylistId":        "",
 			"musicSongId":            "",

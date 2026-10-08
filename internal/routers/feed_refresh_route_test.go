@@ -45,7 +45,7 @@ func TestFeedRefreshIsPublic(t *testing.T) {
 		middleware.InvalidateAccessLogConfigCache()
 	})
 
-	r := SetupRouter()
+	r := SetupRouter(nil)
 	r.GET("/__test/session/:role", func(c *gin.Context) {
 		selected := ordinary
 		if c.Param("role") == "admin" {

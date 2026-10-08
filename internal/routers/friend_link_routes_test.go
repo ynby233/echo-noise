@@ -11,7 +11,7 @@ func TestRetiredFriendLinkRoutesAreUnreachable(t *testing.T) {
 	t.Setenv("SESSION_SECRET", "retired-friend-link-route-test-secret-32")
 	t.Chdir(t.TempDir())
 
-	r := SetupRouter()
+	r := SetupRouter(nil)
 	for _, request := range []struct {
 		name   string
 		method string

@@ -16,7 +16,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-(()=>{try{const s=document.currentScript;if(s&&s.src&&!s.src.startsWith('file:')){fetch(s.src,{mode:'cors',credentials:'omit'}).catch(()=>{});}}catch(e){}})();
+(() => {
 const GlobalAudioManager = {
     currentPlayer: null,
     setCurrent(player) {
@@ -42,6 +42,7 @@ const ICONS = {
     shuffle: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640"><path d="M467.8 98.4C479.8 93.4 493.5 96.2 502.7 105.3L566.7 169.3C572.7 175.3 576.1 183.4 576.1 191.9C576.1 200.4 572.7 208.5 566.7 214.5L502.7 278.5C493.5 287.7 479.8 290.4 467.8 285.4C455.8 280.4 448 268.9 448 256L448 224L416 224C405.9 224 396.4 228.7 390.4 236.8L358 280L318 226.7L339.2 198.4C357.3 174.2 385.8 160 416 160L448 160L448 128C448 115.1 455.8 103.4 467.8 98.4zM218 360L258 413.3L236.8 441.6C218.7 465.8 190.2 480 160 480L96 480C78.3 480 64 465.7 64 448C64 430.3 78.3 416 96 416L160 416C170.1 416 179.6 411.3 185.6 403.2L218 360zM502.6 534.6C493.4 543.8 479.7 546.5 467.7 541.5C455.7 536.5 448 524.9 448 512L448 480L416 480C385.8 480 357.3 465.8 339.2 441.6L185.6 236.8C179.6 228.7 170.1 224 160 224L96 224C78.3 224 64 209.7 64 192C64 174.3 78.3 160 96 160L160 160C190.2 160 218.7 174.2 236.8 198.4L390.4 403.2C396.4 411.3 405.9 416 416 416L448 416L448 384C448 371.1 455.8 359.4 467.8 354.4C479.8 349.4 493.5 352.2 502.7 361.3L566.7 425.3C572.7 431.3 576.1 439.4 576.1 447.9C576.1 456.4 572.7 464.5 566.7 470.5L502.7 534.5z"/></svg>`
 };
 class NeteaseMiniPlayer {
+    static supportsLocalPlaylist = true;
     constructor(element) {
         this.element = element;
         this.element.neteasePlayer = this;
@@ -60,12 +61,239 @@ class NeteaseMiniPlayer {
         this.showLyrics = this.config.lyric;
         this.cache = new Map();
         this.userMinimizeIntent = false;
-        this.init();
+        this.destroyed = false;
+        this.cleanups = [];
+        this.timers = new Set();
+        this.intervals = new Set();
+        this.observers = [];
+        this.loadGeneration = 0;
+        this.mediaRequest = null;
+        this.apiRequests = new Set();
+        this.localFailures = new Set();
+        this.plainLyrics = '';
+        this.localSourceKey = '';
         this.playMode = 'list';
         this.shuffleHistory = [];
         this.idleTimeout = null;
         this.idleDelay = 5000;
         this.isIdle = false;
+        this.ready = this.init();
+    }
+    listen(target, event, callback, options) {
+        if (this.destroyed || !target) return;
+        if (target.addEventListener) {
+            target.addEventListener(event, callback, options);
+            this.cleanups.push(() => target.removeEventListener(event, callback, options));
+        } else if (event === 'change' && target.addListener) {
+            target.addListener(callback);
+            this.cleanups.push(() => target.removeListener(callback));
+        }
+    }
+    delay(callback, milliseconds) {
+        const id = setTimeout(() => {
+            this.timers.delete(id);
+            if (!this.destroyed) callback();
+        }, milliseconds);
+        this.timers.add(id);
+        return id;
+    }
+    repeat(callback, milliseconds) {
+        const id = setInterval(() => { if (!this.destroyed) callback(); }, milliseconds);
+        this.intervals.add(id);
+        return id;
+    }
+    destroy() {
+        if (this.destroyed) return;
+        this.destroyed = true;
+        ++this.loadGeneration;
+        this.mediaRequest?.abort();
+        this.apiRequests.forEach(request => request.abort());
+        this.apiRequests.clear();
+        this.cleanups.splice(0).forEach(cleanup => cleanup());
+        this.timers.forEach(clearTimeout);
+        this.intervals.forEach(clearInterval);
+        this.timers.clear();
+        this.intervals.clear();
+        this.observers.splice(0).forEach(observer => observer.disconnect());
+        this.audio.pause();
+        this.audio.removeAttribute('src');
+        this.audio.load();
+        this.isPlaying = false;
+        this.playlist = [];
+        this.currentSong = null;
+        this.lyrics = [];
+        this.cache.clear();
+        if (GlobalAudioManager.currentPlayer === this) GlobalAudioManager.currentPlayer = null;
+        if (this.element.neteasePlayer === this) delete this.element.neteasePlayer;
+        if (this.element._neteasePlayer === this) delete this.element._neteasePlayer;
+    }
+    localURL(value, kind) {
+        if (!value) return '';
+        const url = new URL(value, window.location.href);
+        if (url.origin !== window.location.origin || !url.pathname.includes(`/music/${kind}/`)) {
+            throw new Error('音源地址无效');
+        }
+        return url.href;
+    }
+    async setLocalPlaylist(items, sourceKey) {
+        await this.ready;
+        if (this.destroyed || this.config.source !== 'local') return;
+        const previous = this.currentSong;
+        const wasPlaying = this.isPlaying;
+        const tracks = items.map(item => ({
+            id: String(item.trackID), name: String(item.title || '未知歌曲'),
+            artists: String(item.artist || ''), album: String(item.album || ''),
+            duration: Number(item.durationMS) || 0,
+            picUrl: this.localURL(item.coverURL, 'cover'),
+            src: this.localURL(item.streamURL, 'stream'),
+            fallbackSrc: this.localURL(item.fallbackStreamURL, 'stream'),
+            mimeType: String(item.mimeType || ''),
+            lyricsURL: this.localURL(item.lyricsURL, 'lyrics'),
+            lyricsAvailable: !!item.lyricsAvailable,
+            mediaVersion: String(item.mediaVersion || '')
+        }));
+        this.playlist = tracks;
+        this.localSourceKey = sourceKey;
+        const preserved = previous ? tracks.findIndex(track => track.id === previous.id && track.mediaVersion === previous.mediaVersion) : -1;
+        if (preserved >= 0) {
+            this.currentIndex = preserved;
+            this.currentSong = tracks[preserved];
+            this.updateSongInfo(this.currentSong);
+            this.updatePlaylistDisplay();
+            return;
+        }
+        this.localFailures.clear();
+        ++this.loadGeneration;
+        this.mediaRequest?.abort();
+        this.currentIndex = 0;
+        this.pause();
+        this.pendingPlay = wasPlaying && tracks.length > 0;
+        this.audio.removeAttribute('src');
+        this.audio.load();
+        this.currentSong = null;
+        this.lyrics = [];
+        this.plainLyrics = '';
+        this.currentTime = 0;
+        this.duration = 0;
+        this.updatePlaylistDisplay();
+        if (tracks.length) {
+            await this.loadCurrentSong();
+            if (this.pendingPlay && this.currentSong && !this.destroyed) await this.play();
+        } else {
+            this.showError('音源暂不可用');
+            this.updateProgress();
+            this.updateTimeDisplay();
+        }
+    }
+    async playIndex(index) {
+        if (this.destroyed || !this.playlist[index]) return;
+        this.currentIndex = index;
+        this.localFailures.clear();
+        if (this.config.source === 'local') this.pendingPlay = true;
+        await this.loadCurrentSong();
+        if (this.config.source !== 'local' && this.currentSong && !this.destroyed) await this.play();
+        this.updatePlaylistDisplay();
+    }
+    seek(seconds) {
+        if (this.destroyed || !Number.isFinite(seconds) || !Number.isFinite(this.duration)) return;
+        this.audio.currentTime = Math.max(0, Math.min(seconds, this.duration));
+        this.endedGeneration = -1;
+    }
+    async prepareLocalMedia(url, controller, generation) {
+        const deadline = Date.now() + 60000;
+        while (!this.destroyed && generation === this.loadGeneration && !controller.signal.aborted) {
+            const remaining = deadline - Date.now();
+            if (remaining <= 0) throw new Error('音源暂不可用');
+            const request = new AbortController();
+            const cancelRequest = () => request.abort();
+            controller.signal.addEventListener('abort', cancelRequest, { once: true });
+            const timeout = this.delay(() => request.abort(), Math.min(remaining, 28000));
+            let response;
+            try {
+                response = await fetch(url, { method: 'HEAD', credentials: 'same-origin', cache: 'no-store', signal: request.signal });
+            } catch (error) {
+                if (controller.signal.aborted) throw error;
+                throw new Error('音源暂不可用');
+            } finally {
+                clearTimeout(timeout);
+                this.timers.delete(timeout);
+                controller.signal.removeEventListener('abort', cancelRequest);
+            }
+            if (response.ok) return;
+            if (response.status !== 503 || Date.now() >= deadline) throw new Error('音源暂不可用');
+            const waitMS = Math.min(deadline - Date.now(), 5000, Math.max(1000, Number(response.headers.get('Retry-After')) * 1000 || 2000));
+            await new Promise((resolve, reject) => {
+                const onAbort = () => { clearTimeout(timer); this.timers.delete(timer); reject(new DOMException('已取消', 'AbortError')); };
+                const timer = this.delay(() => { controller.signal.removeEventListener('abort', onAbort); resolve(); }, waitMS);
+                controller.signal.addEventListener('abort', onAbort, { once: true });
+            });
+        }
+        throw new DOMException('已取消', 'AbortError');
+    }
+    async loadLocalSong(song, compatibility = false) {
+        const generation = ++this.loadGeneration;
+        this.mediaRequest?.abort();
+        const controller = new AbortController();
+        this.mediaRequest = controller;
+        this.pendingPlay = this.pendingPlay || this.isPlaying;
+        this.audio.pause();
+        this.audio.removeAttribute('src');
+        this.audio.load();
+        this.currentSong = null;
+        this.lyrics = [];
+        this.plainLyrics = '';
+        this.currentTime = 0;
+        this.duration = song.duration / 1000;
+        this.updateSongInfo(song);
+        this.elements.albumCover.removeAttribute('src');
+        if (song.picUrl) this.elements.albumCover.src = song.picUrl;
+        this.elements.lyricLine.textContent = this.showLyrics ? '加载歌词中…' : '';
+        const useCompatibility = compatibility || (song.mimeType && !this.audio.canPlayType(song.mimeType));
+        const url = useCompatibility && song.fallbackSrc ? song.fallbackSrc : song.src;
+        try {
+            await this.prepareLocalMedia(url, controller, generation);
+            if (this.destroyed || generation !== this.loadGeneration) return;
+            this.currentSong = song;
+            this.localCompatibility = useCompatibility;
+            this.audio.src = url;
+            this.audio.load();
+            this.updateProgress();
+            this.updateTimeDisplay();
+            if (this.showLyrics) await this.loadLocalLyrics(song, controller, generation);
+            if (this.pendingPlay && !this.destroyed && generation === this.loadGeneration) await this.play();
+        } catch (error) {
+            if (error.name === 'AbortError' || this.destroyed || generation !== this.loadGeneration) return;
+            this.currentSong = song;
+            this.showError('播放失败，尝试下一首');
+            this.handleLocalFailure(song, generation);
+        }
+    }
+    async loadLocalLyrics(song, controller, generation) {
+        try {
+            if (!song.lyricsAvailable || !song.lyricsURL) throw new Error('无歌词');
+            const response = await fetch(song.lyricsURL, { credentials: 'same-origin', cache: 'no-store', signal: controller.signal });
+            const envelope = await response.json();
+            if (!response.ok || envelope.code !== 1) throw new Error('无歌词');
+            if (this.destroyed || generation !== this.loadGeneration) return;
+            this.lyrics = (envelope.data.lines || []).map(line => ({ time: Number(line.timeMS) / 1000, text: String(line.text || ''), translation: '' })).filter(line => Number.isFinite(line.time)).sort((a, b) => a.time - b.time);
+            this.plainLyrics = String(envelope.data.text || '').slice(0, 4000);
+            this.currentLyricIndex = -1;
+            this.elements.lyricTranslation.style.display = 'none';
+            if (!this.lyrics.length) this.elements.lyricLine.textContent = this.plainLyrics || '暂无歌词';
+            else this.updateLyrics();
+        } catch (error) {
+            if (error.name !== 'AbortError' && !this.destroyed && generation === this.loadGeneration) this.elements.lyricLine.textContent = '暂无歌词';
+        }
+    }
+    handleLocalFailure(song, generation) {
+        this.localFailures.add(song.id);
+        if (this.localFailures.size >= this.playlist.length) { this.pause(); return; }
+        this.delay(async () => {
+            if (generation !== this.loadGeneration) return;
+            this.currentIndex = (this.currentIndex + 1) % this.playlist.length;
+            await this.loadCurrentSong();
+            this.updatePlaylistDisplay();
+        }, 1000);
     }
     parseConfig() {
         const element = this.element;
@@ -81,6 +309,7 @@ class NeteaseMiniPlayer {
         const autoPauseDisabled = autoPauseAttr === 'true' || autoPauseAttr === true;
 
         return {
+            source: element.dataset.musicSource === 'local' ? 'local' : 'netease',
             embed: isEmbed,
             autoplay: element.dataset.autoplay === 'true',
             playlistId: element.dataset.playlistId,
@@ -110,7 +339,9 @@ class NeteaseMiniPlayer {
         this.bindEvents();
         this.setupAudioEvents();
         try {
-            if (this.config.embed) {
+            if (this.config.source === 'local') {
+                this.showError('请选择歌曲播放');
+            } else if (this.config.embed) {
                 if (this.config.songId) {
                     await this.loadSingleSong(this.config.songId);
                 } else if (this.config.playlistId) {
@@ -155,7 +386,7 @@ class NeteaseMiniPlayer {
                             const targetVol = originalVolume;
                             const step = targetVol / 10;
                             const interval = 50;
-                            const fadeTimer = setInterval(() => {
+                            const fadeTimer = this.repeat(() => {
                                 currentVol += step;
                                 if (currentVol >= targetVol) {
                                     currentVol = targetVol;
@@ -168,13 +399,13 @@ class NeteaseMiniPlayer {
                     };
                     if (this.isPlaying) {
                         interactionEvents.forEach(event => {
-                            document.addEventListener(event, enableAudio, { once: true, passive: true });
+                            this.listen(document, event, enableAudio, { once: true, passive: true });
                         });
                     } else {
                         this.audio.muted = false;
                         this.audio.volume = originalVolume;
                         interactionEvents.forEach(event => {
-                            document.addEventListener(event, enableAudio, { once: true, passive: true });
+                            this.listen(document, event, enableAudio, { once: true, passive: true });
                         });
                     }
                 }
@@ -207,18 +438,18 @@ class NeteaseMiniPlayer {
                     </div>
                 </div>
                 <div class="controls">
-                    ${!this.config.embed ? `<button class="control-btn prev-btn" title="上一首">${ICONS.prev}</button>` : ''}
+                    ${!this.config.embed || this.config.source === 'local' ? `<button class="control-btn prev-btn" title="上一首">${ICONS.prev}</button>` : ''}
                     <button class="control-btn play-btn" title="播放/暂停">
                         <span class="play-icon">${ICONS.play}</span>
                         <span class="pause-icon" style="display: none;">${ICONS.pause}</span>
                     </button>
-                    ${!this.config.embed ? `<button class="control-btn next-btn" title="下一首">${ICONS.next}</button>` : ''}
+                    ${!this.config.embed || this.config.source === 'local' ? `<button class="control-btn next-btn" title="下一首">${ICONS.next}</button>` : ''}
                 </div>
             </div>
             <div class="player-bottom">
                 <div class="progress-container">
                     <span class="time-display current-time">0:00</span>
-                    <div class="progress-bar-container">
+                    <div class="progress-bar-container" role="slider" tabindex="0" aria-label="播放进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
                         <div class="progress-bar"></div>
                     </div>
                     <span class="time-display total-time">0:00</span>
@@ -233,8 +464,8 @@ class NeteaseMiniPlayer {
                         </div>
                     </div>
                     <span class="feature-btn lyrics-btn" role="button" title="显示/隐藏歌词">${ICONS.lyrics}</span>
-                    ${!this.config.embed ? `<span class="feature-btn loop-mode-btn" role="button" title="列表循环">${ICONS.loopList}</span>` : ''}
-                    ${!this.config.embed ? `<span class="feature-btn list-btn" role="button" title="播放列表">${ICONS.list}</span>` : ''}
+                    ${!this.config.embed || this.config.source === 'local' ? `<span class="feature-btn loop-mode-btn" role="button" title="列表循环">${ICONS.loopList}</span>` : ''}
+                    ${!this.config.embed || this.config.source === 'local' ? `<span class="feature-btn list-btn" role="button" title="播放列表">${ICONS.list}</span>` : ''}
                     ${!this.config.embed ? `<span class="feature-btn minimize-btn" role="button" title="缩小/展开">${ICONS.minimize}</span>` : ''}
                 </div>
             </div>
@@ -273,62 +504,69 @@ class NeteaseMiniPlayer {
         this.elements.loopModeBtn = this.element.querySelector('.loop-mode-btn');
     }
     bindEvents() {
-        this.elements.playBtn.addEventListener('click', () => this.togglePlay());
+        this.listen(this.elements.playBtn, 'click', () => this.togglePlay());
         if (this.elements.prevBtn) {
-            this.elements.prevBtn.addEventListener('click', () => this.previousSong());
+            this.listen(this.elements.prevBtn, 'click', () => this.previousSong());
         }
         if (this.elements.nextBtn) {
-            this.elements.nextBtn.addEventListener('click', () => this.nextSong());
+            this.listen(this.elements.nextBtn, 'click', () => this.nextSong());
         }
         if (this.elements.loopModeBtn) {
-            this.elements.loopModeBtn.addEventListener('click', () => this.togglePlayMode());
+            this.listen(this.elements.loopModeBtn, 'click', () => this.togglePlayMode());
         }
-        this.elements.albumCoverContainer.addEventListener('click', () => {
+        this.listen(this.elements.albumCoverContainer, 'click', () => {
             if (this.element.classList.contains('minimized')) {
                 this.setMinimized(false, true);
                 return;
             }
-            if (this.currentSong && this.currentSong.id) {
+            if (this.config.source !== 'local' && this.currentSong && this.currentSong.id) {
             const songUrl = `https://music.163.com/song?id=${this.currentSong.id}`;
             window.open(songUrl, '_blank', 'noopener,noreferrer');
             }
         });
         let isDragging = false;
-        this.elements.progressContainer.addEventListener('mousedown', (e) => {
+        this.listen(this.elements.progressContainer, 'pointerdown', (e) => {
             isDragging = true;
+            this.elements.progressContainer.setPointerCapture?.(e.pointerId);
             this.seekTo(e);
         });
-        document.addEventListener('mousemove', (e) => {
+        this.listen(this.elements.progressContainer, 'pointermove', (e) => {
             if (isDragging) {
                 this.seekTo(e);
             }
         });
-        document.addEventListener('mouseup', () => {
+        this.listen(this.elements.progressContainer, 'pointerup', () => {
             isDragging = false;
         });
-        this.elements.progressContainer.addEventListener('click', (e) => this.seekTo(e));
+        this.listen(this.elements.progressContainer, 'click', (e) => this.seekTo(e));
+        this.listen(this.elements.progressContainer, 'pointercancel', () => { isDragging = false; });
+        this.listen(this.elements.progressContainer, 'keydown', event => {
+            if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+            event.preventDefault();
+            this.seek(event.key === 'Home' ? 0 : event.key === 'End' ? this.duration : this.audio.currentTime + (event.key === 'ArrowRight' ? 5 : -5));
+        });
         let isVolumesDragging = false;
-        this.elements.volumeSlider.addEventListener('mousedown', (e) => {
+        this.listen(this.elements.volumeSlider, 'mousedown', (e) => {
             isVolumesDragging = true;
             this.setVolume(e);
         });
-        document.addEventListener('mousemove', (e) => {
+        this.listen(document, 'mousemove', (e) => {
             if (isVolumesDragging) {
                 this.setVolume(e);
             }
         });
-        document.addEventListener('mouseup', () => {
+        this.listen(document, 'mouseup', () => {
             isVolumesDragging = false;
         });
-        this.elements.volumeSlider.addEventListener('click', (e) => this.setVolume(e));
-        this.elements.lyricsBtn.addEventListener('click', () => this.toggleLyrics());
+        this.listen(this.elements.volumeSlider, 'click', (e) => this.setVolume(e));
+        this.listen(this.elements.lyricsBtn, 'click', () => this.toggleLyrics());
         if (this.elements.listBtn) {
-            this.elements.listBtn.addEventListener('click', () => this.togglePlaylist());
+            this.listen(this.elements.listBtn, 'click', () => this.togglePlaylist());
         }
         if (this.elements.minimizeBtn) {
-            this.elements.minimizeBtn.addEventListener('click', () => this.toggleMinimize());
+            this.listen(this.elements.minimizeBtn, 'click', () => this.toggleMinimize());
         }
-        document.addEventListener('click', (e) => {
+        this.listen(document, 'click', (e) => {
             if (this.elements.playlistContainer && 
                 this.elements.playlistContainer.classList.contains('show')) {
                 if (!this.element.contains(e.target)) {
@@ -340,7 +578,7 @@ class NeteaseMiniPlayer {
             this.setupDragAndDrop();
         }
         if (typeof document.hidden !== 'undefined') {
-            document.addEventListener('visibilitychange', () => {
+            this.listen(document, 'visibilitychange', () => {
                 if (this.config.autoPauseDisabled === true) {
                     return;
                 }
@@ -354,10 +592,10 @@ class NeteaseMiniPlayer {
             });
         }
 
-        this.element.addEventListener('mouseenter', () => {
+        this.listen(this.element, 'mouseenter', () => {
             this.restoreOpacity();
         });
-        this.element.addEventListener('mouseleave', () => {
+        this.listen(this.element, 'mouseleave', () => {
             this.startIdleTimer();
         });
         this.applyIdlePolicyOnInit();
@@ -366,7 +604,7 @@ class NeteaseMiniPlayer {
     startIdleTimer() {
         this.clearIdleTimer();
         if (!this.shouldEnableIdleOpacity()) return;
-        this.idleTimeout = setTimeout(() => {
+        this.idleTimeout = this.delay(() => {
             this.triggerFadeOut();
         }, this.idleDelay);
     }
@@ -394,7 +632,7 @@ class NeteaseMiniPlayer {
             this.element.classList.add('idle');
             this.element.removeEventListener('animationend', onEnd);
         };
-        this.element.addEventListener('animationend', onEnd);
+        this.listen(this.element, 'animationend', onEnd);
     }
 
     restoreOpacity() {
@@ -419,9 +657,9 @@ class NeteaseMiniPlayer {
                     this.element.classList.remove('fading-in');
                     this.element.removeEventListener('animationend', onEndIn);
                 };
-                this.element.addEventListener('animationend', onEndIn);
+                this.listen(this.element, 'animationend', onEndIn);
             };
-            this.element.addEventListener('animationend', onPopEnd);
+            this.listen(this.element, 'animationend', onPopEnd);
             return;
         }
         if (!this.isIdle) return;
@@ -433,7 +671,7 @@ class NeteaseMiniPlayer {
             this.element.classList.remove('fading-in');
             this.element.removeEventListener('animationend', onEndIn);
         };
-        this.element.addEventListener('animationend', onEndIn);
+        this.listen(this.element, 'animationend', onEndIn);
     }
 
     shouldEnableIdleOpacity() {
@@ -502,67 +740,61 @@ class NeteaseMiniPlayer {
     setupEnvListeners() {
         const reapply = () => this.applyResponsiveControls();
         if (window.matchMedia) {
-            try {
-                const mq1 = window.matchMedia('(orientation: portrait)');
-                const mq2 = window.matchMedia('(orientation: landscape)');
-                mq1.addEventListener?.('change', reapply);
-                mq2.addEventListener?.('change', reapply);
-            } catch (e) {
-                mq1.onchange = reapply;
-                mq2.onchange = reapply;
-            }
-        } else {
-            window.addEventListener('orientationchange', reapply);
+            this.listen(window.matchMedia('(orientation: portrait)'), 'change', reapply);
+            this.listen(window.matchMedia('(orientation: landscape)'), 'change', reapply);
         }
-        window.addEventListener('resize', reapply);
+        this.listen(window, 'orientationchange', reapply);
+        this.listen(window, 'resize', reapply);
     }
     setupAudioEvents() {
-        this.audio.addEventListener('loadedmetadata', () => {
-            this.duration = this.audio.duration;
+        this.listen(this.audio, 'loadedmetadata', () => {
+            this.duration = Number.isFinite(this.audio.duration) ? this.audio.duration : this.duration;
+            this.endedGeneration = -1;
             this.updateTimeDisplay();
         });
-        this.audio.addEventListener('timeupdate', () => {
+        this.listen(this.audio, 'timeupdate', () => {
             this.currentTime = this.audio.currentTime;
             this.updateProgress();
             this.updateLyrics();
             this.updateTimeDisplay();
         });
-        this.audio.addEventListener('ended', async () => {
+        this.listen(this.audio, 'ended', async () => {
+            if (this.endedGeneration === this.loadGeneration) return;
+            this.endedGeneration = this.loadGeneration;
             await this.nextSong();
         });
-        this.audio.addEventListener('error', async (e) => {
-            console.error('音频播放错误:', e);
-            console.error('错误详情:', {
-                code: e.target.error?.code,
-                message: e.target.error?.message,
-                src: e.target.src
-            });
-            this.showError('播放失败，尝试下一首');
-            setTimeout(async () => {
-                await this.nextSong();
-            }, 1000);
-        });
-        this.audio.addEventListener('abort', () => {
-            console.warn('音频加载被中断');
-        });
-        this.audio.addEventListener('stalled', () => {
-            console.warn('音频加载停滞');
-        });
-        this.audio.addEventListener('canplay', () => {
-            if (this.isPlaying && this.audio.paused) {
-                this.audio.play().catch(e => console.error('自动播放失败:', e));
+        this.listen(this.audio, 'error', async () => {
+            if (this.config.source === 'local') {
+                const song = this.currentSong;
+                if (!song) return;
+                if (!this.localCompatibility && song.fallbackSrc) {
+                    await this.loadLocalSong(song, true);
+                } else {
+                    this.showError('播放失败，尝试下一首');
+                    this.handleLocalFailure(song, this.loadGeneration);
+                }
+                return;
             }
+            this.showError('播放失败，尝试下一首');
+            this.delay(() => this.nextSong(), 1000);
+        });
+        this.listen(this.audio, 'canplay', () => {
+            if (this.isPlaying && this.audio.paused) this.audio.play().catch(() => {});
         });
         this.audio.volume = this.volume;
         this.updateVolumeDisplay();
     }
     async apiRequest(endpoint, params = {}) {
+        if (this.destroyed || this.config.source === 'local') throw new DOMException('已取消', 'AbortError');
         const baseUrl = 'https://api.hypcvgm.top/NeteaseMiniPlayer/nmp.php';
         const queryString = new URLSearchParams(params).toString();
         const url = `${baseUrl}${endpoint}${queryString ? '?' + queryString : ''}`;
+        const controller = new AbortController();
+        this.apiRequests.add(controller);
         try {
-            const response = await fetch(url);
+            const response = await fetch(url, { signal: controller.signal });
             const data = await response.json();
+            if (this.destroyed) throw new DOMException('已取消', 'AbortError');
             if (data.code !== 200) {
                 throw new Error(`API错误: ${data.code}`);
             }
@@ -570,6 +802,8 @@ class NeteaseMiniPlayer {
         } catch (error) {
             console.error('API请求失败:', error);
             throw error;
+        } finally {
+            this.apiRequests.delete(controller);
         }
     }
     getCacheKey(type, id) {
@@ -601,6 +835,7 @@ class NeteaseMiniPlayer {
             tracks = response.songs; 
             this.setCache(cacheKey, tracks);
         }
+        if (this.destroyed || this.config.source === 'local') return;
         this.playlist = tracks.map(song => ({
             id: song.id,
             name: song.name,
@@ -646,7 +881,8 @@ class NeteaseMiniPlayer {
         this.playlist = [songData];
     }
     async loadCurrentSong() {
-        if (this.playlist.length === 0) return;
+        if (this.destroyed || this.playlist.length === 0) return;
+        if (this.config.source === 'local') return this.loadLocalSong(this.playlist[this.currentIndex]);
         
         if (this.showLyrics) {
             this.elements.lyricLine.textContent = '♪ 加载歌词中... ♪';
@@ -753,6 +989,7 @@ class NeteaseMiniPlayer {
                 }
             }
         }
+        if (this.destroyed || this.config.source === 'local' || String(this.currentSong?.id) !== String(songId)) return;
         if (urlData && urlData.url) {
             const httpsUrl = this.ensureHttps(urlData.url);
             console.log('设置音频源:', httpsUrl);
@@ -785,6 +1022,7 @@ class NeteaseMiniPlayer {
                 return;
             }
         }
+        if (this.destroyed || this.config.source === 'local' || String(this.currentSong?.id) !== String(songId)) return;
         this.parseLyrics(lyricData);
     }
     parseLyrics(lyricData) {
@@ -846,9 +1084,13 @@ class NeteaseMiniPlayer {
         }
     }
     async play() {
+        if (this.destroyed) return;
+        if (this.config.source === 'local' && !this.currentSong) { this.pendingPlay = true; return; }
         GlobalAudioManager.setCurrent(this);
         try {
             await this.audio.play();
+            if (this.destroyed) { this.audio.pause(); return; }
+            this.pendingPlay = false;
             this.isPlaying = true;
             this.elements.playIcon.style.display = 'none';
             this.elements.pauseIcon.style.display = 'inline';
@@ -865,6 +1107,7 @@ class NeteaseMiniPlayer {
         }
     }
     pause() {
+        this.pendingPlay = false;
         this.audio.pause();
         this.isPlaying = false;
         this.elements.playIcon.style.display = 'inline';
@@ -873,22 +1116,21 @@ class NeteaseMiniPlayer {
         this.element.classList.remove('player-playing');
     }
     async previousSong() {
-        if (this.playlist.length <= 1) return;
+        if (this.destroyed || this.playlist.length <= 1) return;
         this.currentIndex = this.currentIndex > 0 ? this.currentIndex - 1 : this.playlist.length - 1;
         await this.loadCurrentSong();
-        if (this.isPlaying) {
-            await this.play();
-        }
+        if (this.config.source !== 'local' && this.isPlaying && !this.destroyed) await this.play();
     }
     async nextSong() {
+        if (this.destroyed || !this.playlist.length) return;
     const wasPlaying = this.isPlaying;
         if (this.playlist.length <= 1) {
             if (this.playMode === 'single') {
-                this.audio.currentTime = 0;
+                this.seek(0);
                 if (wasPlaying) await this.play();
                 return;
             }
-            this.audio.currentTime = 0;
+            this.seek(0);
             if (wasPlaying) await this.play();
             return;
         }
@@ -919,8 +1161,8 @@ class NeteaseMiniPlayer {
         
         this.updatePlaylistDisplay();
         
-        if (wasPlaying) {
-            setTimeout(async () => {
+        if (wasPlaying && this.config.source !== 'local') {
+            this.delay(async () => {
                 try {
                     await this.play();
                 } catch (error) {
@@ -933,6 +1175,7 @@ class NeteaseMiniPlayer {
         if (this.duration > 0) {
             const progress = (this.currentTime / this.duration) * 100;
             this.elements.progressBar.style.width = `${progress}%`;
+            this.elements.progressContainer.setAttribute('aria-valuenow', String(Math.round(progress)));
         }
     }
     updateTimeDisplay() {
@@ -966,6 +1209,7 @@ class NeteaseMiniPlayer {
                 this.elements.lyricLine.classList.remove('current');
             
                 requestAnimationFrame(() => {
+                    if (this.destroyed) return;
                     this.elements.lyricLine.textContent = lyricText;
                     this.checkLyricScrolling(this.elements.lyricLine, lyricText);
             
@@ -985,7 +1229,7 @@ class NeteaseMiniPlayer {
                 });
             
                 this.elements.lyricsContainer.classList.add('switching');
-                setTimeout(() => {
+                this.delay(() => {
                     this.elements.lyricsContainer.classList.remove('switching');
                 }, 500);
                 if (lyric.translation) {
@@ -1025,36 +1269,53 @@ class NeteaseMiniPlayer {
         }
     }
     updatePlaylistDisplay() {
-        if (!this.elements.playlistContent || !this.playlist || this.playlist.length === 0) return;
-        const html = this.playlist.map((song, index) => `
-            <div class="playlist-item ${index === this.currentIndex ? 'active' : ''}" data-index="${index}">
-                <div class="playlist-item-index">${(index + 1).toString().padStart(2, '0')}</div>
-                <img class="playlist-item-cover" src="${song.picUrl || ''}" alt="专辑封面">
-                <div class="playlist-item-info">
-                    <div class="playlist-item-name">${song.name}</div>
-                    <div class="playlist-item-artist">${song.artists}</div>
-                </div>
-            </div>
-        `).join('');
-        this.elements.playlistContent.innerHTML = html;
-        this.elements.playlistContent.querySelectorAll('.playlist-item').forEach(item => {
-            item.addEventListener('click', async () => {
-                const index = parseInt(item.dataset.index);
-                if (index !== this.currentIndex) {
+        if (!this.elements.playlistContent || this.destroyed) return;
+        const content = this.elements.playlistContent;
+        content.replaceChildren();
+        this.playlist.forEach((song, index) => {
+            const item = document.createElement('div');
+            item.className = `playlist-item ${index === this.currentIndex ? 'active' : ''}`;
+            item.dataset.index = String(index);
+            item.tabIndex = 0;
+            item.setAttribute('role', 'button');
+            const number = document.createElement('div');
+            number.className = 'playlist-item-index';
+            number.textContent = String(index + 1).padStart(2, '0');
+            const cover = document.createElement('img');
+            cover.className = 'playlist-item-cover';
+            cover.alt = '专辑封面';
+            if (song.picUrl) {
+                try {
+                    const url = new URL(song.picUrl, window.location.href);
+                    if (url.protocol === 'http:' || url.protocol === 'https:') cover.src = url.href;
+                } catch {}
+            }
+            const info = document.createElement('div');
+            info.className = 'playlist-item-info';
+            const name = document.createElement('div');
+            name.className = 'playlist-item-name';
+            name.textContent = song.name || '未知歌曲';
+            const artist = document.createElement('div');
+            artist.className = 'playlist-item-artist';
+            artist.textContent = song.artists || '';
+            info.append(name, artist);
+            item.append(number, cover, info);
+            const activate = async () => {
+                if (this.config.source === 'local') await this.playIndex(index);
+                else if (index !== this.currentIndex) {
                     this.currentIndex = index;
                     await this.loadCurrentSong();
-                    if (this.isPlaying) {
-                        await this.play();
-                    }
+                    if (this.isPlaying && !this.destroyed) await this.play();
                     this.updatePlaylistDisplay();
-                    this.togglePlaylist();
                 }
-            });
+                this.togglePlaylist(false);
+            };
+            item.onclick = activate;
+            item.onkeydown = event => {
+                if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); void activate(); }
+            };
+            content.append(item);
         });
-        const activeItem = this.elements.playlistContent.querySelector('.playlist-item.active');
-        if (activeItem) {
-            activeItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        }
     }
     seekTo(e) {
         if (!this.elements.progressContainer || !this.audio) return;
@@ -1062,7 +1323,7 @@ class NeteaseMiniPlayer {
         const percent = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
         const newTime = percent * this.duration;
         if (isFinite(newTime) && newTime >= 0) {
-            this.audio.currentTime = newTime;
+            this.seek(newTime);
         }
     }
     setVolume(e) {
@@ -1077,6 +1338,9 @@ class NeteaseMiniPlayer {
         this.showLyrics = !this.showLyrics;
         this.elements.lyricsContainer.classList.toggle('hidden', !this.showLyrics);
         this.elements.lyricsBtn.classList.toggle('active', this.showLyrics);
+        if (this.showLyrics && this.config.source === 'local' && this.currentSong && this.mediaRequest) {
+            void this.loadLocalLyrics(this.currentSong, this.mediaRequest, this.loadGeneration);
+        }
     }
     togglePlaylist(show = null) {
         if (!this.elements.playlistContainer) return;
@@ -1158,6 +1422,7 @@ class NeteaseMiniPlayer {
         return;
     }
     showError(message) {
+        if (this.destroyed || !this.elements) return;
         this.elements.songTitle.textContent = message;
         this.elements.songArtist.textContent = '';
         this.elements.lyricLine.textContent = '';
@@ -1286,11 +1551,7 @@ class NeteaseMiniPlayer {
                     this.setTheme('auto');
                 }
             };
-            if (mediaQuery.addEventListener) {
-                mediaQuery.addEventListener('change', handleThemeChange);
-            } else {
-                mediaQuery.addListener(handleThemeChange);
-            }
+            this.listen(mediaQuery, 'change', handleThemeChange);
         }
         if (window.MutationObserver) {
             const observer = new MutationObserver((mutations) => {
@@ -1307,6 +1568,7 @@ class NeteaseMiniPlayer {
                     }
                 }
             });
+            this.observers.push(observer);
             observer.observe(document.documentElement, {
                 attributes: true,
                 attributeFilter: ['class', 'data-theme']
@@ -1639,3 +1901,4 @@ if (typeof module !== 'undefined' && module.exports) {
 }
 
 console.log(["版本号 v2.1.0.2", "NeteaseMiniPlayer V2 [NMPv2]", "BHCN STUDIO & 北海的佰川（ImBHCN[numakkiyu]）", "GitHub地址：https://github.com/numakkiyu/NeteaseMiniPlayer", "基于 Apache 2.0 开源协议发布"].join("\n"));
+})();

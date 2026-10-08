@@ -961,6 +961,22 @@
     display: none !important;
 }
 
+.netease-mini-player[data-music-source="local"][data-embed="true"] .list-btn,
+.netease-mini-player[data-music-source="local"][data-embed="true"] .prev-btn,
+.netease-mini-player[data-music-source="local"][data-embed="true"] .next-btn {
+    display: inline-flex !important;
+}
+.netease-mini-player[data-music-source="local"][data-embed="true"] .playlist-container {
+    display: block !important;
+}
+.netease-mini-player .progress-bar-container {
+    touch-action: none;
+}
+.netease-mini-player .progress-bar-container:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 3px;
+}
+
 .playlist-container {
     position: absolute;
     left: 0;

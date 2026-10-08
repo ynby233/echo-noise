@@ -337,6 +337,15 @@ func GetFrontendConfig(viewerUserIDs ...uint) (map[string]interface{}, error) {
 		"smtpEncryption":     config.SmtpEncryption,
 		"smtpTLS":            config.SmtpTLS,
 	}
+	frontend := configMap["frontendSettings"].(map[string]interface{})
+	frontend["musicSource"] = "netease"
+	var musicConfig models.MusicConfig
+	if err := db.First(&musicConfig, 1).Error; err == nil && musicConfig.Source == "local" {
+		frontend["musicSource"] = "local"
+		for _, key := range []string{"musicPlaylistId", "musicSongId", "musicCssCdnURL", "musicJsCdnURL"} {
+			delete(frontend, key)
+		}
+	}
 	if !viewerIsPrimaryAdmin {
 		if frontendSettings, ok := configMap["frontendSettings"].(map[string]interface{}); ok {
 			delete(frontendSettings, "loginExpireDays")

@@ -13,7 +13,9 @@ import (
 	"github.com/rcy1314/echo-noise/config"
 	"github.com/rcy1314/echo-noise/internal/authorization"
 	"github.com/rcy1314/echo-noise/internal/controllers"
+	"github.com/rcy1314/echo-noise/internal/database"
 	"github.com/rcy1314/echo-noise/internal/middleware"
+	"github.com/rcy1314/echo-noise/internal/music"
 	"github.com/rcy1314/echo-noise/pkg"
 )
 
@@ -71,7 +73,13 @@ func registerAttachmentManagementRoutes(authRoutes *gin.RouterGroup) {
 	attachments.POST("/references/batch-purge", middleware.RequireCapability(authorization.CapabilityAttachmentsPurgeBlob), controllers.PurgeAttachmentBlobsBatch)
 }
 
-func SetupRouter() *gin.Engine {
+func SetupRouter(musicService *music.Service) *gin.Engine {
+	if musicService == nil {
+		musicService = music.NewService(database.DB, music.Options{
+			RootDir: "/app/music", ExcludedRoots: musicCacheExcludedRoots(),
+		})
+	}
+	musicController := controllers.NewMusicController(musicService)
 	r := gin.New()
 	configureTrustedProxies(r)
 	r.Use(gin.Recovery())
@@ -113,6 +121,8 @@ func SetupRouter() *gin.Engine {
 		"/api/audio/",
 		"/api/files/",
 		"/api/cloud-attachments/",
+		"/api/music/",
+		"/api/token/music/",
 	})))
 
 	// 安全防护：拦截敏感路径扫描（不影响正常 API/静态资源/MCP）
@@ -155,8 +165,13 @@ func SetupRouter() *gin.Engine {
 		"Cache-Control",
 		"Pragma",
 		"Referer",
+		"Range",
+		"If-Range",
+		"If-None-Match",
+		"If-Modified-Since",
 	}
 	corsConfig.AllowMethods = []string{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}
+	corsConfig.ExposeHeaders = []string{"Content-Length", "Content-Range", "Accept-Ranges", "ETag", "Retry-After"}
 	corsConfig.AllowCredentials = true
 	corsConfig.MaxAge = 86400
 
@@ -281,6 +296,7 @@ func SetupRouter() *gin.Engine {
 
 	// 需要鉴权的路由
 	authRoutes := api.Group("")
+	registerPublicMusicRoutes(api, musicController)
 	authRoutes.Use(middleware.SessionAuthMiddleware())
 	authRoutes.GET("/version/build", controllers.GetBuildIdentity)
 	authRoutes.GET("/version/channels", controllers.GetUpdateChannels)
@@ -303,6 +319,7 @@ func SetupRouter() *gin.Engine {
 	executorRoutes.GET("/runtime", controllers.GetExecutorRuntime)
 	registerAdminAuthorizationRoutes(authRoutes)
 	registerRuntimePolicyRoutes(authRoutes)
+	registerMusicManagementRoutes(authRoutes, musicController)
 	registerNoteManagementRoutes(authRoutes)
 	authRoutes.GET("/users/me/stats", controllers.GetCurrentUserHomeStats)
 	// 版本更新（管理员）
@@ -316,6 +333,7 @@ func SetupRouter() *gin.Engine {
 	tokenAuth.Use(middleware.TokenAuthMiddleware()) // 使用 TokenAuthMiddleware
 	registerNoteManagementRoutes(tokenAuth)
 	registerCommentManagementRoutes(tokenAuth)
+	registerMusicManagementRoutes(tokenAuth, musicController)
 	{
 		tokenAuth.POST("/messages", controllers.PostMessage)
 		tokenAuth.PUT("/messages/:id", controllers.UpdateMessage)

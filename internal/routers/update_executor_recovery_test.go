@@ -44,7 +44,7 @@ func TestRotatedExecutorCanRetryOnlyItsOwnFinalReportHTTP(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			router := SetupRouter()
+			router := SetupRouter(nil)
 			call := func(method, path, raw, body string) *httptest.ResponseRecorder {
 				t.Helper()
 				request := httptest.NewRequest(method, path, bytes.NewBufferString(body))

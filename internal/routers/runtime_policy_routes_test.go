@@ -58,7 +58,7 @@ func TestRuntimePolicyRoutesArePrimaryOnlyAndRedactHealthDetails(t *testing.T) {
 		t.Fatalf("create site config: %v", err)
 	}
 
-	r := SetupRouter()
+	r := SetupRouter(nil)
 	r.GET("/__test/runtime-session/:id", func(c *gin.Context) {
 		session := sessions.Default(c)
 		session.Set("user_id", c.Param("id"))

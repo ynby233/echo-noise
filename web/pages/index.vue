@@ -617,6 +617,7 @@ import { asyncFeature } from '~/utils/async-feature'
 import { useHomeNotifications } from '~/composables/useHomeNotifications'
 import { useHomePager } from '~/composables/useHomePager'
 import { normalizeLayoutMode, useHomeLayout } from '~/composables/useHomeLayout'
+import { usePublicMusic } from '~/composables/usePublicMusic'
 const AddForm = asyncFeature(() => import('@/components/index/AddForm.vue'), '编辑器')
 import MessageList from '@/components/index/MessageList.vue'
 import HeatmapWidget from '~/components/widgets/heatmap.vue'
@@ -1613,6 +1614,7 @@ Object.assign(frontendConfig.value, {
     commentEnabled: true,
     // 音乐配置
     musicEnabled: false,
+    musicSource: 'netease',
     musicPlaylistId: '2141128031',
     musicSongId: '',
     musicPosition: 'bottom-left',
@@ -1645,14 +1647,19 @@ watch(isFeedEnabled, (enabled) => {
   }
 })
 const musicConfigLoaded = ref(false)
+const publicMusic = usePublicMusic()
+const musicPlaybackConfig = computed(() => ({
+  ...frontendConfig.value,
+  ...(publicMusic.state.value?.frontendSettings || {}),
+  musicEnabled: !!publicMusic.state.value?.frontendSettings.musicEnabled,
+  musicSource: publicMusic.state.value?.source || frontendConfig.value.musicSource || 'netease'
+}))
 const resolveMusicSource = (cfg: any) => {
-  const playlistId = String(cfg?.musicPlaylistId || '').trim()
-  const songId = playlistId ? '' : String(cfg?.musicSongId || '').trim()
-  return {
-    playlistId,
-    songId,
-    hasSource: !!playlistId || !!songId
-  }
+  const kind = cfg?.musicSource === 'local' ? 'local' : 'netease'
+  const playlistId = kind === 'local' ? '' : String(cfg?.musicPlaylistId || '').trim()
+  const songId = kind === 'local' || playlistId ? '' : String(cfg?.musicSongId || '').trim()
+  const tracks = kind === 'local' ? publicMusic.state.value?.tracks || [] : []
+  return { kind, playlistId, songId, tracks, revision: String(publicMusic.state.value?.revision || ''), hasSource: kind === 'local' ? tracks.length > 0 : !!playlistId || !!songId }
 }
 const normalizeMusicTheme = (raw: string) => {
   const value = String(raw || 'auto').trim()
@@ -1677,7 +1684,7 @@ const applyNmpTheme = (el?: any, cfg: any = (frontendConfig as any).value || {},
   return theme
 }
 const shouldShowMusicPlayer = computed(() => {
-  const cfg: any = frontendConfig.value || {}
+  const cfg: any = musicPlaybackConfig.value
   const source = resolveMusicSource(cfg)
   return musicConfigLoaded.value && !!cfg.musicEnabled && source.hasSource && !(!!cfg.musicHideOnMobile && isMobile.value)
 })
@@ -1701,7 +1708,16 @@ const nmpDisabled = ref(false)
 let nmpFailureCount = 0
 let nmpReconcileQueued = false
 let nmpReconcileRequested = false
+let nmpInstance: any = null
+let nmpRuntimeSource = ''
+let nmpGeneration = 0
+let musicDisposed = false
 const clearNmpRuntime = () => {
+  ++nmpGeneration
+  try { nmpInstance?.destroy?.() } catch {}
+  try { nmpInstance?.audio?.pause?.(); nmpInstance?.audio?.removeAttribute?.('src') } catch {}
+  nmpInstance = null
+  nmpRuntimeSource = ''
   try { nmpThemeObserver?.disconnect() } catch {}
   try { nmpStateObserver?.disconnect() } catch {}
   nmpThemeObserver = null
@@ -1784,6 +1800,7 @@ const syncNmpAttributes = (el: any, cfg: any) => {
   if (!el) return
   const source = resolveMusicSource(cfg)
   el.classList.toggle('minimized', !!cfg.musicDefaultMinimized)
+  el.setAttribute('data-music-source', source.kind)
   el.setAttribute('data-playlist-id', source.playlistId)
   el.setAttribute('data-song-id', source.songId)
   el.setAttribute('data-position', normalizeNmpPosition(cfg.musicPosition || 'bottom-left'))
@@ -1815,6 +1832,8 @@ const getNmpPlayer = async (el: any, NMP: any) => {
     try { el.neteasePlayer = player } catch {}
     try { el._neteasePlayer = player } catch {}
     await waitForNmpPlayerReady(player)
+    if (player.ready) await player.ready
+    nmpInstance = player
   }
   return player
 }
@@ -1829,6 +1848,8 @@ const refreshNmpConfig = (player: any) => {
     if (typeof player?.parseConfig === 'function') {
       player.config = player.parseConfig()
       player.showLyrics = !!player.config?.lyric
+      player.elements?.lyricsContainer?.classList.toggle('hidden', !player.showLyrics)
+      player.elements?.lyricsBtn?.classList.toggle('active', player.showLyrics)
     }
   } catch {}
 }
@@ -1844,6 +1865,15 @@ const loadNmpCurrentSong = async (player: any) => {
   return !!player.currentSong
 }
 const syncNmpSource = async (el: any, player: any, source: ReturnType<typeof resolveMusicSource>) => {
+  if (source.kind === 'local') {
+    if (player.destroyed) return false
+    const sourceKey = `local|${source.revision}`
+    if (el.getAttribute('data-source-key') !== sourceKey) {
+      await player.setLocalPlaylist(source.tracks, sourceKey)
+      if (!player.destroyed) el.setAttribute('data-source-key', sourceKey)
+    }
+    return !!player.currentSong
+  }
   const sourceKey = `${source.playlistId}|${source.songId}`
   const playlist = Array.isArray(player?.playlist) ? player.playlist : []
   const loadedHasSource = source.songId
@@ -1871,8 +1901,8 @@ const syncNmpSource = async (el: any, player: any, source: ReturnType<typeof res
 }
 const reconcileMusicPlayer = async (reason = 'state') => {
   try {
-    if (typeof window === 'undefined' || typeof document === 'undefined') return false
-    const cfg = (frontendConfig as any).value || (frontendConfig as any) || {}
+    if (musicDisposed || typeof window === 'undefined' || typeof document === 'undefined') return false
+    const cfg = musicPlaybackConfig.value
     const source = resolveMusicSource(cfg)
     if (nmpDisabled.value || !musicConfigLoaded.value || !cfg.musicEnabled || !source.hasSource || (!!cfg.musicHideOnMobile && isMobile.value)) {
       clearNmpRuntime()
@@ -1881,13 +1911,16 @@ const reconcileMusicPlayer = async (reason = 'state') => {
     await nextTick()
     const el = document.querySelector('.netease-mini-player') as any
     if (!el) return false
+    if (nmpInstance && (nmpRuntimeSource !== source.kind || !!nmpInstance.config?.embed !== !!cfg.musicEmbed)) clearNmpRuntime()
+    const generation = nmpGeneration
+    const sourceStillCurrent = () => !musicDisposed && generation === nmpGeneration && el.isConnected && shouldShowMusicPlayer.value && resolveMusicSource(musicPlaybackConfig.value).kind === source.kind
 
     // 先把公共配置写入 DOM，再加载脚本；NMP 脚本会自初始化，必须避免它读到空的初始属性。
     syncNmpAttributes(el, cfg)
     syncNmpState(el, cfg)
 
     if (!nmpAssetsPromise) {
-      nmpAssetsPromise = loadNMPAssets().then(res => {
+      nmpAssetsPromise = loadNMPAssets(source.kind).then(res => {
         nmpAssetsPromise = null
         return res
       }).catch(() => {
@@ -1896,6 +1929,7 @@ const reconcileMusicPlayer = async (reason = 'state') => {
       })
     }
     const assetsLoaded = await nmpAssetsPromise
+    if (!sourceStillCurrent()) return false
     if (!assetsLoaded) {
       nmpFailureCount += 1
       return false
@@ -1910,6 +1944,8 @@ const reconcileMusicPlayer = async (reason = 'state') => {
     syncNmpAttributes(el, cfg)
     syncNmpState(el, cfg)
     const player = await getNmpPlayer(el, NMP)
+    if (!sourceStillCurrent()) { player?.destroy?.(); return false }
+    nmpRuntimeSource = source.kind
     if (!player) {
       nmpFailureCount += 1
       return false
@@ -1917,6 +1953,7 @@ const reconcileMusicPlayer = async (reason = 'state') => {
     refreshNmpConfig(player)
     observeNmpState(el)
     await syncNmpSource(el, player, source)
+    if (!sourceStillCurrent()) return false
 
     applyNmpTheme(el, cfg, player)
     try { nmpThemeObserver?.disconnect() } catch {}
@@ -1982,9 +2019,9 @@ const waitForNmpGlobal = async (ms = 400) => {
   }
   return !!(window as any).NeteaseMiniPlayer
 }
-const loadNmpStylesheet = async (cssId: string, candidates: string[]) => {
+const loadNmpStylesheet = async (cssId: string, candidates: string[], useCache = true) => {
   if (typeof document === 'undefined') return false
-  const ordered = orderNmpCandidates(NMP_CDN_CSS_KEY, candidates)
+  const ordered = useCache ? orderNmpCandidates(NMP_CDN_CSS_KEY, candidates) : dedupeStrings(candidates)
   if (ordered.length === 0) return false
   const existing = document.getElementById(cssId) as HTMLLinkElement | null
   if (existing) return true
@@ -1993,11 +2030,16 @@ const loadNmpStylesheet = async (cssId: string, candidates: string[]) => {
   link.id = cssId
   link.rel = 'stylesheet'
   link.href = href
-  document.head.appendChild(link)
-  writeNmpCdn(NMP_CDN_CSS_KEY, href)
-  return true
+  const loaded = await new Promise<boolean>(resolve => {
+    const timer = setTimeout(() => { link.remove(); resolve(false) }, 4000)
+    link.onload = () => { clearTimeout(timer); resolve(true) }
+    link.onerror = () => { clearTimeout(timer); link.remove(); resolve(false) }
+    document.head.appendChild(link)
+  })
+  if (loaded && useCache) writeNmpCdn(NMP_CDN_CSS_KEY, href)
+  return loaded
 }
-const loadNmpScript = async (jsId: string, candidates: string[]) => {
+const loadNmpScript = async (jsId: string, candidates: string[], useCache = true) => {
   if (typeof document === 'undefined') return false
   const existing = document.getElementById(jsId) as HTMLScriptElement | null
   if (existing) {
@@ -2005,7 +2047,7 @@ const loadNmpScript = async (jsId: string, candidates: string[]) => {
     if (ready) return true
     existing.remove()
   }
-  const ordered = orderNmpCandidates(NMP_CDN_JS_KEY, candidates)
+  const ordered = useCache ? orderNmpCandidates(NMP_CDN_JS_KEY, candidates) : dedupeStrings(candidates)
   for (const src of ordered) {
     const loaded = await new Promise<boolean>((resolve) => {
       const script = document.createElement('script')
@@ -2015,7 +2057,7 @@ const loadNmpScript = async (jsId: string, candidates: string[]) => {
       script.defer = true
       script.crossOrigin = 'anonymous'
       script.referrerPolicy = 'no-referrer'
-      const timer = setTimeout(() => resolve(false), 4000)
+      const timer = setTimeout(() => { script.remove(); resolve(false) }, 4000)
       script.onload = () => {
         clearTimeout(timer)
         resolve(true)
@@ -2028,7 +2070,7 @@ const loadNmpScript = async (jsId: string, candidates: string[]) => {
       document.body.appendChild(script)
     })
     if (loaded && await waitForNmpGlobal(800)) {
-      writeNmpCdn(NMP_CDN_JS_KEY, src)
+      if (useCache) writeNmpCdn(NMP_CDN_JS_KEY, src)
       return true
     }
     document.getElementById(jsId)?.remove()
@@ -2036,37 +2078,34 @@ const loadNmpScript = async (jsId: string, candidates: string[]) => {
   return false
 }
 
-const loadNMPAssets = async (): Promise<boolean> => {
+let nmpAssetsKind = ''
+const loadNMPAssets = async (source: 'local' | 'netease' = 'netease'): Promise<boolean> => {
   try {
-    if (typeof window === 'undefined') return false
-    if ((window as any).NeteaseMiniPlayer) return true
-    const head = document.head
-    const body = document.body
-    const cssId = 'nmp-css'
-    const jsId = 'nmp-js'
-    if (!document.getElementById(cssId)) {
-      const cfgCss = normalizeNmpAssetUrl('css', String(((frontendConfig as any).value?.musicCssCdnURL ?? (frontendConfig as any).musicCssCdnURL) || '').trim())
-      const cssCandidates = dedupeStrings([
-        cfgCss,
-        NMP_LOCAL_CSS,
-        'https://api.hypcvgm.top/NeteaseMiniPlayer/netease-mini-player-v2.css',
-        'https://cdn.jsdelivr.net/gh/ImBHCN/NeteaseMiniPlayer@v2/netease-mini-player-v2.css',
-        'https://unpkg.com/netease-mini-player@2.0.4/dist/netease-mini-player-v2.css'
-      ])
-      await loadNmpStylesheet(cssId, cssCandidates)
-    }
-    if (!document.getElementById(jsId)) {
-      const cfgJs = normalizeNmpAssetUrl('js', String(((frontendConfig as any).value?.musicJsCdnURL ?? (frontendConfig as any).musicJsCdnURL) || '').trim())
-      const jsCandidates = dedupeStrings([
-        cfgJs,
-        NMP_LOCAL_JS,
-        'https://api.hypcvgm.top/NeteaseMiniPlayer/netease-mini-player-v2.js',
-        'https://cdn.jsdelivr.net/gh/ImBHCN/NeteaseMiniPlayer@v2/netease-mini-player-v2.js',
-        'https://unpkg.com/netease-mini-player@2.0.4/dist/netease-mini-player-v2.js'
-      ])
-      await loadNmpScript(jsId, jsCandidates)
-    }
-    return !!(window as any).NeteaseMiniPlayer
+    if (typeof window === 'undefined' || musicDisposed) return false
+    const globalPlayer = (window as any).NeteaseMiniPlayer
+    if (nmpAssetsKind === source && globalPlayer && (source !== 'local' || globalPlayer.supportsLocalPlaylist)) return true
+    document.getElementById('nmp-css')?.remove()
+    document.getElementById('nmp-js')?.remove()
+    delete (window as any).NeteaseMiniPlayer
+    const cfg = musicPlaybackConfig.value
+    const cssCandidates = source === 'local' ? [NMP_LOCAL_CSS] : dedupeStrings([
+      normalizeNmpAssetUrl('css', String(cfg.musicCssCdnURL || '')),
+      NMP_LOCAL_CSS,
+      'https://api.hypcvgm.top/NeteaseMiniPlayer/netease-mini-player-v2.css',
+      'https://unpkg.com/netease-mini-player@2.0.4/dist/netease-mini-player-v2.css'
+    ])
+    const jsCandidates = source === 'local' ? [NMP_LOCAL_JS] : dedupeStrings([
+      normalizeNmpAssetUrl('js', String(cfg.musicJsCdnURL || '')),
+      NMP_LOCAL_JS,
+      'https://api.hypcvgm.top/NeteaseMiniPlayer/netease-mini-player-v2.js',
+      'https://unpkg.com/netease-mini-player@2.0.4/dist/netease-mini-player-v2.js'
+    ])
+    if (!await loadNmpStylesheet('nmp-css', cssCandidates, source !== 'local')) return false
+    if (!await loadNmpScript('nmp-js', jsCandidates, source !== 'local')) return false
+    const loaded = (window as any).NeteaseMiniPlayer
+    if (!loaded || (source === 'local' && !loaded.supportsLocalPlaylist)) return false
+    nmpAssetsKind = source
+    return true
   } catch {
     return false
   }
@@ -2151,6 +2190,8 @@ watch(() => [
   musicConfigLoaded.value,
   shouldShowMusicPlayer.value,
   frontendConfig.value.musicEnabled,
+  frontendConfig.value.musicSource,
+  publicMusic.state.value?.revision,
   frontendConfig.value.musicPlaylistId,
   frontendConfig.value.musicSongId,
   frontendConfig.value.musicPosition,
@@ -2164,6 +2205,8 @@ watch(() => [
   frontendConfig.value.musicJsCdnURL,
   isMobile.value
 ], () => {
+  const nextSource = resolveMusicSource(musicPlaybackConfig.value).kind
+  if (nmpInstance && nmpRuntimeSource !== nextSource) clearNmpRuntime()
   nmpDisabled.value = false
   nmpFailureCount = 0
   scheduleMusicPlayerReconcile('public-config')
@@ -2181,6 +2224,7 @@ onMounted(() => {
   document.addEventListener('visibilitychange', onMusicVisibilityChange)
 })
 onUnmounted(() => {
+  musicDisposed = true
   document.removeEventListener('visibilitychange', onMusicVisibilityChange)
   clearNmpRuntime()
 })
@@ -2273,6 +2317,7 @@ const headerImageStyle = computed(() => ({
     commentEnabled: true,
     // 音乐默认配置
     musicEnabled: false,
+    musicSource: 'netease',
     musicPlaylistId: '2141128031',
     musicSongId: '',
     musicPosition: 'bottom-left',
