@@ -1692,8 +1692,9 @@ const shouldShowMusicPlayer = computed(() => {
 const NMP_STATE_KEY = 'nmp_state_v1'
 const NMP_CDN_CSS_KEY = 'nmp_cdn_css_v1'
 const NMP_CDN_JS_KEY = 'nmp_cdn_js_v1'
-const NMP_LOCAL_CSS = '/assets/netease-mini-player/netease-mini-player-v2.css'
-const NMP_LOCAL_JS = '/assets/netease-mini-player/netease-mini-player-v2.js'
+const NMP_ASSET_VERSION = encodeURIComponent(String(import.meta.env.VITE_APP_VERSION || 'local-library-v1'))
+const NMP_LOCAL_CSS = `/assets/netease-mini-player/netease-mini-player-v2.css?v=${NMP_ASSET_VERSION}`
+const NMP_LOCAL_JS = `/assets/netease-mini-player/netease-mini-player-v2.js?v=${NMP_ASSET_VERSION}`
 const NMP_POSITIONS = ['bottom-left', 'bottom-right', 'top-left', 'top-right'] as const
 const runIdle = (cb: () => void) => {
   if (typeof window === 'undefined') return
@@ -1847,10 +1848,14 @@ const resetNmpCurrentIndex = (player: any) => {
 const refreshNmpConfig = (player: any) => {
   try {
     if (typeof player?.parseConfig === 'function') {
+      const previousLyrics = player.showLyrics
       player.config = player.parseConfig()
       player.showLyrics = !!player.config?.lyric
       player.elements?.lyricsContainer?.classList.toggle('hidden', !player.showLyrics)
       player.elements?.lyricsBtn?.classList.toggle('active', player.showLyrics)
+      if (!previousLyrics && player.showLyrics && player.config?.source === 'local' && player.currentSong && player.mediaRequest) {
+        void player.loadLocalLyrics?.(player.currentSong, player.mediaRequest, player.loadGeneration)
+      }
     }
   } catch {}
 }

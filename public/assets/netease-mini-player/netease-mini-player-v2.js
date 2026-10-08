@@ -139,7 +139,7 @@ class NeteaseMiniPlayer {
         await this.ready;
         if (this.destroyed || this.config.source !== 'local') return;
         const previous = this.currentSong;
-        const wasPlaying = this.isPlaying;
+        const wasPlaying = this.isPlaying || this.pendingPlay;
         const tracks = items.map(item => ({
             id: String(item.trackID), name: String(item.title || '未知歌曲'),
             artists: String(item.artist || ''), album: String(item.album || ''),
@@ -907,6 +907,8 @@ class NeteaseMiniPlayer {
     updateSongInfo(song) {
         if (!song) return;
         this.elements.songTitle.textContent = song.name || '未知歌曲';
+        this.elements.songArtist.textContent = song.artists || '未知艺术家';
+        this.elements.songArtist.removeAttribute('title');
         if (song.artists) {
             const truncatedArtist = this.truncateArtistName(song.artists);
             this.elements.songArtist.textContent = truncatedArtist;
