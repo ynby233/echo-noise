@@ -54,9 +54,10 @@
             <p v-if="ready && config?.rootReadable && config?.toolsReady && config.counts.total === 0 && config.scan.state !== 'running'" class="text-sm">目录中尚无已索引歌曲，可刷新目录后再选择。</p>
           </div>
         </section>
+      </template>
 
-        <div class="music-workspace">
-          <section class="admin-form-section music-library">
+        <div class="music-workspace" :class="{ 'music-workspace-local': draft.frontendSettings.musicSource === 'local' }">
+          <section v-if="draft.frontendSettings.musicSource === 'local'" class="admin-form-section music-library">
             <div class="music-panel-heading">
               <div class="admin-section-heading"><h3>音源歌曲 <span class="music-panel-count">{{ library.total }} 首</span></h3><p>搜索音源并添加到全站歌单，保存后生效。</p></div>
               <div class="music-toolbar music-selection-actions">
@@ -93,7 +94,8 @@
             </div>
           </section>
 
-          <section class="admin-form-section music-playlist">
+          <aside class="music-sidebar" aria-label="歌单与播放器设置">
+          <section v-if="draft.frontendSettings.musicSource === 'local'" class="admin-form-section music-playlist">
             <div class="admin-section-heading"><h3>全站歌单 <span class="text-sm">{{ draft.trackIDs.length }} / 1000</span></h3><p>按下列顺序播放。拖拽或使用移动按钮排序。</p></div>
             <p v-if="!playlist.length" class="text-sm" :class="theme.mutedText">尚未选择歌曲。请从音源歌曲中明确添加。</p>
             <ol class="music-track-list music-playlist-list">
@@ -110,26 +112,26 @@
               </li>
             </ol>
           </section>
-        </div>
-      </template>
 
-      <details class="admin-form-section mt-4">
+      <details class="admin-form-section music-preferences" open>
         <summary class="music-preferences-title">播放器展示与播放偏好</summary>
-        <fieldset :disabled="writeDisabled" class="admin-settings-grid mt-4 min-w-0">
-          <section class="admin-form-section"><div class="admin-section-heading"><h3>播放器展示</h3></div><div class="admin-fields-grid">
+        <fieldset :disabled="writeDisabled" class="music-preferences-grid" :class="{ 'music-preferences-local': draft.frontendSettings.musicSource === 'local' }">
+          <section class="music-preference-group"><div class="admin-section-heading"><h3>播放器展示</h3></div><div class="music-display-fields">
             <label class="admin-labeled-field"><span>展示模式</span><USelect class="admin-select" v-model="embedMode" :options="[{ label: '嵌入', value: 'embed' }, { label: '浮动', value: 'float' }]" :disabled="writeDisabled" /></label>
             <label class="admin-labeled-field"><span>显示位置</span><USelect class="admin-select" v-model="draft.frontendSettings.musicPosition" :disabled="writeDisabled || embedMode === 'embed'" :options="positionOptions" /></label>
             <label class="admin-labeled-field"><span>主题</span><USelect class="admin-select" v-model="draft.frontendSettings.musicTheme" :options="themeOptions" :disabled="writeDisabled" /></label>
           </div></section>
-          <section v-if="draft.frontendSettings.musicSource === 'netease'" class="admin-form-section"><div class="admin-section-heading"><h3>资源加载</h3></div><div class="admin-fields-grid">
+          <section class="music-preference-group"><div class="admin-section-heading"><h3>播放偏好</h3></div><div class="music-toggle-grid"><label v-for="item in toggleItems" :key="item.key" class="admin-toggle-row"><span>{{ item.label }}</span><UToggle v-model="draft.frontendSettings[item.key]" :disabled="writeDisabled" /></label></div></section>
+          <section v-if="draft.frontendSettings.musicSource === 'netease'" class="music-preference-group music-resource-settings"><div class="admin-section-heading"><h3>资源加载</h3></div><div class="music-resource-fields">
             <label class="admin-labeled-field"><span>CDN 源</span><USelect class="admin-select" v-model="cdnPreset" :options="cdnOptions" :disabled="writeDisabled" /></label>
             <label v-if="cdnPreset === 'custom'" class="admin-labeled-field"><span>CSS CDN 地址</span><UInput class="admin-input" v-model="draft.frontendSettings.musicCssCdnURL" :disabled="writeDisabled" /></label>
             <label v-if="cdnPreset === 'custom'" class="admin-labeled-field"><span>JS CDN 地址</span><UInput class="admin-input" v-model="draft.frontendSettings.musicJsCdnURL" :disabled="writeDisabled" /></label>
           </div></section>
-          <p v-else class="text-sm" :class="theme.mutedText">本地音乐使用站内播放器资源。</p>
-          <section class="admin-form-section"><div class="admin-section-heading"><h3>播放偏好</h3></div><div class="admin-option-grid"><label v-for="item in toggleItems" :key="item.key" class="admin-toggle-row"><span>{{ item.label }}</span><UToggle v-model="draft.frontendSettings[item.key]" :disabled="writeDisabled" /></label></div></section>
         </fieldset>
+        <p v-if="draft.frontendSettings.musicSource === 'local'" class="music-resource-note" :class="theme.mutedText">本地音乐使用站内播放器资源。</p>
       </details>
+          </aside>
+        </div>
       <p v-if="conflict" class="text-sm mt-3" role="alert">{{ conflictMessage }}。草稿已保留，请确认后重新加载。</p>
       <div class="music-save-bar">
         <div class="music-save-summary" :class="theme.mutedText">
@@ -260,7 +262,8 @@ const duration = (milliseconds: number) => {
 .music-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: end; gap: .5rem .65rem; }
 .music-search { grid-column: 1 / -1; }
 .music-track-list { list-style: none; padding: 0; margin: .6rem 0 0; }
-.music-library-list, .music-playlist-list { max-height: 32rem; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.music-library-list { max-height: 32rem; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.music-playlist-list { max-height: 24rem; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
 .music-track-row { display: flex; align-items: center; gap: .6rem; min-width: 0; padding: .55rem 0; }
 .music-track-list > li { border-top: 1px solid rgb(128 128 128 / .2); }
 .music-track-details { flex: 1; min-width: 0; }
@@ -269,9 +272,25 @@ const duration = (milliseconds: number) => {
 .music-track-subtitle { font-size: .75rem; }
 .music-track-badges { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem; font-size: .7rem; margin-top: .2rem; }
 .music-order { font-size: .75rem; min-width: 1.2rem; text-align: center; }
-.music-order-actions { justify-content: flex-end; padding-bottom: .55rem; }
+.music-draft-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: .4rem; }
+.music-draft-row > .music-track-row { gap: .4rem; }
+.music-order-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .25rem; justify-content: end; padding: .4rem 0; }
+.music-order-actions > :last-child { grid-column: 1 / -1; }
 .music-pagination { justify-content: center; margin-top: .65rem; padding-top: .5rem; border-top: 1px solid rgb(128 128 128 / .16); }
 .music-preferences-title { cursor: pointer; font-weight: 600; }
+.music-sidebar { display: grid; align-content: start; gap: .85rem; min-width: 0; }
+.admin-form-section.music-preferences { display: block; min-width: 0; padding: .85rem; }
+.music-preferences-grid { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; gap: .75rem 1rem; margin-top: .75rem; min-width: 0; }
+.music-preference-group { display: grid; gap: .6rem; min-width: 0; }
+.music-display-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .6rem; min-width: 0; }
+.music-toggle-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; }
+.music-toggle-grid .admin-toggle-row { min-width: 0; gap: .5rem; }
+.music-toggle-grid .admin-toggle-row > span { font-size: .75rem; }
+.music-resource-note { margin-top: .65rem; font-size: .75rem; }
+.music-resource-settings { grid-column: 1 / -1; border-top: 1px solid rgb(128 128 128 / .16); padding-top: .75rem; }
+.music-resource-fields { display: grid; grid-template-columns: minmax(0, 1fr); gap: .6rem; }
+.music-preferences-local .music-display-fields { grid-template-columns: minmax(0, 1fr); }
+.music-preferences-local .music-display-fields .admin-labeled-field { display: grid; grid-template-columns: 5rem minmax(0, 1fr); align-items: center; gap: .5rem; }
 .music-save-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .65rem 1rem; margin-top: .85rem; }
 .music-save-summary { display: grid; gap: .25rem; min-width: 0; flex: 1 1 20rem; line-height: 1.5; }
 .music-save-summary p { margin: 0; }
@@ -279,10 +298,16 @@ const duration = (milliseconds: number) => {
 @media (min-width: 1024px) {
   .admin-form-section.music-status { grid-template-columns: minmax(0, 1fr) auto; }
   .music-refresh-controls { justify-content: flex-end; }
-  .music-workspace { grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr); }
+  .music-workspace-local { grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr); }
   .music-filters { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .music-preferences-grid:not(.music-preferences-local) { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .music-resource-fields { grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); }
 }
 @media (max-width: 479px) {
+  .music-display-fields { grid-template-columns: minmax(0, 1fr); }
+  .music-toggle-grid { grid-template-columns: minmax(0, 1fr); }
+  .music-draft-row { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .music-order-actions { display: flex; justify-content: flex-end; }
   .music-refresh-controls { flex-wrap: nowrap; gap: .5rem; }
   .music-interval { flex: 1 1 auto; flex-wrap: wrap; gap: .3rem; }
   .music-interval-select { width: 100%; }

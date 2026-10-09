@@ -103,6 +103,25 @@ async function main() {
     assert.equal(await page.evaluate(() => Boolean(window.tagExecuted)), false)
     assert((await row(2).textContent()).includes('CUE · 第 2 轨'))
     assert.equal(await row(3).locator('img').count(), 0, 'external cover is rejected')
+    assert.equal(await section.locator('.music-sidebar .music-preferences').count(), 1, 'local preferences must occupy the playlist sidebar')
+    assert.equal(await section.locator('.music-preferences-grid > p').count(), 0, 'local resource note must not occupy a preferences grid column')
+    assert.equal(await section.locator('.music-preferences').evaluate(node => node.open), true, 'settings are visible beneath the playlist by default')
+    await section.locator('input[name="music-source"][value="netease"]').check()
+    assert.equal(await section.locator('.music-library, .music-playlist').count(), 0)
+    const onlineLayout = await section.evaluate(node => {
+      const groups = node.querySelectorAll('.music-preference-group')
+      const display = groups[0].getBoundingClientRect(), toggles = groups[1].getBoundingClientRect()
+      const resource = node.querySelector('.music-resource-settings').getBoundingClientRect()
+      return { topDelta: Math.abs(display.top - toggles.top), resourceBelow: resource.top >= Math.max(display.bottom, toggles.bottom), spansWidth: resource.width >= display.width + toggles.width }
+    })
+    assert(onlineLayout.topDelta < 2 && onlineLayout.resourceBelow && onlineLayout.spansWidth, 'online display and preferences share a row; resources occupy the next full row')
+    await section.locator('.music-resource-fields select').selectOption('custom')
+    assert.equal(await section.locator('.music-resource-fields .admin-labeled-field').count(), 3, 'custom CDN exposes both address fields in the resource row')
+    await section.locator('.music-resource-fields select').selectOption('hypcvgm')
+    await section.locator('input[name="music-source"][value="local"]').check()
+    await section.locator('.music-preferences-title').click()
+    assert.equal(await section.locator('.music-preferences').evaluate(node => node.open), false)
+    await section.locator('.music-preferences-title').click()
     await row(2).getByRole('checkbox').check(); await button('music-add-selected').click()
     await section.locator(`[data-draft-track-id="${id(2)}"] [data-testid="music-move-up"]`).click()
     assert.deepEqual(await section.locator('[data-draft-track-id]').evaluateAll(nodes => nodes.map(n => n.dataset.draftTrackId)), [id(2), id(1)])
@@ -152,6 +171,8 @@ async function main() {
           controlBottomDelta: Math.abs(select.bottom - refresh.bottom),
           statusHeight: rect('.music-status').height,
           libraryHeight: library.height, playlistHeight: playlist.height,
+          preferencesTop: rect('.music-preferences').top, playlistBottom: playlist.bottom,
+          preferencesLeft: rect('.music-preferences').left, playlistLeft: playlist.left,
           listHeight: list.getBoundingClientRect().height, listScrollHeight: list.scrollHeight,
           listMaxHeight: parseFloat(getComputedStyle(list).maxHeight)
         }
@@ -162,6 +183,8 @@ async function main() {
       if (width >= 1024) {
         assert(layout.statusHeight < 200, `desktop status remains unnecessarily tall: ${layout.statusHeight}`)
         assert(layout.playlistHeight < layout.libraryHeight, 'short playlist must not stretch to the candidate column height')
+        assert(Math.abs(layout.preferencesLeft - layout.playlistLeft) < 2, 'local preferences share the playlist column')
+        assert(layout.preferencesTop - layout.playlistBottom < 20, 'settings immediately fill the space beneath the playlist')
       }
     }
     readFailure = true; await page.evaluate(() => window.dispatchEvent(new Event('frontend-config-updated')))
