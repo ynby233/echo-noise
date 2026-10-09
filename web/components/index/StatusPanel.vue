@@ -3,7 +3,7 @@ store. Each selected section owns its data requests, form state and cleanup. -->
 <template>
   <div class="admin-root fixed inset-0 h-full w-full overflow-hidden" :class="[theme.pageBg, theme.text, panelTheme === 'light' ? 'admin-theme-light' : 'dark admin-theme-dark']" :data-admin-theme="panelTheme">
     <div class="admin-dashboard-shell h-full w-full">
-      <aside class="admin-sidebar-surface fixed left-0 top-0 z-40 flex h-full flex-col overflow-hidden border-r backdrop-blur-md transition-transform duration-300 md:transition-[width]" :class="sidebarClass">
+      <aside class="admin-sidebar-surface fixed left-0 top-0 z-40 flex h-full w-60 flex-col overflow-hidden border-r backdrop-blur-md transition-transform duration-300 md:transition-[width]" :class="sidebarClass">
         <div class="flex flex-col items-center gap-2 border-b px-4 py-4" :class="theme.border">
           <img :src="avatarSrc" class="h-14 w-14 rounded-full object-cover shadow-lg ring-2 ring-indigo-400/60" alt="avatar" @error="useFallbackAvatar" />
           <div class="w-full text-center transition-all" :class="sidebarCollapsed ? 'max-h-0 opacity-0 pointer-events-none' : 'max-h-20 opacity-100'">
@@ -189,7 +189,6 @@ onUnmounted(() => { window.removeEventListener('hashchange', onHashChange); docu
 <style src="~/assets/css/admin-sections.css"></style>
 <style scoped>
 .admin-dashboard-shell { min-height: 100%; }
-.admin-sidebar-surface { width: 15rem; }
 .admin-content-scroll { scrollbar-gutter: stable; }
 .admin-form-shell { max-width: 120rem; margin-inline: auto; }
 .admin-desktop-flex { display: none; }
