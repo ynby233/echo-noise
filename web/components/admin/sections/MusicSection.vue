@@ -28,27 +28,42 @@
 
       <template v-if="draft.frontendSettings.musicSource === 'local'">
         <section class="admin-form-section music-status" aria-live="polite">
-          <div class="admin-section-heading"><h3>本地音乐库</h3><p>使用服务器只读音乐目录；选曲后保存为全站歌单。</p></div>
-          <div class="music-toolbar">
-            <span class="music-badge">{{ config?.rootReadable ? '目录可读' : '目录不可读' }}</span>
-            <span class="music-badge">{{ scanLabel }}</span>
-            <span v-if="!config?.toolsReady" class="music-badge">{{ config?.toolsStatus === 'checking' ? '正在检查音频解析工具' : '音频解析工具不可用' }}</span>
-            <span>{{ config?.counts.available ?? 0 }} 首可用 · {{ config?.counts.unavailable ?? 0 }} 首失效</span>
-            <span v-if="config?.scan.state === 'running'">已处理 {{ config.scan.processed ?? 0 }} 首</span>
+          <div class="music-status-main">
+            <div class="music-status-heading">
+              <h3>本地音乐库</h3>
+              <span class="music-status-count">{{ config?.counts.available ?? 0 }} 首可用 · {{ config?.counts.unavailable ?? 0 }} 首失效</span>
+            </div>
+            <div class="music-toolbar music-status-badges">
+              <span class="music-badge">{{ config?.rootReadable ? '目录可读' : '目录不可读' }}</span>
+              <span class="music-badge">{{ scanLabel }}</span>
+              <span v-if="!config?.toolsReady" class="music-badge">{{ config?.toolsStatus === 'checking' ? '正在检查音频解析工具' : '音频解析工具不可用' }}</span>
+              <span v-if="config?.scan.state === 'running'" class="text-xs">已处理 {{ config.scan.processed ?? 0 }} 首</span>
+            </div>
+            <div class="music-status-times" :class="theme.mutedText">
+              <span>最近成功：{{ displayTime(config?.scan.lastSuccessAt) }}</span>
+              <span>下次自动刷新：{{ displayTime(config?.scan.nextAutoScanAt) }}</span>
+            </div>
           </div>
-          <p class="text-xs mt-2" :class="theme.mutedText">最近成功：{{ displayTime(config?.scan.lastSuccessAt) }} · 下次自动刷新：{{ displayTime(config?.scan.nextAutoScanAt) }}</p>
-          <p v-if="scanError" class="text-sm mt-2" role="status">{{ scanError }}</p>
-          <p v-if="config?.scan.metadataFailed || config?.scan.invalidCUE" class="text-xs mt-2" :class="theme.mutedText" role="status">元数据读取失败 {{ config.scan.metadataFailed ?? 0 }} 首 · CUE 无法解析或引用音源缺失 {{ config.scan.invalidCUE ?? 0 }} 份。其他可用歌曲已正常收录。</p>
-          <p v-if="ready && config?.rootReadable && config?.toolsReady && config.counts.total === 0 && config.scan.state !== 'running'" class="text-sm mt-2">目录中尚无已索引歌曲，可刷新目录后再选择。</p>
-          <div class="music-toolbar mt-3">
-            <label class="admin-labeled-field music-interval"><span>自动刷新周期</span><USelect v-model="draft.scanIntervalMinutes" class="admin-select" :options="intervalOptions" :disabled="writeDisabled" /></label>
-            <UButton data-testid="music-refresh" size="sm" class="admin-action" variant="soft" :disabled="writeDisabled || refreshing || config?.scan.state === 'running'" :loading="refreshing" @click="refreshScan">{{ config?.scan.state === 'running' ? '正在刷新' : '刷新目录' }}</UButton>
+          <div class="music-refresh-controls">
+            <label class="music-interval"><span>自动刷新周期</span><USelect v-model="draft.scanIntervalMinutes" class="admin-select music-interval-select" :options="intervalOptions" :disabled="writeDisabled" /></label>
+            <UButton data-testid="music-refresh" size="sm" class="admin-action music-refresh-button" variant="soft" :disabled="writeDisabled || refreshing || config?.scan.state === 'running'" :loading="refreshing" @click="refreshScan">{{ config?.scan.state === 'running' ? '正在刷新' : '刷新目录' }}</UButton>
+          </div>
+          <div v-if="scanError || config?.scan.metadataFailed || config?.scan.invalidCUE || (ready && config?.rootReadable && config?.toolsReady && config.counts.total === 0 && config.scan.state !== 'running')" class="music-status-notices">
+            <p v-if="scanError" class="text-sm" role="status">{{ scanError }}</p>
+            <p v-if="config?.scan.metadataFailed || config?.scan.invalidCUE" class="text-xs" :class="theme.mutedText" role="status">元数据读取失败 {{ config.scan.metadataFailed ?? 0 }} 首 · CUE 无法解析或引用音源缺失 {{ config.scan.invalidCUE ?? 0 }} 份。其他可用歌曲已正常收录。</p>
+            <p v-if="ready && config?.rootReadable && config?.toolsReady && config.counts.total === 0 && config.scan.state !== 'running'" class="text-sm">目录中尚无已索引歌曲，可刷新目录后再选择。</p>
           </div>
         </section>
 
         <div class="music-workspace">
           <section class="admin-form-section music-library">
-            <div class="admin-section-heading"><h3>音源歌曲</h3><p>搜索整个目录；勾选和添加仅影响当前草稿。</p></div>
+            <div class="music-panel-heading">
+              <div class="admin-section-heading"><h3>音源歌曲 <span class="music-panel-count">{{ library.total }} 首</span></h3><p>搜索音源并添加到全站歌单，保存后生效。</p></div>
+              <div class="music-toolbar music-selection-actions">
+                <span class="text-xs" :class="theme.mutedText">已勾选 {{ selectedIDs.size }} 首</span>
+                <UButton data-testid="music-add-selected" size="xs" variant="soft" :disabled="writeDisabled || selectedIDs.size === 0 || libraryLoading" @click="addSelected">添加勾选歌曲</UButton>
+              </div>
+            </div>
             <div class="music-filters">
               <label class="admin-labeled-field music-search"><span>搜索歌曲 / 艺术家 / 专辑</span><UInput data-testid="music-search" class="admin-input" v-model="search" placeholder="输入关键词" /></label>
               <label class="admin-labeled-field"><span>格式</span><USelect class="admin-select" v-model="query.format" :options="formatOptions" /></label>
@@ -56,14 +71,10 @@
               <label class="admin-labeled-field"><span>可用状态</span><USelect class="admin-select" v-model="query.availability" :options="availabilityOptions" /></label>
               <label class="admin-labeled-field"><span>已保存歌单</span><USelect class="admin-select" v-model="query.selected" :options="selectedOptions" /></label>
             </div>
-            <div class="music-toolbar mt-3">
-              <span class="text-xs" :class="theme.mutedText">共 {{ library.total }} 首 · 当前页勾选 {{ selectedIDs.size }} 首</span>
-              <UButton data-testid="music-add-selected" size="xs" variant="soft" :disabled="writeDisabled || selectedIDs.size === 0 || libraryLoading" @click="addSelected">添加勾选歌曲</UButton>
-            </div>
             <p v-if="libraryError" class="text-sm mt-3" role="alert">{{ libraryError }} <UButton size="xs" variant="link" @click="loadLibrary">重试</UButton></p>
             <p v-if="libraryLoading" role="status" class="text-sm mt-3">正在读取音源歌曲…</p>
             <p v-else-if="!library.items.length && !libraryError" class="text-sm mt-3" :class="theme.mutedText">没有符合条件的歌曲。</p>
-            <ul class="music-track-list" :aria-busy="libraryLoading">
+            <ul class="music-track-list music-library-list" :aria-busy="libraryLoading">
               <li v-for="track in library.items" :key="track.trackID" class="music-track-row" :data-track-id="track.trackID">
                 <input type="checkbox" :aria-label="`勾选 ${track.title}`" :checked="selectedIDs.has(track.trackID)" :disabled="writeDisabled || libraryLoading || !track.available || draft.trackIDs.includes(track.trackID)" @change="toggleSelection(track.trackID, $event)" />
                 <MusicTrackCover :url="track.coverURL" :base-api="baseApi" />
@@ -85,7 +96,7 @@
           <section class="admin-form-section music-playlist">
             <div class="admin-section-heading"><h3>全站歌单 <span class="text-sm">{{ draft.trackIDs.length }} / 1000</span></h3><p>按下列顺序播放。拖拽或使用移动按钮排序。</p></div>
             <p v-if="!playlist.length" class="text-sm" :class="theme.mutedText">尚未选择歌曲。请从音源歌曲中明确添加。</p>
-            <ol class="music-track-list">
+            <ol class="music-track-list music-playlist-list">
               <li v-for="(track, index) in playlist" :key="track.trackID" class="music-draft-row" :data-draft-track-id="track.trackID" :draggable="!writeDisabled" @dragstart="startDrag(track.trackID, $event)" @dragover.prevent @drop.prevent="dropTrack(index, $event)" @dragend="draggedID = ''">
                 <div class="music-track-row">
                   <span class="music-order">{{ index + 1 }}</span><MusicTrackCover :url="track.coverURL" :base-api="baseApi" />
@@ -120,16 +131,20 @@
         </fieldset>
       </details>
       <p v-if="conflict" class="text-sm mt-3" role="alert">{{ conflictMessage }}。草稿已保留，请确认后重新加载。</p>
-      <p class="text-xs mt-3" :class="theme.mutedText" aria-live="polite">{{ dirty ? '有未保存的更改' : '配置已同步' }}<template v-if="savedAt"> · 保存成功：{{ displayTime(savedAt) }}</template></p>
+      <div class="music-save-bar">
+        <div class="music-save-summary" :class="theme.mutedText">
+          <p class="text-xs" aria-live="polite">{{ dirty ? '有未保存的更改' : '配置已同步' }}<template v-if="savedAt"> · 保存成功：{{ displayTime(savedAt) }}</template></p>
+          <p class="text-xs">保存后所有访客共用此来源和歌单；关闭或本地歌单为空时不播放音乐。</p>
+        </div>
+        <div class="music-toolbar music-save-actions">
+          <UButton data-testid="music-reload" size="sm" class="admin-action" variant="soft" color="gray" :disabled="loading || saving" @click="reload">重新加载</UButton>
+          <UButton data-testid="music-save" size="sm" class="admin-action" color="primary" :disabled="writeDisabled || conflict || loading" :loading="saving" @click="save">保存配置</UButton>
+        </div>
+      </div>
       <div v-if="confirmReload" class="admin-form-section mt-3" role="alertdialog" aria-label="重新加载音乐配置" aria-describedby="music-reload-description">
         <p id="music-reload-description">重新加载将覆盖未保存的音乐配置和歌单草稿。</p>
         <div class="music-toolbar mt-3"><UButton data-testid="music-confirm-reload" size="sm" @click="discardDraft">确认重新加载</UButton><UButton data-testid="music-cancel-reload" size="sm" variant="soft" color="gray" @click="confirmReload = false">取消</UButton></div>
       </div>
-      <div class="admin-form-actions">
-        <UButton data-testid="music-reload" size="sm" class="admin-action" variant="soft" color="gray" :disabled="loading || saving" @click="reload">重新加载</UButton>
-        <UButton data-testid="music-save" size="sm" class="admin-action" color="primary" :disabled="writeDisabled || conflict || loading" :loading="saving" @click="save">保存配置</UButton>
-      </div>
-      <p class="text-xs mt-2" :class="theme.mutedText">保存后所有访客共用此来源和歌单；关闭或本地歌单为空时不播放音乐。</p>
     </div>
   </section>
 </template>
@@ -222,23 +237,56 @@ const duration = (milliseconds: number) => {
 .music-source { margin: .5rem 0 1rem; }
 .music-radio { display: flex; align-items: center; gap: .4rem; }
 .music-badge { display: inline-block; border: 1px solid currentColor; opacity: .8; border-radius: .4rem; padding: .1rem .4rem; font-size: .7rem; overflow-wrap: anywhere; }
-.music-status { margin-bottom: 1rem; }
-.music-interval { width: min(100%, 13rem); }
-.music-workspace { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; }
-.music-library, .music-playlist { min-width: 0; }
-.music-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .65rem; }
+.admin-form-section.music-status { display: grid; grid-template-columns: minmax(0, 1fr); align-items: center; gap: .65rem 1.25rem; margin-bottom: .85rem; }
+.music-status-main { min-width: 0; display: grid; gap: .45rem; }
+.music-status-heading { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem 1rem; }
+.music-status-heading h3 { margin: 0; font-size: .875rem; font-weight: 600; }
+.music-status-count { font-size: .8rem; }
+.music-status-badges { gap: .4rem; }
+.music-status-times { display: flex; flex-wrap: wrap; gap: .3rem 1rem; font-size: .75rem; line-height: 1.5; }
+.music-refresh-controls { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem .65rem; min-width: 0; }
+.music-interval { display: flex; align-items: center; gap: .6rem; min-width: 0; font-size: .75rem; }
+.music-interval > span { white-space: nowrap; }
+.music-interval-select { width: 8.5rem; min-width: 0; }
+.music-refresh-button { flex: 0 0 auto; }
+.music-status-notices { grid-column: 1 / -1; display: grid; gap: .35rem; border-top: 1px solid rgb(128 128 128 / .16); padding-top: .6rem; line-height: 1.5; }
+.music-status-notices p { margin: 0; }
+.music-workspace { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; gap: .85rem; }
+.admin-form-section.music-library, .admin-form-section.music-playlist { min-width: 0; gap: .65rem; }
+.music-panel-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem 1rem; margin-bottom: .65rem; }
+.music-panel-heading .admin-section-heading { margin: 0; }
+.music-panel-count { font-size: .75rem; font-weight: 400; margin-left: .35rem; opacity: .7; }
+.music-selection-actions { margin-left: auto; }
+.music-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: end; gap: .5rem .65rem; }
 .music-search { grid-column: 1 / -1; }
-.music-track-list { list-style: none; padding: 0; margin: .8rem 0 0; }
-.music-track-row { display: flex; align-items: center; gap: .6rem; min-width: 0; padding: .7rem 0; }
+.music-track-list { list-style: none; padding: 0; margin: .6rem 0 0; }
+.music-library-list, .music-playlist-list { max-height: 32rem; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.music-track-row { display: flex; align-items: center; gap: .6rem; min-width: 0; padding: .55rem 0; }
 .music-track-list > li { border-top: 1px solid rgb(128 128 128 / .2); }
 .music-track-details { flex: 1; min-width: 0; }
 .music-track-title, .music-track-subtitle { display: block; overflow-wrap: anywhere; line-height: 1.4; }
 .music-track-title { font-size: .85rem; }
 .music-track-subtitle { font-size: .75rem; }
-.music-track-badges { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem; font-size: .7rem; margin-top: .3rem; }
+.music-track-badges { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem; font-size: .7rem; margin-top: .2rem; }
 .music-order { font-size: .75rem; min-width: 1.2rem; text-align: center; }
-.music-order-actions { justify-content: flex-end; padding-bottom: .7rem; }
-.music-pagination { justify-content: center; margin-top: 1rem; }
+.music-order-actions { justify-content: flex-end; padding-bottom: .55rem; }
+.music-pagination { justify-content: center; margin-top: .65rem; padding-top: .5rem; border-top: 1px solid rgb(128 128 128 / .16); }
 .music-preferences-title { cursor: pointer; font-weight: 600; }
-@media (min-width: 1024px) { .music-workspace { grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr); } .music-filters { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.music-save-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .65rem 1rem; margin-top: .85rem; }
+.music-save-summary { display: grid; gap: .25rem; min-width: 0; flex: 1 1 20rem; line-height: 1.5; }
+.music-save-summary p { margin: 0; }
+.music-save-actions { margin-left: auto; justify-content: flex-end; }
+@media (min-width: 1024px) {
+  .admin-form-section.music-status { grid-template-columns: minmax(0, 1fr) auto; }
+  .music-refresh-controls { justify-content: flex-end; }
+  .music-workspace { grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr); }
+  .music-filters { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@media (max-width: 479px) {
+  .music-refresh-controls { flex-wrap: nowrap; gap: .5rem; }
+  .music-interval { flex: 1 1 auto; flex-wrap: wrap; gap: .3rem; }
+  .music-interval-select { width: 100%; }
+  .music-refresh-button { align-self: flex-end; }
+  .music-selection-actions { margin-left: 0; }
+}
 </style>

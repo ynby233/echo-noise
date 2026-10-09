@@ -142,6 +142,27 @@ async function main() {
     for (const width of [1440, 768, 390]) {
       await page.setViewportSize({ width, height: 1000 })
       assert(await section.evaluate(node => node.scrollWidth <= node.clientWidth + 1), `section overflow at ${width}`)
+      const layout = await section.evaluate(node => {
+        const rect = selector => node.querySelector(selector).getBoundingClientRect()
+        const select = rect('.music-interval select'), refresh = rect('[data-testid="music-refresh"]')
+        const library = rect('.music-library'), playlist = rect('.music-playlist')
+        const list = node.querySelector('.music-library-list')
+        return {
+          controlCenterDelta: Math.abs(select.y + select.height / 2 - refresh.y - refresh.height / 2),
+          controlBottomDelta: Math.abs(select.bottom - refresh.bottom),
+          statusHeight: rect('.music-status').height,
+          libraryHeight: library.height, playlistHeight: playlist.height,
+          listHeight: list.getBoundingClientRect().height, listScrollHeight: list.scrollHeight,
+          listMaxHeight: parseFloat(getComputedStyle(list).maxHeight)
+        }
+      })
+      assert(width < 480 ? layout.controlBottomDelta < 2 : layout.controlCenterDelta < 2, `refresh controls misaligned at ${width}: ${JSON.stringify(layout)}`)
+      assert(layout.listHeight <= layout.listMaxHeight + 2, `library must have bounded height at ${width}`)
+      assert(layout.listScrollHeight > layout.listHeight, `full candidate page must scroll at ${width}`)
+      if (width >= 1024) {
+        assert(layout.statusHeight < 200, `desktop status remains unnecessarily tall: ${layout.statusHeight}`)
+        assert(layout.playlistHeight < layout.libraryHeight, 'short playlist must not stretch to the candidate column height')
+      }
     }
     readFailure = true; await page.evaluate(() => window.dispatchEvent(new Event('frontend-config-updated')))
     await section.getByText('音乐服务暂不可用，请重试', { exact: false }).first().waitFor(); readFailure = false
