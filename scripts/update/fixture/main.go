@@ -126,6 +126,7 @@ func main() {
 		}
 		controllers.GetExecutorRuntime(c)
 	})
+	executor.GET("/work", controllers.GetExecutorWork)
 	executor.POST("/check", controllers.RecordExecutorDeploymentCheck)
 	executor.POST("/claim", controllers.ClaimUpdateTask)
 	executor.POST("/tasks/:id/events", controllers.RecordUpdateTaskEvent)
@@ -141,6 +142,23 @@ func main() {
 			_ = updates.WakeExecutor()
 		}
 		c.JSON(http.StatusCreated, dto.OK(task))
+	})
+	router.POST("/fixture/prepare", func(c *gin.Context) {
+		// The harness publishes this isolated server only on host loopback.
+		must(db.Exec("INSERT OR IGNORE INTO users(id, username, password, is_admin) VALUES(1, 'fixture-admin', '', 1)").Error)
+		c.Set("user_id", models.PrimaryAdminUserID)
+		c.Set("auth_via", "session")
+		controllers.PrepareUpdateInstallation(c)
+	})
+	router.POST("/fixture/expire-check", func(c *gin.Context) {
+		credential, err := service.CurrentCredential()
+		must(err)
+		if credential == nil {
+			c.Status(http.StatusPreconditionFailed)
+			return
+		}
+		must(db.Model(&models.UpdateExecutorCredential{}).Where("id = ?", credential.ID).Update("checked_at", time.Now().UTC().Add(-4*time.Minute)).Error)
+		c.Status(http.StatusOK)
 	})
 	router.POST("/fixture/rotate", func(c *gin.Context) {
 		_, token, err := service.CreateCredential(1, "rotated fixture")

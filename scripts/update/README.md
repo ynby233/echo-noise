@@ -6,9 +6,9 @@
 
 ## 配对与固定配置
 
-执行器可由部署者选择的调度工具调用。空闲时每分钟运行 `run`，维持近期能力检查、领取任务并恢复原记录；所有入口使用同一配置和状态目录，不并行重装。应用不持有宿主 SSH 凭据，也不负责配置调度工具。
+执行器可由部署者选择的调度工具调用。原周期 `run` 会维持近期能力检查、领取任务并恢复原记录；新增 `poll` 可用于低频补偿，空闲只查询待办，存在持久检查请求或可领取任务时才沿原 `run` 做完整检查。所有入口使用同一配置和状态目录，不并行重装。应用不持有宿主 SSH 凭据，也不负责配置调度工具。
 
-若需要加速领取，可在受信部署配置中设置 `UPDATE_EXECUTOR_WAKE_URL` 和 `UPDATE_EXECUTOR_WAKE_TOKEN_FILE`。应用在任务成功创建后向固定地址发送带 Bearer token 的 POST，不附带命令、镜像或路径参数；超时或失败仍返回原任务 ID，由定时领取补偿。钩子接收端的认证和调度接入由部署者实现，主动领取无需配置该钩子。
+若需要加速检查或领取，可在受信部署配置中设置 `UPDATE_EXECUTOR_WAKE_URL` 和 `UPDATE_EXECUTOR_WAKE_TOKEN_FILE`。应用在持久化新的部署检查请求或成功创建任务后向固定地址发送带 Bearer token 的 POST，不附带命令、镜像或路径参数；重复未完成的检查请求合并，不重复唤醒。超时或失败保留检查请求或原任务，由定时调用补偿。钩子接收端的认证和调度接入由部署者实现；无钩子时仍可周期 `run`、手工 `check`，或由 `poll` 接手持久待办。
 
 站长必须是固定 ID 1，使用现有登录认证调用 API。管理员 JWT/密码不能当长期 executor token；初次接口请求使用现有站长客户端的认证方式，不在终端参数填管理员 token。
 
@@ -16,7 +16,9 @@
 | --- | --- |
 | `POST /api/updates/executor/credential`，`{"name":"宿主执行器"}` | HTTP 201，`{"code":1,"data":{"credential":{...},"token":"仅显示一次"}}` |
 | `GET /api/updates` | `data.instance_id` 是管理员人工确认的固定实例 ID |
+| `POST /api/updates/prepare`，`{}` | 固定 ID 1 站长认证；已可安装 HTTP 200，检查请求持久化/合并 HTTP 202；`data.credential_id/requested_at/installation/wake_status`，只准备部署检查，不创建任务、不查询 registry |
 | `GET /api/updates/executor/runtime` | executor Bearer；`data.instance_id/revision/build_identity` 用于核对 |
+| `GET /api/updates/executor/work` | executor Bearer；HTTP 200、`code:1`、`data.instance_id/check_requested/task_available`，两个标志为 bool；只查询待办，不领取或更新部署检查，`Cache-Control: no-store` |
 | `POST /api/updates/executor/check` | executor Bearer；`instance_id/version/platform/revision/ok`，记录本脚本实际部署/SQLite 备份检查，不接受路径、秘密或自由文本 |
 | `POST /api/updates/executor/claim` | executor Bearer；无任务 204；有任务 `code:1`，`data.id/status/channel/target_image/target_digest/target_revision` |
 | `POST /api/updates/executor/tasks/ID/events`，`{"status":"downloading"}` | executor Bearer；成功 HTTP 200、`code:1`；非法转换 409；自由文本不保存 |
@@ -74,13 +76,18 @@ python3 executor.py check /absolute/executor.json   # 核对，不领取
 python3 executor.py claim /absolute/executor.json   # 领取并落盘，无任务 exit 0
 python3 executor.py report /absolute/executor.json  # 仅按序补报已有记录
 python3 executor.py run /absolute/executor.json     # 先恢复，再检查/上报能力，然后领取
+python3 executor.py poll /absolute/executor.json    # 先恢复；无待办只查询，有待办沿原 run
 ```
 
-每次 CLI 独占登记 state_dir 的 flock，并发调用非零退出，不删除锁文件“恢复”。`active.json` 原子替换/fsync、0600，保存任务/实例、目标 digest/revision、旧容器/image ID、配置位置、备份位置、token **文件引用**、确认/待报阶段和动作意图/结果；无 token 明文或原 env。日志只输出任务 ID、阶段和有限错误码。保留宿主/scheduler stderr；服务起不来时网页无法查询是实际限制。
+每次 CLI 独占登记 state_dir 的 flock；仅 `poll` 锁忙输出 `busy` 并 exit 0，表示已有执行器承担工作，其他入口锁忙仍输出 `executor_already_running` 并非零退出，不删除锁文件“恢复”。`active.json` 原子替换/fsync、0600，保存任务/实例、目标 digest/revision、旧容器/image ID、配置位置、备份位置、token **文件引用**、确认/待报阶段和动作意图/结果；无 token 明文或原 env。日志只输出任务 ID、阶段和有限错误码。保留宿主/scheduler stderr；服务起不来时网页无法查询是实际限制。
 
 状态按 `claimed → downloading → stopping → backing_up → replacing → verifying → succeeded` 回报。停机期间继续确认后的宿主操作，事件落盘后在新服务恢复时串行补报。ACK 丢失重发当前未确认事件；409 保留记录并退出，不能忽略/跳过。实例或配置不一致、原任务无本地证据时停止，不领取第二条任务。下载/停机前检查失败记录 failed；停止/备份中断结果不明进入 `needs_attention`；替换意图存在且实际目标已运行时只核验/补报，不再次替换。
 
 最终 ACK 丢失保留 `step=complete/failed` 和待报 `succeeded/failed`，下次用原 token 引用补报，不先要求旧 token 调用 claim/runtime。轮换按 U2 范围接受自己最终回报；撤销/过期 401，记录保留、非零退出。已确认结束记录在下次领取前按任务 ID 归档；旧镜像/备份不全局 prune。
+
+`poll` 先加载 journal，按原流程完成已闭合记录的有限清理/归档；仍有记录时直接调用原 `run` 恢复，不先访问新 token 的 `/work`。无记录才查询 `/work`，核对固定实例 ID 和两个真正的布尔标志；响应无效或实例不匹配时失败。两个标志均为 false 输出 `idle` 并 exit 0，不调用 runtime/check/claim、不访问 Engine、不创建探测容器、不测量备份、不改 journal。任一标志为 true 则沿原完整预检、检查回报、领取及执行路径；只有检查请求且无任务时，原 claim 返回 204 后结束。
+
+仅 `/work` 返回 HTTP 404/405 时，本次 `poll` 回退原 `run`，支持先升级脚本再升级后端。401/403、传输失败、非法响应及其他错误不回退；后续完整执行中的错误也不触发兼容重试。原 `run/check/claim/report/reconcile` 不依赖新工作查询，协议能力版本保持 u6-1。
 
 Docker 模式在新版镜像/挂载/健康/runtime 验证通过、原任务 succeeded 回报获确认后，只删除该任务记录的旧容器 ID。删除前确认备份已完成、当前容器仍是目标镜像、旧容器名称/镜像与本任务一致且 exited/restart=no；使用普通 `docker rm`，不强制停止，不删除卷、镜像、备份、配置或业务目录。正常完成、最终 ACK 补报和人工 verify 成功均执行同一清理；失败/needs_attention/未确认终态不清理。Compose 仍由原 up 流程处理服务替换，不另删容器。
 
@@ -110,9 +117,11 @@ CGO_ENABLED=0 go build -o update-tool ./cmd/update-tool
 sudo -E python3 scripts/update/test-docker.py
 ```
 
-`.github/workflows/update-executor.yml` 自动在独立 runner 执行。fixture 使用临时 SQLite、真实 TaskService/Create/Claim、真实认证/控制器和不同内嵌 revision 的 coordinator，回环 registry、独立端口和临时卷；生产路由无开关。仅 fixture 子类将官方仓库映射到回环 registry，由真实旧镜像 `/app/update-tool` 归档合成 SQLite 笔记、外置本地 Blob、兼容媒体和配置，并实际恢复到隔离目录；产品入口不导入它。
+`.github/workflows/update-executor.yml` 在独立 runner 执行。fixture 使用临时 SQLite、真实 TaskService/Create/Claim、实际部署准备与工作查询控制器、真实认证和不同内嵌 revision 的 coordinator，回环 registry、独立端口和临时卷；`/fixture/prepare` 与 `/fixture/expire-check` 仅存在于回环测试入口，生产路由无测试开关。仅 fixture 子类将官方仓库映射到回环 registry，由真实旧镜像 `/app/update-tool` 归档合成 SQLite 笔记、外置本地 Blob、兼容媒体和配置，并实际恢复到隔离目录；产品入口不导入它。
 
 真实检查覆盖 Docker/Compose 停旧替换、健康/runtime、OCI index/manifest/image ID、错误架构、flock、claim 丢失取回、409、停机积压事件、DB 提交后最终响应丢失、轮换/撤销、SIGKILL 后核对不重装、Compose 再 up 及其他服务身份/挂载。清理只处理自有项目/临时卷；fixture 的 `down --volumes` 只清理独立测试卷，不是产品执行器动作。
+
+低频路径的测试覆盖 Docker/Compose 空闲 `poll` 不产生探测容器且不刷新 checked_at，检查过期后通过准备请求和 `poll` 重做完整检查，再领取固定任务并完成替换；未发送 wake 的请求/任务仍由 `poll` 接手，最终 ACK 丢失和轮换凭据时先按 journal 恢复。新增覆盖是否通过需以实际测试运行结果为准。
 
 F1–F6 补验包含真实 network connect、自定义 hostname/domain 拒绝及 host 成功、两种多副本文件加单副本覆盖启动、create 后 SIGKILL/回执丢失重试与他人/运行中探测保留、真实 UID/mode/链接与 UNIX/Engine socket 检查，以及异常首次写入 SIGKILL 后真实协调数据库 needs_attention/活动占位。均使用空数据隔离实例，不操作 NAS。
 
@@ -120,9 +129,11 @@ F1–F6 补验包含真实 network connect、自定义 hostname/domain 拒绝及
 
 ## U5 后台与能力检查
 
-固定 ID 1 站长在后台“版本与更新”创建一次显示的 token、读取实例 ID，按上文写受控配置；在宿主运行 `check`。当前 `u6-1` 的 check/空闲 run 在真实 preflight 与旧镜像 SQLite 备份 plan/数据布局/写入者/空间检查通过后，上报同一 instance/full revision。失败清除此前成功检查，HTTP 只接收有限能力字段，具体错误留在宿主 stderr。`u3-1`/`u4-1`/`u5-1` 本地 journal 仍可恢复；升级脚本不能删除旧凭据或未结束记录。
+固定 ID 1 站长在后台“版本与更新”创建一次显示的 token、读取实例 ID，按上文写受控配置；在宿主运行 `check`。当前 `u6-1` 的 check、无 journal 的 run 和有待办的 poll 在真实 preflight 与旧镜像 SQLite 备份 plan/数据布局/写入者/空间检查通过后，上报同一 instance/full revision。失败清除此前成功检查，HTTP 只接收有限能力字段，具体错误留在宿主 stderr。`u3-1`/`u4-1`/`u5-1` 本地 journal 仍可恢复；升级脚本不能删除旧凭据或未结束记录。
 
-安装需当前有效且未轮换的凭据、最近三分钟内成功部署检查、匹配实例/已安装 revision、u6-1、Linux/amd64、SQLite。`last_seen_at` 的普通认证不延长 `checked_at`；连接过但未检查/离线/脚本过旧/不支持平台或数据保护失败均不可安装。每分钟 run 无任务即退出，三分钟窗口对应三轮调度；大型检查超过窗口或调度缺失会保守拒绝创建，不重新分配已领取任务。ARM、MySQL/PostgreSQL、远端附件未验收，不支持安装。
+安装需当前有效且未轮换的凭据、最近三分钟内成功部署检查、匹配实例/已安装 revision、u6-1、Linux/amd64、SQLite。`last_seen_at` 的普通认证和工作查询不延长 `checked_at`；连接过但未检查、检查过期、脚本过旧、不支持平台或数据保护失败均不可创建任务。原每分钟 run 无任务即退出，三分钟窗口对应三轮调度；低频 poll 空闲时允许检查过期，安装前通过准备请求重新检查，不延长窗口。大型检查超过窗口或调度缺失会保守拒绝创建，不重新分配已领取任务。ARM、MySQL/PostgreSQL、远端附件未验收，不支持安装。
+
+`POST /api/updates/prepare` 持久记录当前有效凭据的部署检查请求；已可安装时不写新请求，未完成的重复请求合并。原 `check` 或 `run` 的检查回报也可满足请求：`checked_at >= requested_at` 表示完成，失败回报同样消费请求但不使安装可用。已完成却失败的请求在 30 秒冷却内再次准备返回 429、`Retry-After: 30`，活动任务返回 409，缺凭据、过期或其他不支持条件返回 412。响应中的 `wake_status` 仅为 not_needed/sent/unconfigured/failed/coalesced；唤醒失败保留请求，后续补偿检查不会自行创建安装任务。
 
 `GET /api/updates` 返回两渠道、跟随偏好、能力、活动任务或最近结果及站长部署指引；`GET /api/updates/state` 每三秒只查询本地任务/运行身份/能力，不重复扫描 registry。刷新、换浏览器、清缓存均从服务端发现原任务。`needs_attention` 占用两个渠道，必须按 U4 结案；任务创建重试返回原活动任务，渠道目标在确认后变化返回 409。浏览器 HTTP 中断只查询，不自动再次 POST；页面停机时依赖宿主日志。匿名 `GET /api/updates/maintenance` 仅返回维护布尔值，没有任务 ID/镜像/提交/错误/凭据信息。
 

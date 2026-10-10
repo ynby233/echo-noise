@@ -18,6 +18,9 @@ const plain = value => JSON.parse(JSON.stringify(value))
 function component(name, expose, options = {}) {
   const hooks = { mounted: [], activated: [], deactivated: [], unmounted: [] }
   const timers = new Map()
+  const timerDelays = new Map()
+  const schedule = (fn, delay) => { timers.set(++timerID, fn); timerDelays.set(timerID, delay); return timerID }
+  const unschedule = id => { timers.delete(id); timerDelays.delete(id) }
   let timerID = 0
   const events = new EventTarget()
   const account = options.account || vue.ref('1')
@@ -31,18 +34,22 @@ function component(name, expose, options = {}) {
     useToast: () => ({ add() {} }),
     useRuntimeConfig: () => ({ public: { baseApi: '/api' } }),
     useAdminCapabilities: () => ({ isPrimaryAdmin: vue.ref(true), can: () => true, refreshCapabilities: async () => {} }),
+    useUserStore: () => ({ get user() { return { userid: account.value } } }),
+    localStorage: { getItem: () => null },
     inject: key => key.description === 'admin drafts' ? drafts : account,
     onMounted: fn => hooks.mounted.push(fn),
     onActivated: fn => hooks.activated.push(fn),
     onDeactivated: fn => hooks.deactivated.push(fn),
     onUnmounted: fn => hooks.unmounted.push(fn),
     window: Object.assign(events, {
-      setTimeout: fn => { timers.set(++timerID, fn); return timerID },
-      clearTimeout: id => timers.delete(id),
+      setTimeout: schedule,
+      clearTimeout: unschedule,
+      confirm: () => true,
     }),
-    setInterval: fn => { timers.set(++timerID, fn); return timerID },
-    clearInterval: id => timers.delete(id),
-    clearTimeout: id => timers.delete(id),
+    setTimeout: schedule,
+    setInterval: schedule,
+    clearInterval: unschedule,
+    clearTimeout: unschedule,
     resolveManagedAttachmentURL: (_base, value) => value,
     resolveUploadedMediaUrl: value => value,
     booleanSetting: (value, fallback = false) => value == null ? fallback : [true, 'true', 1, '1'].includes(value),
@@ -69,7 +76,9 @@ function component(name, expose, options = {}) {
   // A block avoids colliding with the composable module's local variables.
   run(`{\n${source}\nglobalThis.subject = { ${expose} }\n}`, `${name}.vue`)
   return {
-    ...sandbox.subject, props, timers, drafts, account,
+    ...sandbox.subject, props, timers, timerDelays, drafts, account,
+    fireTimer: async id => { const callback = timers.get(id); unschedule(id); await callback(); await flush() },
+    mount: async () => { for (const hook of hooks.mounted) await hook(); await flush() },
     activate: async () => { for (const hook of hooks.activated) await hook(); await flush() },
     deactivate: async () => { for (const hook of hooks.deactivated) await hook(); await flush() },
     dispose: () => { for (const hook of hooks.unmounted) hook(); scope.stop() },
@@ -347,4 +356,466 @@ test('async dashboard refreshes on its first return even without an initial acti
   await panel.activate()
   assert.equal(panel.registerEnabled.value, false)
   panel.dispose()
+})
+
+const versionIntent = { channel: 'edge', revision: 'a'.repeat(40), digest: `sha256:${'b'.repeat(64)}` }
+const versionNow = Date.parse('2026-10-11T01:00:00Z')
+const versionRequestedAt = new Date(versionNow).toISOString()
+const versionAvailable = { available: true, reason: '' }
+const versionExpired = { available: false, reason: 'executor_offline' }
+function versionPanel(options = {}) {
+  let now = versionNow
+  class Clock extends Date {
+    constructor(...args) { super(...(args.length ? args : [now])) }
+    static now() { return now }
+  }
+  const posts = [], gets = []
+  let state = {
+    executor: { id: 7, checked_at: new Date(now - 240000).toISOString(), check_ok: true },
+    installation: { ...versionExpired },
+    preparation: { credential_id: 7 },
+    task: null,
+    ...options.state,
+  }
+  const pendingReply = (wake_status = 'sent') => ({ code: 1, data: { credential_id: 7, requested_at: versionRequestedAt, installation: { ...versionExpired }, wake_status } })
+  const panel = component('VersionSection', 'canInstall, canPrepare, confirmInstall, install, prepareInstallation, cancelPreparation, refresh, poll, applyState, channels, selected, target, draftConfirmed, installation, executor, task, busy, preparing, posting, preparationAttempt, pendingInstall, preparationError, preparationHint, uncertain, error, rejection', {
+    account: options.account,
+    io: {
+      Date: Clock,
+      getRequest: async (path, _params, requestOptions) => {
+        gets.push({ path, options: requestOptions })
+        if (options.get) return options.get(path)
+        if (path === 'updates/state') return { code: 1, data: plain(state) }
+        if (path === 'updates') return { code: 1, data: { report: { channels: [] }, follow_channel: 'stable' } }
+        return { code: 1, data: { isContainer: true } }
+      },
+      postRequest: async (path, body, requestOptions) => {
+        posts.push({ path, body: plain(body), options: requestOptions })
+        if (options.post) return options.post(path, body)
+        if (path === 'updates/prepare') return pendingReply()
+        state.task = { id: 'created', status: 'pending', target_revision: body.revision }
+        return { code: 1, data: state.task }
+      },
+      ...options.io,
+    },
+  })
+  panel.applyState(plain(state))
+  panel.channels.value = [{ name: 'edge', ...versionIntent, installable: true, status: 'update_available' }]
+  return Object.assign(panel, {
+    posts, gets, pendingReply,
+    setNow: value => { now = value },
+    setState: patch => { state = { ...state, ...patch } },
+    report: async patch => { state = { ...state, ...patch }; await panel.refresh(); await flush() },
+    confirm: () => { panel.confirmInstall('edge'); panel.draftConfirmed.value = true },
+    taskPosts: () => posts.filter(request => request.path === 'updates/tasks'),
+  })
+}
+
+test('version permits expired checks but requires draft confirmation before any prepare or task request', async () => {
+  const panel = versionPanel()
+  assert.equal(panel.canInstall('edge'), true)
+  panel.confirmInstall('edge')
+  assert.equal(panel.selected.value, 'edge')
+  await panel.install()
+  assert.equal(panel.posts.length, 0)
+  assert.equal(panel.preparing.value, false)
+  panel.draftConfirmed.value = true
+  await panel.install()
+  assert.deepEqual(panel.posts.map(request => [request.path, request.body]), [['updates/prepare', {}]])
+  assert.equal(panel.busy.value, true)
+  assert.equal(panel.posting.value, false)
+  assert.equal(panel.taskPosts().length, 0)
+  for (const reason of ['credential_expired', 'platform_unsupported', 'database_unsupported', 'instance_mismatch', 'executor_upgrade_required', 'executor_unconfigured']) {
+    panel.cancelPreparation()
+    panel.installation.value = { available: false, reason }
+    assert.equal(panel.canInstall('edge'), false)
+    assert.equal(panel.canPrepare.value, false)
+  }
+  panel.dispose()
+})
+
+test('version ignores state until prepare replies, waits for matching new check and posts captured target only once', async () => {
+  const preparation = deferred()
+  const panel = versionPanel({ post: path => path === 'updates/prepare' ? preparation.promise : { code: 1, data: { id: 'task-1', status: 'pending' } } })
+  panel.confirm()
+  const installing = panel.install()
+  assert.equal(panel.preparationAttempt.value, null)
+  assert.deepEqual(plain(panel.pendingInstall.value).revision, versionIntent.revision)
+  await panel.report({ installation: versionAvailable, executor: { id: 7, checked_at: versionRequestedAt, check_ok: true } })
+  assert.equal(panel.taskPosts().length, 0, 'state cannot settle an unanswered prepare POST')
+  preparation.resolve(panel.pendingReply())
+  await installing
+  panel.channels.value = [{ name: 'edge', revision: 'c'.repeat(40), digest: `sha256:${'d'.repeat(64)}`, status: 'update_available', installable: true }]
+  panel.target.value = { revision: 'e'.repeat(40), digest: 'changed-dialog' }
+  await panel.report({ installation: versionAvailable, executor: { id: 7, checked_at: new Date(versionNow - 1000).toISOString(), check_ok: true } })
+  assert.equal(panel.taskPosts().length, 0, 'old successful check must not authorize this request')
+  await panel.report({ executor: { id: 7, checked_at: versionRequestedAt, check_ok: true } })
+  assert.deepEqual(panel.taskPosts().map(request => request.body), [versionIntent])
+  assert.equal(panel.pendingInstall.value, null)
+  assert.equal(panel.preparationAttempt.value, null)
+  assert.equal(panel.preparing.value, false)
+  assert.equal([...panel.timerDelays.values()].includes(90000), false)
+  await panel.refresh()
+  await panel.refresh()
+  assert.equal(panel.taskPosts().length, 1)
+  panel.dispose()
+})
+
+test('version check-only preparation works without an update and never creates a task', async () => {
+  for (const fresh of [false, true]) {
+    const panel = versionPanel({ post: () => ({ code: 1, data: { credential_id: 7, requested_at: fresh ? null : versionRequestedAt, installation: fresh ? versionAvailable : versionExpired, wake_status: fresh ? 'not_needed' : 'sent' } }) })
+    panel.channels.value = []
+    assert.equal(panel.canPrepare.value, true)
+    assert.equal(panel.canInstall('edge'), false)
+    await panel.prepareInstallation(null)
+    assert.equal(panel.pendingInstall.value, null)
+    if (!fresh) await panel.report({ installation: versionAvailable, executor: { id: 7, checked_at: versionRequestedAt, check_ok: true } })
+    assert.equal(panel.preparing.value, false)
+    assert.equal(panel.taskPosts().length, 0)
+    panel.dispose()
+  }
+})
+
+test('version fresh preparation creates a task once without waiting for a poll', async () => {
+  const panel = versionPanel({ post: path => path === 'updates/prepare' ? { code: 1, data: { credential_id: 7, installation: versionAvailable, wake_status: 'not_needed' } } : { code: 1, data: { id: 'task-1', status: 'pending' } } })
+  panel.confirm()
+  await panel.install()
+  await flush()
+  assert.deepEqual(panel.taskPosts().map(request => request.body), [versionIntent])
+  assert.equal(panel.preparing.value, false)
+  assert.equal(panel.preparationAttempt.value, null)
+  panel.dispose()
+})
+
+test('version wake failures keep one preparation pending for legacy run or poll instead of reposting', async () => {
+  for (const wake_status of ['sent', 'unconfigured', 'failed', 'coalesced']) {
+    const panel = versionPanel({ post: () => ({ code: 1, data: { credential_id: 7, requested_at: versionRequestedAt, installation: versionExpired, wake_status } }) })
+    await panel.prepareInstallation(null)
+    assert.equal(panel.preparing.value, true)
+    if (wake_status === 'unconfigured') assert.match(panel.preparationHint.value, /周期 run、poll/)
+    if (wake_status === 'failed') assert.match(panel.preparationHint.value, /唤醒未成功/)
+    await panel.refresh()
+    assert.equal(panel.posts.length, 1)
+    assert.equal(panel.uncertain.value, false)
+    panel.dispose()
+  }
+})
+
+test('version completed failure, hard conditions, credential changes and competing task clear installation intent', async () => {
+  const cases = [
+    { installation: { available: false, reason: 'deployment_check_failed' }, executor: { id: 7, checked_at: versionRequestedAt, check_ok: false } },
+    { installation: { available: false, reason: 'platform_unsupported' } },
+    { installation: { available: false, reason: 'credential_expired' }, executor: null, preparation: { credential_id: 0 } },
+    { installation: versionAvailable, executor: { id: 8, checked_at: versionRequestedAt, check_ok: true }, preparation: { credential_id: 8 } },
+    { installation: versionAvailable, executor: { id: 7, checked_at: versionRequestedAt, check_ok: true }, task: { id: 'someone-else', status: 'pending' } },
+    { installation: versionAvailable, executor: { id: 7, checked_at: versionRequestedAt, check_ok: false } },
+  ]
+  for (const patch of cases) {
+    const panel = versionPanel()
+    panel.confirm()
+    await panel.install()
+    await panel.report(patch)
+    assert.equal(panel.preparing.value, false)
+    assert.equal(panel.pendingInstall.value, null)
+    assert.notEqual(panel.preparationError.value, '')
+    assert.equal([...panel.timerDelays.values()].includes(90000), false)
+    await panel.report({ installation: versionAvailable, preparation: { credential_id: 7 }, executor: { id: 7, checked_at: versionRequestedAt, check_ok: true }, task: null })
+    assert.equal(panel.taskPosts().length, 0, 'late success must not restore a cleared intent')
+    assert.equal(panel.uncertain.value, false)
+    panel.dispose()
+  }
+})
+
+test('version cancellation, deadline, disposal and account switch discard both late POST and late state success', async () => {
+  for (const phase of ['awaiting-post', 'awaiting-check']) {
+    for (const action of ['cancel', 'deadline', 'dispose', 'account']) {
+      const request = deferred()
+      const panel = versionPanel({ post: path => path === 'updates/prepare' ? request.promise : { code: 1, data: { id: 'unexpected', status: 'pending' } } })
+      panel.confirm()
+      const installing = panel.install()
+      if (phase === 'awaiting-check') { request.resolve(panel.pendingReply()); await installing }
+      if (action === 'cancel') panel.cancelPreparation()
+      if (action === 'deadline') {
+        panel.setNow(versionNow + 90000)
+        const timer = [...panel.timerDelays].find(([, delay]) => delay === 90000)?.[0]
+        assert.notEqual(timer, undefined)
+        await panel.fireTimer(timer)
+        assert.match(panel.preparationError.value, /90 秒/)
+      }
+      if (action === 'dispose') panel.dispose()
+      if (action === 'account') { panel.account.value = '2'; await flush() }
+      if (phase === 'awaiting-post') { request.resolve({ code: 1, data: { credential_id: 7, requested_at: versionRequestedAt, installation: versionAvailable, wake_status: 'not_needed' } }); await installing }
+      await panel.report({ installation: versionAvailable, executor: { id: 7, checked_at: versionRequestedAt, check_ok: true } })
+      assert.equal(panel.taskPosts().length, 0, `${phase}/${action} must never create a task`)
+      assert.equal(panel.preparing.value, false)
+      assert.equal(panel.preparationAttempt.value, null)
+      assert.equal(panel.pendingInstall.value, null)
+      assert.equal(panel.uncertain.value, false)
+      assert.equal([...panel.timerDelays.values()].includes(90000), false)
+      if (action !== 'dispose') panel.dispose()
+    }
+  }
+})
+
+test('version enforces elapsed 90 seconds even if the deadline callback has not run yet', async () => {
+  for (const awaitingPost of [true, false]) {
+    const request = deferred()
+    const panel = versionPanel({ post: () => request.promise })
+    panel.confirm()
+    const installing = panel.install()
+    if (!awaitingPost) { request.resolve(panel.pendingReply()); await installing }
+    panel.setNow(versionNow + 90000)
+    if (awaitingPost) { request.resolve({ code: 1, data: { credential_id: 7, installation: versionAvailable, wake_status: 'not_needed' } }); await installing }
+    else await panel.report({ installation: versionAvailable, executor: { id: 7, checked_at: versionRequestedAt, check_ok: true } })
+    assert.match(panel.preparationError.value, /90 秒/)
+    assert.equal(panel.taskPosts().length, 0)
+    assert.equal(panel.preparing.value, false)
+    panel.dispose()
+  }
+})
+
+test('version prepare rejection or transport failure is retryable and never marks task creation uncertain', async () => {
+  for (const status of [0, 401, 403, 409, 412, 429, 500, 'throw']) {
+    const panel = versionPanel({ post: () => { if (status === 'throw') throw new Error('connection lost'); return { code: 0, status, msg: `prepare failed ${status}`, data: { installation: versionExpired } } } })
+    panel.confirm()
+    await panel.install()
+    assert.notEqual(panel.preparationError.value, '')
+    assert.equal(panel.error.value, '')
+    assert.equal(panel.uncertain.value, false)
+    assert.equal(panel.preparing.value, false)
+    assert.equal(panel.pendingInstall.value, null)
+    assert.equal(panel.taskPosts().length, 0)
+    assert.equal(panel.canInstall('edge'), true)
+    await panel.refresh()
+    assert.equal(panel.posts.length, 1, 'prepare must not automatically retry')
+    panel.dispose()
+  }
+})
+
+test('version lost task response remains uncertain across old completed state and never reposts', async () => {
+  for (const thrown of [false, true]) {
+    const oldTask = { id: 'previous', status: 'succeeded' }
+    const panel = versionPanel({ state: { task: oldTask }, post: path => {
+      if (path === 'updates/prepare') return { code: 1, data: { credential_id: 7, installation: versionAvailable, wake_status: 'not_needed' } }
+      if (thrown) throw new Error('response lost')
+      return { code: 0, status: 0, msg: 'response lost', data: null }
+    } })
+    panel.confirm()
+    await panel.install()
+    await flush()
+    assert.equal(panel.uncertain.value, true)
+    assert.match(panel.error.value, /任务创建结果尚未确认/)
+    await panel.refresh()
+    await panel.prepareInstallation(versionIntent)
+    panel.confirm()
+    await panel.install()
+    assert.equal(panel.taskPosts().length, 1)
+    assert.equal(panel.posts.filter(request => request.path === 'updates/prepare').length, 1)
+    assert.equal(panel.uncertain.value, true, 'an older completed task cannot settle a lost creation response')
+    await panel.report({ task: { id: 'new-task', status: 'pending' } })
+    assert.equal(panel.uncertain.value, false)
+    assert.equal(panel.taskPosts().length, 1)
+    panel.dispose()
+  }
+})
+
+test('version task target rejection keeps server message and requires new explicit confirmation', async () => {
+  const panel = versionPanel({ post: path => path === 'updates/prepare' ? { code: 1, data: { credential_id: 7, installation: versionAvailable, wake_status: 'not_needed' } } : { code: 0, status: 409, msg: '目标已变化，请重新检查并确认', data: null } })
+  panel.confirm()
+  await panel.install()
+  await flush()
+  assert.deepEqual(panel.taskPosts().map(request => request.body), [versionIntent])
+  assert.match(panel.rejection.value, /目标已变化/)
+  assert.equal(panel.uncertain.value, false)
+  assert.equal(panel.selected.value, '')
+  await panel.install()
+  await panel.refresh()
+  assert.equal(panel.taskPosts().length, 1)
+  panel.dispose()
+})
+
+test('version preparation uses the existing three-second local state poll and does not discover channels', async () => {
+  const panel = versionPanel()
+  panel.confirm()
+  await panel.install()
+  await panel.poll()
+  assert.deepEqual(panel.gets.map(request => request.path), ['updates/state'])
+  assert.deepEqual([...panel.timerDelays.values()].sort((a, b) => a - b), [3000, 90000])
+  const timer = [...panel.timerDelays].find(([, delay]) => delay === 3000)[0]
+  await panel.fireTimer(timer)
+  assert.deepEqual(panel.gets.map(request => request.path), ['updates/state', 'updates/state'])
+  assert.equal(panel.posts.length, 1)
+  panel.dispose()
+  assert.equal(panel.timers.size, 0)
+})
+
+test('version delegated administrator has no prepare or installation action', async () => {
+  const panel = versionPanel({ io: { useAdminCapabilities: () => ({ isPrimaryAdmin: vue.ref(false), can: () => true }) } })
+  assert.equal(panel.canPrepare.value, false)
+  assert.equal(panel.canInstall('edge'), false)
+  panel.confirm()
+  await panel.install()
+  await panel.prepareInstallation(null)
+  assert.equal(panel.posts.length, 0)
+  panel.dispose()
+})
+
+test('version credential rotation during an unanswered prepare cannot authorize a late ready response', async () => {
+  const request = deferred()
+  const panel = versionPanel({ post: () => request.promise })
+  panel.confirm()
+  const installing = panel.install()
+  await panel.report({ executor: { id: 8, checked_at: versionRequestedAt, check_ok: true }, preparation: { credential_id: 8 }, installation: versionAvailable })
+  assert.equal(panel.preparationAttempt.value, null)
+  request.resolve({ code: 1, data: { credential_id: 7, installation: versionAvailable, wake_status: 'not_needed' } })
+  await installing
+  assert.equal(panel.pendingInstall.value, null)
+  assert.equal(panel.preparing.value, false)
+  assert.equal(panel.taskPosts().length, 0)
+  assert.match(panel.preparationError.value, /凭据已变化/)
+  panel.dispose()
+})
+
+test('version a cancelled prepare response cannot replace a newer check-only attempt', async () => {
+  const old = deferred(), latest = deferred()
+  let calls = 0
+  const panel = versionPanel({ post: () => (++calls === 1 ? old.promise : latest.promise) })
+  panel.confirm()
+  const first = panel.install()
+  panel.cancelPreparation()
+  const second = panel.prepareInstallation(null)
+  old.resolve({ code: 1, data: { credential_id: 7, installation: versionAvailable, wake_status: 'not_needed' } })
+  await first
+  assert.equal(panel.preparing.value, true)
+  assert.equal(panel.pendingInstall.value, null)
+  assert.equal(panel.preparationAttempt.value, null)
+  latest.resolve(panel.pendingReply())
+  await second
+  assert.notEqual(panel.preparationAttempt.value, null)
+  await panel.report({ installation: versionAvailable, executor: { id: 7, checked_at: versionRequestedAt, check_ok: true } })
+  assert.equal(panel.preparing.value, false)
+  assert.equal(panel.taskPosts().length, 0)
+  panel.dispose()
+})
+
+test('version reopening restores state without any installation intent from the previous component', async () => {
+  const first = versionPanel()
+  first.confirm()
+  await first.install()
+  first.dispose()
+  const reopened = versionPanel({ state: { installation: versionAvailable, executor: { id: 7, checked_at: versionRequestedAt, check_ok: true }, preparation: { credential_id: 7, requested_at: versionRequestedAt } } })
+  await reopened.poll()
+  assert.equal(reopened.pendingInstall.value, null)
+  assert.equal(reopened.preparationAttempt.value, null)
+  assert.equal(reopened.preparing.value, false)
+  assert.equal(reopened.posts.length, 0)
+  assert.equal(first.taskPosts().length, 0)
+  reopened.dispose()
+})
+
+test('version preparation rejection preserves HTTP data installation reason without task uncertainty', async () => {
+  for (const nested of [false, true]) {
+    const installation = { available: false, reason: 'database_unsupported' }
+    const data = { credential_id: 7, installation }
+    const panel = versionPanel({ state: { installation }, post: () => ({ code: 0, status: 412, msg: '不能准备安装', data: nested ? { data } : data }) })
+    panel.installation.value = { ...versionAvailable }
+    panel.confirm()
+    await panel.install()
+    assert.match(panel.preparationError.value, /不能准备安装/)
+    assert.match(panel.preparationError.value, /数据库不支持自动备份/)
+    assert.equal(panel.installation.value.reason, 'database_unsupported')
+    assert.equal(panel.canPrepare.value, false)
+    assert.equal(panel.uncertain.value, false)
+    assert.equal(panel.taskPosts().length, 0)
+    panel.dispose()
+  }
+})
+
+test('version null-data prepare rejection blocks repeat preparation and queues state behind an older ready response', async () => {
+  for (const status of [412, 409]) {
+    const oldState = deferred(), authoritativeState = deferred()
+    let reads = 0
+    const panel = versionPanel({
+      state: { installation: { ...versionAvailable } },
+      post: () => ({ code: 0, status, msg: '不能准备安装', data: null }),
+      get: path => {
+        assert.equal(path, 'updates/state')
+        return ++reads === 1 ? oldState.promise : authoritativeState.promise
+      },
+    })
+    const oldRefresh = panel.refresh()
+    panel.confirm()
+    await panel.install()
+    assert.equal(reads, 1, 'authoritative refresh waits for the in-flight state request')
+    assert.equal(panel.installation.value.reason, 'preparation_state_unknown')
+    assert.equal(panel.canPrepare.value, false)
+    assert.equal(panel.canInstall('edge'), false, 'the SFC installation button must be disabled immediately')
+    await panel.prepareInstallation(null)
+    assert.equal(panel.posts.length, 1, 'unknown state cannot authorize another prepare')
+    oldState.resolve({ code: 1, data: { executor: { id: 7 }, installation: versionAvailable } })
+    await flush()
+    assert.equal(reads, 2, 'finally must issue the queued local state refresh')
+    assert.equal(panel.installation.value.reason, 'preparation_state_unknown', 'late old-generation ready state is ignored')
+    assert.equal(panel.canInstall('edge'), false)
+    const installation = { available: false, reason: 'database_unsupported' }
+    authoritativeState.resolve({ code: 1, data: { executor: { id: 7 }, installation, task: status === 409 ? { id: 'competing', status: 'pending' } : null } })
+    await oldRefresh
+    assert.equal(panel.installation.value.reason, 'database_unsupported')
+    assert.equal(panel.canPrepare.value, false)
+    assert.equal(panel.canInstall('edge'), false, 'authoritative hard rejection keeps the installation button disabled')
+    assert.equal(panel.task.value?.id || null, status === 409 ? 'competing' : null)
+    assert.equal(panel.uncertain.value, false)
+    assert.equal(panel.pendingInstall.value, null)
+    assert.equal(panel.taskPosts().length, 0)
+    assert.equal(panel.timers.size, 0, 'rejection adds no polling timer')
+    panel.dispose()
+  }
+})
+
+test('version null-data rejection immediately reads local state and keeps unknown blocked if that read fails', async () => {
+  for (const status of [412, 409]) {
+    const stateReply = deferred()
+    const panel = versionPanel({
+      state: { installation: { ...versionAvailable } },
+      post: () => ({ code: 0, status, data: null }),
+      get: path => { assert.equal(path, 'updates/state'); return stateReply.promise },
+    })
+    const preparation = panel.prepareInstallation(null)
+    await flush()
+    assert.deepEqual(panel.gets.map(request => request.path), ['updates/state'])
+    assert.equal(panel.installation.value.reason, 'preparation_state_unknown')
+    assert.equal(panel.canPrepare.value, false)
+    await panel.prepareInstallation(null)
+    assert.equal(panel.posts.length, 1)
+    stateReply.resolve({ code: 0, data: null })
+    await preparation
+    assert.equal(panel.installation.value.reason, 'preparation_state_unknown')
+    assert.equal(panel.canInstall('edge'), false)
+    assert.equal(panel.uncertain.value, false)
+    assert.equal(panel.taskPosts().length, 0)
+    assert.equal(panel.timers.size, 0)
+    panel.dispose()
+  }
+})
+
+test('version malformed preparation response never authorizes a task', async () => {
+  const invalid = [
+    null,
+    { credential_id: 0, installation: versionAvailable, wake_status: 'not_needed' },
+    { credential_id: 7, requested_at: 'invalid-time', installation: versionAvailable, wake_status: 'not_needed' },
+    { credential_id: 7, installation: { available: 'true', reason: '' }, wake_status: 'not_needed' },
+    { credential_id: 7, installation: versionAvailable, wake_status: 'invalid-status' },
+    { credential_id: 7, installation: versionExpired, wake_status: 'sent' },
+  ]
+  for (const data of invalid) {
+    const panel = versionPanel({ post: () => ({ code: 1, data }) })
+    panel.confirm()
+    await panel.install()
+    assert.match(panel.preparationError.value, /响应无效/)
+    assert.equal(panel.preparing.value, false)
+    assert.equal(panel.pendingInstall.value, null)
+    assert.equal(panel.uncertain.value, false)
+    assert.equal(panel.taskPosts().length, 0)
+    panel.dispose()
+  }
 })

@@ -22,6 +22,7 @@ type UpdateExecutorCredential struct {
 	ExpiresAt         *time.Time `gorm:"index" json:"expires_at,omitempty"`
 	LastSeenAt        *time.Time `json:"last_seen_at,omitempty"`
 	CheckedAt         *time.Time `json:"checked_at,omitempty"`
+	CheckRequestedAt  *time.Time `json:"check_requested_at,omitempty"`
 	InstanceID        string     `gorm:"type:varchar(32)" json:"-"`
 	ExecutorVersion   string     `gorm:"type:varchar(20)" json:"executor_version,omitempty"`
 	Platform          string     `gorm:"type:varchar(30)" json:"platform,omitempty"`

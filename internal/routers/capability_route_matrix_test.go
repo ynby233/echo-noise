@@ -17,6 +17,7 @@ import (
 	"github.com/rcy1314/echo-noise/internal/middleware"
 	"github.com/rcy1314/echo-noise/internal/models"
 	"github.com/rcy1314/echo-noise/internal/repository"
+	"github.com/rcy1314/echo-noise/internal/updates"
 	"github.com/rcy1314/echo-noise/internal/vocechat"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
@@ -498,6 +499,7 @@ func TestProtectedAdminRouteMatrixRejectsDelegatedAdministratorWithoutRequiredGr
 		{name: "updates view", method: http.MethodGet, path: "/api/updates", capability: authorization.CapabilityVersionView},
 		{name: "update task view", method: http.MethodGet, path: "/api/updates/tasks/not-real", capability: authorization.CapabilityVersionView},
 		{name: "update channel", method: http.MethodPut, path: "/api/updates/channel", capability: authorization.CapabilityVersionUpdate},
+		{name: "update preparation", method: http.MethodPost, path: "/api/updates/prepare", capability: authorization.CapabilityVersionUpdate},
 		{name: "update task create", method: http.MethodPost, path: "/api/updates/tasks", capability: authorization.CapabilityVersionUpdate},
 		{name: "executor credential view", method: http.MethodGet, path: "/api/updates/executor/credential", capability: authorization.CapabilityVersionUpdate},
 		{name: "executor credential create", method: http.MethodPost, path: "/api/updates/executor/credential", capability: authorization.CapabilityVersionUpdate},
@@ -663,5 +665,205 @@ func TestProtectedAdminRouteMatrixRejectsDelegatedAdministratorWithoutRequiredGr
 	r.ServeHTTP(retiredRefreshResponse, retiredRefreshRequest)
 	if retiredRefreshResponse.Code != http.StatusNotFound {
 		t.Fatalf("retired RSS refresh route status=%d body=%s", retiredRefreshResponse.Code, retiredRefreshResponse.Body.String())
+	}
+}
+
+func TestExecutorWorkAndUpdatePreparationProductionAuthMatrix(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	t.Setenv("ACCESS_LOG", "false")
+	t.Setenv("SESSION_SECRET", "update-preparation-matrix-secret-32")
+	t.Setenv("UPDATE_EXECUTOR_WAKE_URL", "")
+	t.Chdir(t.TempDir())
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	sqlDB.SetMaxOpenConns(1)
+	t.Cleanup(func() { _ = sqlDB.Close() })
+	if err := models.MigrateDB(db); err != nil {
+		t.Fatal(err)
+	}
+	database.DB = db
+	models.SetDB(db)
+	middleware.InvalidateAccessLogConfigCache()
+	t.Cleanup(func() {
+		database.DB = nil
+		models.SetDB(nil)
+		middleware.InvalidateAccessLogConfigCache()
+	})
+	users := []models.User{
+		{ID: models.PrimaryAdminUserID, Username: "prepare-primary", IsAdmin: true, Token: "prepare-primary-bearer"},
+		{Username: "prepare-delegated", IsAdmin: true, Token: "prepare-delegated-bearer"},
+		{Username: "prepare-ordinary", Token: "prepare-ordinary-bearer"},
+	}
+	if err := db.Create(&users).Error; err != nil {
+		t.Fatal(err)
+	}
+	// Even a manually seeded historical update grant cannot delegate host access.
+	if err := db.Create(&[]models.AdminCapabilityGrant{
+		{UserID: users[1].ID, Capability: string(authorization.CapabilityVersionUpdate), GrantedByUserID: users[0].ID},
+		{UserID: users[1].ID, Capability: string(authorization.CapabilityVersionView), GrantedByUserID: users[0].ID},
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	service := updates.NewTaskService(db)
+	credential, token, err := service.CreateCredential(1, "matrix executor")
+	if err != nil {
+		t.Fatal(err)
+	}
+	router := SetupRouter(nil)
+	router.GET("/__test/prepare-session/:id", func(c *gin.Context) {
+		id, err := strconv.Atoi(c.Param("id"))
+		if err != nil || id < 1 || id > len(users) {
+			c.Status(http.StatusBadRequest)
+			return
+		}
+		user := users[id-1]
+		session := sessions.Default(c)
+		session.Set("user_id", user.ID)
+		session.Set("username", user.Username)
+		session.Set("is_admin", user.IsAdmin)
+		session.Set("login_expire_at", time.Now().Add(time.Hour).Unix())
+		if err := session.Save(); err != nil {
+			c.Status(http.StatusInternalServerError)
+			return
+		}
+		c.Status(http.StatusNoContent)
+	})
+	cookies := make([][]*http.Cookie, len(users))
+	for index := range users {
+		seed := httptest.NewRecorder()
+		router.ServeHTTP(seed, httptest.NewRequest(http.MethodGet, "/__test/prepare-session/"+strconv.Itoa(index+1), nil))
+		if seed.Code != http.StatusNoContent {
+			t.Fatalf("seed session=%d", seed.Code)
+		}
+		cookies[index] = seed.Result().Cookies()
+	}
+	request := func(method, path, bearer string, sessionCookies []*http.Cookie) *httptest.ResponseRecorder {
+		t.Helper()
+		r := httptest.NewRequest(method, path, bytes.NewBufferString(`{}`))
+		r.Header.Set("Content-Type", "application/json")
+		if bearer != "" {
+			r.Header.Set("Authorization", "Bearer "+bearer)
+		}
+		for _, cookie := range sessionCookies {
+			r.AddCookie(cookie)
+		}
+		response := httptest.NewRecorder()
+		router.ServeHTTP(response, r)
+		return response
+	}
+	for _, test := range []struct {
+		name    string
+		token   string
+		cookies []*http.Cookie
+		want    int
+	}{
+		{name: "guest", want: http.StatusUnauthorized},
+		{name: "ordinary session", cookies: cookies[2], want: http.StatusForbidden},
+		{name: "delegated session with historical grant", cookies: cookies[1], want: http.StatusForbidden},
+		{name: "primary bearer", token: users[0].Token, want: http.StatusForbidden},
+		{name: "delegated bearer", token: users[1].Token, want: http.StatusForbidden},
+		{name: "executor bearer", token: token, want: http.StatusUnauthorized},
+	} {
+		t.Run("prepare "+test.name, func(t *testing.T) {
+			response := request(http.MethodPost, "/api/updates/prepare", test.token, test.cookies)
+			if response.Code != test.want {
+				t.Fatalf("status=%d want=%d body=%s", response.Code, test.want, response.Body.String())
+			}
+		})
+	}
+	for _, test := range []struct {
+		name    string
+		token   string
+		cookies []*http.Cookie
+	}{
+		{name: "guest"},
+		{name: "primary session", cookies: cookies[0]},
+		{name: "delegated session", cookies: cookies[1]},
+		{name: "ordinary session", cookies: cookies[2]},
+		{name: "primary bearer", token: users[0].Token},
+		{name: "delegated bearer", token: users[1].Token},
+	} {
+		t.Run("work "+test.name, func(t *testing.T) {
+			response := request(http.MethodGet, "/api/updates/executor/work", test.token, test.cookies)
+			if response.Code != http.StatusUnauthorized {
+				t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+			}
+		})
+	}
+	decodeWork := func(response *httptest.ResponseRecorder) updates.ExecutorWork {
+		t.Helper()
+		var body struct {
+			Code int                  `json:"code"`
+			Data updates.ExecutorWork `json:"data"`
+		}
+		if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil || response.Code != http.StatusOK || body.Code != 1 || response.Header().Get("Cache-Control") != "no-store" {
+			t.Fatalf("work response=%d %s err=%v", response.Code, response.Body.String(), err)
+		}
+		var exact struct {
+			Data map[string]json.RawMessage `json:"data"`
+		}
+		if err := json.Unmarshal(response.Body.Bytes(), &exact); err != nil || len(exact.Data) != 3 {
+			t.Fatalf("work DTO changed: %s", response.Body.String())
+		}
+		return body.Data
+	}
+	before := decodeWork(request(http.MethodGet, "/api/updates/executor/work", token, nil))
+	instance, err := service.InstanceID()
+	if err != nil || before.InstanceID != instance || before.CheckRequested || before.TaskAvailable {
+		t.Fatalf("idle work=%#v err=%v", before, err)
+	}
+	prepared := request(http.MethodPost, "/api/updates/prepare", "", cookies[0])
+	if prepared.Code != http.StatusAccepted {
+		t.Fatalf("primary session preparation=%d %s", prepared.Code, prepared.Body.String())
+	}
+	after := decodeWork(request(http.MethodGet, "/api/updates/executor/work", token, nil))
+	if !after.CheckRequested || after.TaskAvailable {
+		t.Fatalf("pending preparation work=%#v", after)
+	}
+	for index, sessionCookies := range cookies[:2] {
+		response := request(http.MethodGet, "/api/updates/state", "", sessionCookies)
+		var body struct {
+			Data map[string]json.RawMessage `json:"data"`
+		}
+		if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil || response.Code != http.StatusOK {
+			t.Fatalf("state=%d %s err=%v", response.Code, response.Body.String(), err)
+		}
+		_, present := body.Data["preparation"]
+		if present != (index == 0) {
+			t.Fatalf("state preparation disclosure index=%d present=%v", index, present)
+		}
+	}
+	var count int64
+	if err := db.Model(&models.UpdateTask{}).Count(&count).Error; err != nil || count != 0 {
+		t.Fatalf("prepare/auth created tasks=%d err=%v", count, err)
+	}
+	var saved models.UpdateExecutorCredential
+	if err := db.First(&saved, credential.ID).Error; err != nil || saved.CheckedAt != nil || saved.CheckOK {
+		t.Fatalf("work refreshed complete check: %#v err=%v", saved, err)
+	}
+	if err := service.RevokeCredential(1); err != nil {
+		t.Fatal(err)
+	}
+	if response := request(http.MethodGet, "/api/updates/executor/work", token, nil); response.Code != http.StatusUnauthorized {
+		t.Fatalf("revoked work token=%d", response.Code)
+	}
+	expiring, expiredToken, err := service.CreateCredential(1, "expired executor")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Model(&expiring).Update("expires_at", time.Now().UTC().Add(-time.Minute)).Error; err != nil {
+		t.Fatal(err)
+	}
+	if response := request(http.MethodGet, "/api/updates/executor/work", expiredToken, nil); response.Code != http.StatusUnauthorized {
+		t.Fatalf("expired work token=%d", response.Code)
+	}
+	if response := request(http.MethodPost, "/api/updates/prepare", "", cookies[0]); response.Code != http.StatusPreconditionFailed {
+		t.Fatalf("expired preparation=%d %s", response.Code, response.Body.String())
 	}
 }

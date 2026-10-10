@@ -1,11 +1,13 @@
 package controllers
 
 import (
+	"encoding/json"
 	"errors"
 	"io"
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -117,8 +119,17 @@ func GetUpdates(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, dto.Fail[any]("读取安装能力失败"))
 		return
 	}
+	data := gin.H{"follow_channel": channel, "instance_id": instanceID, "guide_url": guideURL, "report": report, "executor": credential, "task": task, "installation": installation}
+	if actorID == models.PrimaryAdminUserID {
+		preparation, err := service.PreparationStatus(buildinfo.CurrentMetadata().Revision)
+		if err != nil {
+			c.Status(http.StatusInternalServerError)
+			return
+		}
+		data["preparation"] = preparation
+	}
 	c.Header("Cache-Control", "no-store")
-	c.JSON(http.StatusOK, dto.OK(gin.H{"follow_channel": channel, "instance_id": instanceID, "guide_url": guideURL, "report": report, "executor": credential, "task": task, "installation": installation}, "更新状态读取成功"))
+	c.JSON(http.StatusOK, dto.OK(data, "更新状态读取成功"))
 }
 
 // Poll persisted local state without doing a remote registry check each time.
@@ -156,8 +167,17 @@ func GetUpdateState(c *gin.Context) {
 	} else {
 		credential = nil
 	}
+	data := gin.H{"task": task, "installation": installation, "executor": credential, "installed": installed}
+	if actorID == models.PrimaryAdminUserID {
+		preparation, err := service.PreparationStatus(metadata.Revision)
+		if err != nil {
+			c.Status(http.StatusInternalServerError)
+			return
+		}
+		data["preparation"] = preparation
+	}
 	c.Header("Cache-Control", "no-store")
-	c.JSON(http.StatusOK, dto.OK(gin.H{"task": task, "installation": installation, "executor": credential, "installed": installed}, "更新状态读取成功"))
+	c.JSON(http.StatusOK, dto.OK(data, "更新状态读取成功"))
 }
 
 func redactUpdateTask(task *models.UpdateTask, actorID uint) {
@@ -218,6 +238,88 @@ func UpdateFollowChannel(c *gin.Context) {
 	}
 	writeUpdateAudit(c, actorID, "set_channel", "update_preference", "1", "updated follow channel")
 	c.JSON(http.StatusOK, dto.OK(gin.H{"channel": strings.ToLower(strings.TrimSpace(request.Channel))}, "跟随渠道已保存；当前安装保持不变"))
+}
+
+// PrepareUpdateInstallation requests a deployment check only. Installation
+// remains a separate, confirmed request with a server-resolved pinned target.
+func PrepareUpdateInstallation(c *gin.Context) {
+	actorID, err := requirePrimaryAdmin(c)
+	if err != nil {
+		c.JSON(http.StatusForbidden, dto.Fail[any](err.Error()))
+		return
+	}
+	if c.GetString("auth_via") != "session" {
+		c.JSON(http.StatusForbidden, dto.Fail[any]("请使用主管理员登录会话检查部署"))
+		return
+	}
+	var request map[string]json.RawMessage
+	decoder := json.NewDecoder(c.Request.Body)
+	if err := decoder.Decode(&request); err != nil || request == nil || len(request) != 0 {
+		c.JSON(http.StatusBadRequest, dto.Fail[any]("部署检查请求参数错误"))
+		return
+	}
+	var extra any
+	if err := decoder.Decode(&extra); err != io.EOF {
+		c.JSON(http.StatusBadRequest, dto.Fail[any]("部署检查请求参数错误"))
+		return
+	}
+	service, err := updateTaskService()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, dto.Fail[any]("更新服务不可用"))
+		return
+	}
+	preparation, created, err := service.RequestDeploymentCheck(actorID, buildinfo.CurrentMetadata().Revision)
+	switch {
+	case errors.Is(err, updates.ErrUpdateTaskActive):
+		c.JSON(http.StatusConflict, dto.Fail[any]("已有活动更新任务"))
+		return
+	case errors.Is(err, updates.ErrExecutorNotConfigured):
+		c.JSON(http.StatusPreconditionFailed, gin.H{"code": 0, "msg": "宿主安装条件尚未满足，请查看部署检查状态", "data": preparation.Installation})
+		return
+	case errors.Is(err, updates.ErrExecutorPrepareCooldown):
+		c.Header("Retry-After", "30")
+		c.JSON(http.StatusTooManyRequests, dto.Fail[any]("部署检查请求过于频繁，请稍后重试"))
+		return
+	case err != nil:
+		c.JSON(http.StatusInternalServerError, dto.Fail[any]("请求部署检查失败"))
+		return
+	}
+	wakeStatus := "coalesced"
+	status := http.StatusAccepted
+	if preparation.Installation.Available {
+		status, wakeStatus = http.StatusOK, "not_needed"
+	}
+	if created {
+		writeUpdateAudit(c, actorID, "request_deployment_check", "update_executor", strconv.FormatUint(uint64(preparation.CredentialID), 10), "requested deployment check")
+		wakeStatus = "unconfigured"
+		if os.Getenv("UPDATE_EXECUTOR_WAKE_URL") != "" {
+			wakeStatus = "sent"
+			if err := updates.WakeExecutor(); err != nil {
+				wakeStatus = "failed"
+				log.Printf("update executor wake: %s", err)
+			}
+		}
+	}
+	c.Header("Cache-Control", "no-store")
+	c.JSON(status, dto.OK(struct {
+		updates.DeploymentPreparation
+		WakeStatus string `json:"wake_status"`
+	}{preparation, wakeStatus}, "部署检查状态读取成功"))
+}
+
+func GetExecutorWork(c *gin.Context) {
+	service, err := updateTaskService()
+	if err != nil {
+		c.Status(http.StatusInternalServerError)
+		return
+	}
+	work, err := service.ExecutorWork(c.GetUint("executor_credential_id"))
+	if err != nil {
+		c.Status(http.StatusInternalServerError)
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusOK, dto.OK(work))
 }
 
 func CreateUpdateTask(c *gin.Context) {

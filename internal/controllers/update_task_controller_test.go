@@ -3,11 +3,13 @@ package controllers
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -214,9 +216,13 @@ func setupUpdateControllerTest(t *testing.T) (*gorm.DB, *gin.Engine, string) {
 
 	router := gin.New()
 	router.Use(func(c *gin.Context) {
+		c.Set("auth_via", "session")
 		switch c.GetHeader("X-Test-Role") {
 		case "primary":
 			c.Set("user_id", users[0].ID)
+		case "primary-token":
+			c.Set("user_id", users[0].ID)
+			c.Set("auth_via", "token")
 		case "delegated":
 			c.Set("user_id", users[1].ID)
 		case "ordinary":
@@ -225,6 +231,9 @@ func setupUpdateControllerTest(t *testing.T) (*gorm.DB, *gin.Engine, string) {
 		c.Next()
 	})
 	router.POST("/updates/tasks", CreateUpdateTask)
+	router.POST("/updates/prepare", PrepareUpdateInstallation)
+	executor := router.Group("/updates/executor", middleware.UpdateExecutorAuthMiddleware())
+	executor.GET("/work", GetExecutorWork)
 	router.GET("/updates", GetUpdates)
 	router.GET("/updates/state", GetUpdateState)
 	router.GET("/updates/tasks/:id", GetUpdateTask)
@@ -430,5 +439,302 @@ func TestLegacyUpdateStreamIsReadOnlyAndExplicitlyRetired(t *testing.T) {
 	var count int64
 	if err := db.Model(&models.UpdateTask{}).Count(&count).Error; err != nil || count != 0 {
 		t.Fatalf("legacy GET created %d tasks: %v", count, err)
+	}
+}
+
+func prepareUpdateHTTP(t *testing.T, router *gin.Engine, role, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	request := httptest.NewRequest(http.MethodPost, "/updates/prepare", strings.NewReader(body))
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("X-Test-Role", role)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	return response
+}
+
+func expireControllerDeploymentCheck(t *testing.T, db *gorm.DB) {
+	t.Helper()
+	if err := db.Model(&models.UpdateExecutorCredential{}).Where("id = ?", 1).Update("checked_at", time.Now().UTC().Add(-4*time.Minute)).Error; err != nil {
+		t.Fatal(err)
+	}
+}
+
+func decodePreparationHTTP(t *testing.T, response *httptest.ResponseRecorder) (updates.DeploymentPreparation, string) {
+	t.Helper()
+	var body struct {
+		Code int `json:"code"`
+		Data struct {
+			updates.DeploymentPreparation
+			WakeStatus string `json:"wake_status"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil || body.Code != 1 {
+		t.Fatalf("invalid prepare response: %s err=%v", response.Body.String(), err)
+	}
+	return body.Data.DeploymentPreparation, body.Data.WakeStatus
+}
+
+func TestUpdatePreparationWakeAfterCommitCoalescesAndRecordsOneAudit(t *testing.T) {
+	db, router, _ := setupUpdateControllerTest(t)
+	expireControllerDeploymentCheck(t, db)
+	service := updates.NewTaskService(db)
+	if err := service.SetChannel(1, "edge"); err != nil {
+		t.Fatal(err)
+	}
+	discoverUpdates = func(*gin.Context) updates.Report {
+		t.Error("prepare invoked remote target discovery")
+		return updates.Report{}
+	}
+	file := filepath.Join(t.TempDir(), "prepare-wake-token")
+	if err := os.WriteFile(file, []byte("dedicated-prepare-token"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("UPDATE_EXECUTOR_WAKE_TOKEN_FILE", file)
+	var calls atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		if r.Method != http.MethodPost || r.Header.Get("Authorization") != "Bearer dedicated-prepare-token" || r.ContentLength != 0 {
+			t.Errorf("wake did not use fixed authenticated empty POST: %s length=%d", r.Method, r.ContentLength)
+		}
+		preparation, err := service.PreparationStatus(buildinfo.Revision)
+		if err != nil || preparation.RequestedAt == nil {
+			t.Errorf("request not committed before wake: %#v err=%v", preparation, err)
+		}
+		var count int64
+		if err := db.Model(&models.UpdateTask{}).Count(&count).Error; err != nil || count != 0 {
+			t.Errorf("preparation created tasks=%d err=%v", count, err)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+	t.Setenv("UPDATE_EXECUTOR_WAKE_URL", server.URL)
+	for _, role := range []string{"delegated", "ordinary", "primary-token", ""} {
+		if response := prepareUpdateHTTP(t, router, role, `{}`); response.Code != http.StatusForbidden {
+			t.Fatalf("role=%q status=%d", role, response.Code)
+		}
+	}
+	if calls.Load() != 0 {
+		t.Fatal("rejected preparation woke executor")
+	}
+	first := prepareUpdateHTTP(t, router, "primary", `{}`)
+	second := prepareUpdateHTTP(t, router, "primary", `{}`)
+	if first.Code != http.StatusAccepted || second.Code != http.StatusAccepted || calls.Load() != 1 {
+		t.Fatalf("statuses=%d,%d wakes=%d", first.Code, second.Code, calls.Load())
+	}
+	a, firstWake := decodePreparationHTTP(t, first)
+	b, secondWake := decodePreparationHTTP(t, second)
+	if a.CredentialID != 1 || a.RequestedAt == nil || b.RequestedAt == nil || !a.RequestedAt.Equal(*b.RequestedAt) || firstWake != "sent" || secondWake != "coalesced" {
+		t.Fatalf("first=%#v/%s second=%#v/%s", a, firstWake, b, secondWake)
+	}
+	var audits int64
+	if err := db.Model(&models.AdminAuditLog{}).Where("action = ? AND target_type = ? AND target_id = ? AND summary = ?", "request_deployment_check", "update_executor", "1", "requested deployment check").Count(&audits).Error; err != nil || audits != 1 {
+		t.Fatalf("preparation audit count=%d err=%v", audits, err)
+	}
+	if channel, err := service.GetChannel(); err != nil || channel != "edge" {
+		t.Fatalf("preparation changed channel=%q err=%v", channel, err)
+	}
+}
+
+func TestUpdatePreparationWakeFailureAndMissingConfigurationKeepRequest(t *testing.T) {
+	for _, mode := range []string{"unconfigured", "rejected", "timeout", "invalid"} {
+		t.Run(mode, func(t *testing.T) {
+			db, router, _ := setupUpdateControllerTest(t)
+			expireControllerDeploymentCheck(t, db)
+			t.Setenv("UPDATE_EXECUTOR_WAKE_URL", "")
+			file := filepath.Join(t.TempDir(), "wake-token")
+			if err := os.WriteFile(file, []byte("dedicated-token"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv("UPDATE_EXECUTOR_WAKE_TOKEN_FILE", file)
+			want := "failed"
+			switch mode {
+			case "unconfigured":
+				want = "unconfigured"
+			case "invalid":
+				t.Setenv("UPDATE_EXECUTOR_WAKE_URL", "not-a-url")
+			default:
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					if mode == "timeout" {
+						<-r.Context().Done()
+						return
+					}
+					w.WriteHeader(http.StatusServiceUnavailable)
+				}))
+				defer server.Close()
+				t.Setenv("UPDATE_EXECUTOR_WAKE_URL", server.URL)
+			}
+			response := prepareUpdateHTTP(t, router, "primary", `{}`)
+			if response.Code != http.StatusAccepted {
+				t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+			}
+			preparation, wake := decodePreparationHTTP(t, response)
+			if wake != want || preparation.RequestedAt == nil {
+				t.Fatalf("wake=%q want=%q preparation=%#v", wake, want, preparation)
+			}
+			work, err := updates.NewTaskService(db).ExecutorWork(preparation.CredentialID)
+			if err != nil || !work.CheckRequested || work.TaskAvailable {
+				t.Fatalf("wake failure lost request: %#v err=%v", work, err)
+			}
+		})
+	}
+}
+
+func TestUpdatePreparationFreshHardConditionsAndEmptyObjectContract(t *testing.T) {
+	for _, mode := range []string{"fresh", "expired", "missing", "active", "invalid-body", "database-failure"} {
+		t.Run(mode, func(t *testing.T) {
+			db, router, _ := setupUpdateControllerTest(t)
+			t.Setenv("UPDATE_EXECUTOR_WAKE_URL", "")
+			body, want := `{}`, http.StatusOK
+			switch mode {
+			case "expired":
+				if err := db.Model(&models.UpdateExecutorCredential{}).Where("id = ?", 1).Update("expires_at", time.Now().UTC().Add(-time.Minute)).Error; err != nil {
+					t.Fatal(err)
+				}
+				want = http.StatusPreconditionFailed
+			case "missing":
+				if err := db.Delete(&models.UpdateExecutorCredential{}, 1).Error; err != nil {
+					t.Fatal(err)
+				}
+				want = http.StatusPreconditionFailed
+			case "active":
+				slot := uint(1)
+				if err := db.Create(&models.UpdateTask{PublicID: "attention", Status: updates.TaskNeedsAttention, ActiveSlot: &slot}).Error; err != nil {
+					t.Fatal(err)
+				}
+				want = http.StatusConflict
+			case "invalid-body":
+				want = http.StatusBadRequest
+				for _, body := range []string{``, `null`, `[]`, `{"image":"untrusted"}`, `{"command":"run"}`, `{"path":"/host"}`, `{"url":"https://elsewhere"}`, `{} {}`} {
+					if response := prepareUpdateHTTP(t, router, "primary", body); response.Code != want {
+						t.Fatalf("body=%s status=%d", body, response.Code)
+					}
+				}
+				return
+			case "database-failure":
+				if err := db.Callback().Query().Before("gorm:query").Register("test:prepare_database_failure", func(tx *gorm.DB) {
+					if tx.Statement.Table == "update_tasks" {
+						tx.AddError(errors.New("test database query unavailable"))
+					}
+				}); err != nil {
+					t.Fatal(err)
+				}
+				want = http.StatusInternalServerError
+			}
+			response := prepareUpdateHTTP(t, router, "primary", body)
+			if response.Code != want {
+				t.Fatalf("status=%d want=%d body=%s", response.Code, want, response.Body.String())
+			}
+			if mode == "fresh" {
+				preparation, wake := decodePreparationHTTP(t, response)
+				if !preparation.Installation.Available || preparation.RequestedAt != nil || wake != "not_needed" {
+					t.Fatalf("fresh check generated request: %#v wake=%s", preparation, wake)
+				}
+			}
+			if mode == "expired" || mode == "missing" {
+				var body struct {
+					Code int                        `json:"code"`
+					Data updates.InstallationStatus `json:"data"`
+				}
+				if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil || body.Code != 0 || body.Data.Available || body.Data.Reason != map[string]string{"expired": "credential_expired", "missing": "executor_unconfigured"}[mode] {
+					t.Fatalf("precondition reason missing: %s err=%v", response.Body.String(), err)
+				}
+			}
+		})
+	}
+}
+
+func TestUpdatePreparationCompletedFailureReturns429AndRetriesAfterCooldown(t *testing.T) {
+	db, router, _ := setupUpdateControllerTest(t)
+	expireControllerDeploymentCheck(t, db)
+	t.Setenv("UPDATE_EXECUTOR_WAKE_URL", "")
+	first := prepareUpdateHTTP(t, router, "primary", `{}`)
+	p, _ := decodePreparationHTTP(t, first)
+	service := updates.NewTaskService(db)
+	instance, _ := service.InstanceID()
+	if err := service.RecordDeploymentCheck(p.CredentialID, updates.DeploymentCheck{InstanceID: instance, Version: updates.ExecutorVersion, Platform: "linux/amd64", Revision: buildinfo.Revision, OK: false}); err != nil {
+		t.Fatal(err)
+	}
+	response := prepareUpdateHTTP(t, router, "primary", `{}`)
+	if response.Code != http.StatusTooManyRequests || response.Header().Get("Retry-After") != "30" || !strings.Contains(response.Body.String(), "部署检查请求过于频繁，请稍后重试") {
+		t.Fatalf("cooldown response=%d %s", response.Code, response.Body.String())
+	}
+	current, err := service.PreparationStatus(buildinfo.Revision)
+	if err != nil || current.RequestedAt == nil || !current.RequestedAt.Equal(*p.RequestedAt) {
+		t.Fatalf("cooldown changed request: %#v err=%v", current, err)
+	}
+	work, err := service.ExecutorWork(p.CredentialID)
+	if err != nil || work.CheckRequested {
+		t.Fatalf("completed failed request advertised work: %#v err=%v", work, err)
+	}
+	if err := db.Model(&models.UpdateExecutorCredential{}).Where("id = ?", p.CredentialID).Update("check_requested_at", time.Now().UTC().Add(-31*time.Second)).Error; err != nil {
+		t.Fatal(err)
+	}
+	retry := prepareUpdateHTTP(t, router, "primary", `{}`)
+	if retry.Code != http.StatusAccepted {
+		t.Fatalf("cooldown never released: %d %s", retry.Code, retry.Body.String())
+	}
+	next, wake := decodePreparationHTTP(t, retry)
+	if next.RequestedAt == nil || !next.RequestedAt.After(*p.RequestedAt) || wake != "unconfigured" {
+		t.Fatalf("retry did not persist new request: %#v wake=%s", next, wake)
+	}
+}
+
+func TestUpdatePreparationStateIsOwnerOnlyAndNeverDiscoversTargets(t *testing.T) {
+	_, router, _ := setupUpdateControllerTest(t)
+	for _, path := range []string{"/updates", "/updates/state"} {
+		for _, role := range []string{"primary", "delegated", "ordinary"} {
+			if path == "/updates/state" {
+				discoverUpdates = func(*gin.Context) updates.Report {
+					t.Error("state polling performed remote discovery")
+					return updates.Report{}
+				}
+			}
+			request := httptest.NewRequest(http.MethodGet, path, nil)
+			request.Header.Set("X-Test-Role", role)
+			response := httptest.NewRecorder()
+			router.ServeHTTP(response, request)
+			var body struct {
+				Data map[string]json.RawMessage `json:"data"`
+			}
+			if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil || response.Code != http.StatusOK {
+				t.Fatalf("state=%s role=%s status=%d err=%v", path, role, response.Code, err)
+			}
+			_, present := body.Data["preparation"]
+			if present != (role == "primary") {
+				t.Fatalf("role=%s preparation presence=%v", role, present)
+			}
+		}
+	}
+}
+
+func TestUpdatePreparationPreservesDirectTaskCreationWithOldChecks(t *testing.T) {
+	db, router, token := setupUpdateControllerTest(t)
+	expireControllerDeploymentCheck(t, db)
+	post := func() *httptest.ResponseRecorder {
+		request := httptest.NewRequest(http.MethodPost, "/updates/tasks", strings.NewReader(`{"channel":"edge"}`))
+		request.Header.Set("Content-Type", "application/json")
+		request.Header.Set("X-Test-Role", "primary")
+		response := httptest.NewRecorder()
+		router.ServeHTTP(response, request)
+		return response
+	}
+	if response := post(); response.Code != http.StatusPreconditionFailed {
+		t.Fatalf("stale old check created task: %d", response.Code)
+	}
+	service := updates.NewTaskService(db)
+	credential, err := service.Authenticate(token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	instance, _ := service.InstanceID()
+	if err := service.RecordDeploymentCheck(credential.ID, updates.DeploymentCheck{InstanceID: instance, Version: updates.ExecutorVersion, Platform: "linux/amd64", Revision: buildinfo.Revision, OK: true}); err != nil {
+		t.Fatal(err)
+	}
+	if response := post(); response.Code != http.StatusCreated {
+		t.Fatalf("old check no longer sufficient: %d %s", response.Code, response.Body.String())
+	}
+	var saved models.UpdateExecutorCredential
+	if err := db.First(&saved, credential.ID).Error; err != nil || saved.CheckRequestedAt != nil {
+		t.Fatalf("direct creation required a new preparation: %#v err=%v", saved, err)
 	}
 }

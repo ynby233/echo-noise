@@ -7,7 +7,7 @@ from pathlib import Path
 import tempfile
 import types
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 spec = importlib.util.spec_from_file_location("executor", Path(__file__).with_name("executor.py"))
 executor = importlib.util.module_from_spec(spec)
@@ -639,6 +639,216 @@ class RecoveryTests(unittest.TestCase):
                         {"Name": "data", "Driver": "local", "Options": None}])):
                 self.ex.check_mounts({"Mounts": [{"Type": kind, "Name": "data", "Source": str(source),
                                                 "Destination": "/data", "RW": True}]})
+
+
+class PollTests(unittest.TestCase):
+    setUp = RecoveryTests.setUp
+    claim = RecoveryTests.claim
+
+    def api(self, method, path, body=None, token=None):
+        self.calls.append((path, body))
+        if path.endswith("/work"):
+            return {"instance_id": self.cfg["instance_id"],
+                    "check_requested": False, "task_available": False}
+        return copy.deepcopy(self.task) if path.endswith("/claim") else None
+
+    def test_idle_only_queries_work_without_engine_check_or_journal(self):
+        self.ex.runtime = Mock(side_effect=AssertionError("idle runtime"))
+        self.ex.preflight = Mock(side_effect=AssertionError("idle preflight"))
+        self.ex.data_protection_available = Mock(side_effect=AssertionError("idle backup plan"))
+        with patch.object(executor, "command", side_effect=AssertionError("idle engine")):
+            self.ex.poll()
+        self.assertEqual(self.calls, [("/api/updates/executor/work", None)])
+        self.assertIsNone(self.ex.record)
+        self.assertFalse(self.ex.journal.exists())
+
+    def test_check_request_runs_full_check_and_claims_no_task(self):
+        def api(method, path, body=None, token=None):
+            self.calls.append((path, body))
+            if path.endswith("/work"):
+                return {"instance_id": self.cfg["instance_id"],
+                        "check_requested": True, "task_available": False}
+            return None
+        self.ex.api = api
+        self.ex.preflight = Mock(wraps=self.ex.preflight)
+        self.ex.data_protection_available = Mock(return_value=True)
+        self.ex.poll()
+        self.assertEqual([path for path, _ in self.calls], [
+            "/api/updates/executor/work", "/api/updates/executor/check", "/api/updates/executor/claim"])
+        self.assertTrue(self.calls[1][1]["ok"])
+        self.ex.preflight.assert_called_once_with()
+        self.ex.data_protection_available.assert_called_once_with()
+        self.assertFalse(self.ex.journal.exists())
+
+    def test_task_available_uses_original_check_claim_and_execution(self):
+        normal = self.api
+        def api(method, path, body=None, token=None):
+            result = normal(method, path, body, token)
+            if path.endswith("/work"):
+                result["task_available"] = True
+            return result
+        self.ex.api = api
+        self.ex.download = Mock(side_effect=executor.Stop("download_rejected"))
+        self.ex.stop_container = Mock(side_effect=AssertionError("failed download stopped container"))
+        with self.assertRaisesRegex(executor.Stop, "download_rejected"):
+            self.ex.poll()
+        self.assertEqual([path for path, _ in self.calls[:3]], [
+            "/api/updates/executor/work", "/api/updates/executor/check", "/api/updates/executor/claim"])
+        self.assertEqual(self.ex.record["task"]["id"], self.task["id"])
+        self.assertEqual(self.ex.record["confirmed"], "failed")
+        self.assertTrue(self.ex.record["closed"])
+        self.ex.stop_container.assert_not_called()
+
+    def test_both_work_flags_use_run_once(self):
+        self.ex.api = Mock(return_value={"instance_id": self.cfg["instance_id"],
+                                        "check_requested": True, "task_available": True})
+        self.ex.run = Mock()
+        self.ex.poll()
+        self.ex.run.assert_called_once_with()
+
+    def test_only_old_work_endpoint_404_and_405_fall_back_to_run(self):
+        for code in ("http_404", "http_405"):
+            with self.subTest(code=code):
+                self.ex.api = Mock(side_effect=executor.Stop(code))
+                self.ex.run = Mock()
+                self.ex.poll()
+                self.ex.api.assert_called_once_with("GET", "/api/updates/executor/work")
+                self.ex.run.assert_called_once_with()
+
+    def test_other_work_errors_do_not_fall_back(self):
+        for code in ("http_401", "http_403", "http_409", "http_429", "http_500",
+                     "http_transport", "http_envelope"):
+            with self.subTest(code=code):
+                self.ex.api = Mock(side_effect=executor.Stop(code))
+                self.ex.run = Mock()
+                with self.assertRaisesRegex(executor.Stop, code):
+                    self.ex.poll()
+                self.ex.run.assert_not_called()
+                self.assertFalse(self.ex.journal.exists())
+
+    def test_malformed_json_response_does_not_fall_back(self):
+        self.ex.api = Mock(side_effect=ValueError("invalid JSON"))
+        self.ex.run = Mock()
+        with self.assertRaises(ValueError):
+            self.ex.poll()
+        self.ex.run.assert_not_called()
+        self.assertFalse(self.ex.journal.exists())
+
+    def test_invalid_work_data_and_boolean_types_do_not_run(self):
+        good = {"instance_id": self.cfg["instance_id"],
+                "check_requested": False, "task_available": False}
+        cases = [(None, "executor_work_invalid"), ([], "executor_work_invalid"),
+                 ({}, "instance_mismatch"), (dict(good, instance_id="different"), "instance_mismatch")]
+        for field in ("check_requested", "task_available"):
+            for value in (0, 1, "false", "true", None, [], {}):
+                cases.append((dict(good, **{field: value}), "executor_work_invalid"))
+            cases.append(({key: value for key, value in good.items() if key != field}, "executor_work_invalid"))
+        for work, code in cases:
+            with self.subTest(work=work):
+                self.ex.api = Mock(return_value=work)
+                self.ex.run = Mock()
+                with self.assertRaisesRegex(executor.Stop, code):
+                    self.ex.poll()
+                self.ex.run.assert_not_called()
+
+    def test_404_after_work_success_does_not_trigger_second_run(self):
+        self.ex.api = Mock(return_value={"instance_id": self.cfg["instance_id"],
+                                        "check_requested": True, "task_available": False})
+        self.ex.run = Mock(side_effect=executor.Stop("http_404"))
+        with self.assertRaisesRegex(executor.Stop, "http_404"):
+            self.ex.poll()
+        self.ex.run.assert_called_once_with()
+
+    def test_terminal_ack_after_rotation_recovers_from_disk_with_old_token(self):
+        self.claim()
+        self.ex.record.update(step="complete", confirmed="verifying", pending=["succeeded"])
+        self.ex.save()
+        rotated = self.root / "rotated-token"
+        rotated.write_text("enu_" + "b" * 64)
+        rotated.chmod(0o600)
+        self.cfg["token_file"] = str(rotated)
+        self.config.write_text(json.dumps(self.cfg))
+        recovered = executor.Executor(self.config)
+        recovered.cleanup_previous = Mock()
+        recovered.runtime = Mock(side_effect=AssertionError("terminal runtime"))
+        recovered.api = Mock(return_value=None)
+        recovered.poll()
+        recovered.api.assert_called_once_with("POST", "/api/updates/executor/tasks/" + self.task["id"] + "/events",
+                                              {"status": "succeeded"}, token=str(self.token))
+        self.assertTrue(recovered.record["closed"])
+        self.assertEqual(recovered.record["confirmed"], "succeeded")
+
+    def test_denied_terminal_ack_preserves_journal_without_work_query(self):
+        self.claim()
+        self.ex.record.update(step="complete", confirmed="verifying", pending=["succeeded"])
+        self.ex.save()
+        self.ex.record = None
+        self.ex.api = Mock(side_effect=executor.Stop("http_401"))
+        with self.assertRaisesRegex(executor.Stop, "http_401"):
+            self.ex.poll()
+        self.ex.api.assert_called_once_with("POST", "/api/updates/executor/tasks/" + self.task["id"] + "/events",
+                                           {"status": "succeeded"}, token=str(self.token))
+        saved = json.loads(self.ex.journal.read_text())
+        self.assertEqual(saved["pending"], ["succeeded"])
+        self.assertFalse(saved["closed"])
+
+    def test_attention_recovery_reports_old_record_without_work_query(self):
+        self.claim()
+        self.ex.record.update(step="attention", confirmed="downloading", pending=[],
+                              error_code="interrupted_destructive_step")
+        self.ex.save()
+        self.calls.clear()
+        self.ex.record = None
+        with self.assertRaisesRegex(executor.Stop, "manual_reconciliation_required"):
+            self.ex.poll()
+        self.assertEqual(self.calls, [("/api/updates/executor/tasks/" + self.task["id"] + "/events",
+                                      {"status": "needs_attention"})])
+        self.assertFalse(self.ex.record["closed"])
+
+    def test_assigned_task_without_local_evidence_is_not_replaced(self):
+        self.task["status"] = "downloading"
+        normal = self.api
+        def api(method, path, body=None, token=None):
+            result = normal(method, path, body, token)
+            if path.endswith("/work"):
+                result["task_available"] = True
+            return result
+        self.ex.api = api
+        self.ex.replace = Mock(side_effect=AssertionError("missing evidence replaced container"))
+        with self.assertRaisesRegex(executor.Stop, "claimed_task_without_local_evidence"):
+            self.ex.poll()
+        self.assertEqual(self.ex.record["step"], "attention")
+        self.assertFalse(self.ex.record["closed"])
+        self.ex.replace.assert_not_called()
+
+    def test_closed_record_is_archived_before_idle_work_query(self):
+        self.claim()
+        self.ex.record.update(step="failed", confirmed="failed", pending=[], closed=True)
+        self.ex.save()
+        self.calls.clear()
+        self.ex.poll()
+        self.assertEqual(self.calls, [("/api/updates/executor/work", None)])
+        self.assertIsNone(self.ex.record)
+        self.assertTrue((self.ex.state / (self.task["id"] + ".json")).exists())
+
+    def test_lock_busy_poll_is_success_and_old_actions_still_fail(self):
+        for action in ("poll", "run", "check", "claim", "report", "reconcile"):
+            with self.subTest(action=action):
+                fcntl = types.SimpleNamespace(LOCK_EX=2, LOCK_NB=4,
+                                              flock=Mock(side_effect=BlockingIOError))
+                output, errors = io.StringIO(), io.StringIO()
+                self.ex.load_record = Mock()
+                with patch.dict(executor.sys.modules, {"fcntl": fcntl}), \
+                        patch.object(executor.sys, "platform", "linux"), \
+                        patch.object(executor.sys, "argv", ["executor.py", action, str(self.config)]), \
+                        patch.object(executor, "Executor", return_value=self.ex), \
+                        patch.object(executor.sys, "stdout", output), \
+                        patch.object(executor.sys, "stderr", errors):
+                    result = executor.main()
+                self.assertEqual(result, 0 if action == "poll" else 1)
+                self.assertEqual(output.getvalue(), "busy\n" if action == "poll" else "")
+                self.assertEqual(errors.getvalue(), "" if action == "poll" else "executor: executor_already_running\n")
+                self.ex.load_record.assert_not_called()
 
 
 class PreflightTests(unittest.TestCase):

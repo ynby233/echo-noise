@@ -10,13 +10,16 @@ on:
       - 'internal/backup/**'
       - 'internal/syncmanager/**'
       - 'internal/routers/routers.go'
+      - 'internal/routers/capability_route_matrix_test.go'
       - 'cmd/update-tool/**'
       - 'cmd/server/**'
       - 'Dockerfile'
       - 'docker-entrypoint.sh'
       - 'internal/controllers/update_task_controller.go'
+      - 'internal/controllers/update_task_controller_test.go'
       - 'internal/middleware/auth.go'
       - 'internal/models/update.go'
+      - 'internal/models/sqlite_upgrade_migration_test.go'
       - 'go.mod'
       - 'go.sum'
       - '.github/workflows/update-executor.yml'
@@ -38,7 +41,7 @@ jobs:
         run: |
           sh scripts/release/test-release-policy.sh
           python3 -m unittest discover -s scripts/update -p 'test_*.py' -v
-          go test ./internal/updates ./internal/controllers ./internal/middleware ./internal/routers -run 'Update|Executor|Task|Overview|Rotated' -count=1 -timeout=8m
+          go test ./internal/models ./internal/updates ./internal/controllers ./internal/middleware ./internal/routers -run 'Update|Executor|Task|Overview|Rotated|ProtectedAdminRouteMatrix' -count=1 -timeout=8m
           go test ./internal/backup ./internal/syncmanager -count=1 -timeout=8m
       - name: Compile two isolated coordinator builds
         env:

@@ -66,8 +66,12 @@ def docker(*args):
     return executor.command(["docker", *args], timeout=600).strip()
 
 
-def request(path, method="POST"):
-    with urllib.request.urlopen(urllib.request.Request(url + path, method=method), timeout=5) as response:
+def request(path, method="POST", body=None, expected_status=None):
+    headers = {"Content-Type": "application/json"} if body is not None else {}
+    payload = json.dumps(body).encode() if body is not None else None
+    with urllib.request.urlopen(urllib.request.Request(url + path, data=payload, headers=headers, method=method), timeout=5) as response:
+        if expected_status is not None:
+            assert response.status == expected_status, (path, response.status)
         return json.loads(response.read()) if response.headers.get("Content-Type", "").startswith("application/json") else None
 
 
@@ -107,6 +111,99 @@ def seed(ex):
 
 def assert_status(task_id, status):
     assert request("/fixture/tasks/" + task_id, "GET")["data"]["status"] == status
+
+
+def assert_idle_poll(ex):
+    before = request("/fixture/state", "GET")["data"]
+    journal = ex.journal.read_bytes() if ex.journal.exists() else None
+    containers_before = docker("ps", "-aq", "--no-trunc", "--filter", "name=" + prefix).split()
+    with unittest_patch.object(ex, "api", wraps=ex.api) as api, \
+            unittest_patch.object(executor, "command", side_effect=AssertionError("idle poll ran an Engine/backup command")), \
+            unittest_patch.object(ex, "check_deployment", side_effect=AssertionError("idle poll ran a full check")):
+        ex.poll()
+    assert [(call.args[0], call.args[1]) for call in api.call_args_list] == [("GET", "/api/updates/executor/work")]
+    after = request("/fixture/state", "GET")["data"]
+    assert after["executor"].get("checked_at") == before["executor"].get("checked_at")
+    assert after["executor"].get("check_requested_at") == before["executor"].get("check_requested_at")
+    assert after["task"] == before["task"]
+    assert (ex.journal.read_bytes() if ex.journal.exists() else None) == journal
+    assert docker("ps", "-aq", "--no-trunc", "--filter", "name=" + prefix).split() == containers_before
+
+
+def assert_work(ex, check_requested, task_available):
+    assert ex.api("GET", "/api/updates/executor/work") == {
+        "instance_id": ex.cfg["instance_id"], "check_requested": check_requested,
+        "task_available": task_available}
+
+
+def test_low_frequency(ex, cfg, cid, new_ref):
+    # No wake configuration: preparation and pending tasks survive until poll.
+    assert_idle_poll(ex)  # Even an unchecked deployment can be idle.
+    ex.check_deployment()
+    fresh = request("/fixture/prepare", body={}, expected_status=200)["data"]
+    assert fresh["installation"]["available"] and fresh["wake_status"] == "not_needed"
+    assert_idle_poll(ex)
+    request("/fixture/expire-check", expected_status=200)
+    expired = request("/fixture/state", "GET")["data"]
+    assert expired["installation"] == {"available": False, "reason": "executor_offline"}
+    assert expired["task"] is None
+    prepared = request("/fixture/prepare", body={}, expected_status=202)["data"]
+    assert prepared["credential_id"] == expired["executor"]["id"]
+    assert prepared["requested_at"] and prepared["wake_status"] == "unconfigured"
+    assert not prepared["installation"]["available"]
+    coalesced = request("/fixture/prepare", body={}, expected_status=202)["data"]
+    assert coalesced["requested_at"] == prepared["requested_at"]
+    assert coalesced["wake_status"] == "coalesced"
+    waiting = request("/fixture/state", "GET")["data"]
+    assert waiting["task"] is None
+    assert waiting["executor"]["checked_at"] == expired["executor"]["checked_at"]
+    assert waiting["executor"]["check_requested_at"] == prepared["requested_at"]
+    assert_work(ex, True, False)
+    # Restart the real coordinator and executor before the compensating tick.
+    docker("restart", cid)
+    wait()
+    ex = new_executor(cfg)
+    assert_work(ex, True, False)
+    with unittest_patch.object(ex, "api", wraps=ex.api) as api:
+        ex.poll()
+    assert [(call.args[0], call.args[1]) for call in api.call_args_list] == [
+        ("GET", "/api/updates/executor/work"), ("GET", "/api/updates/executor/runtime"),
+        ("POST", "/api/updates/executor/check"), ("POST", "/api/updates/executor/claim")]
+    ready = request("/fixture/state", "GET")["data"]
+    assert ready["installation"]["available"] and ready["task"] is None
+    assert ready["executor"]["checked_at"] != expired["executor"]["checked_at"]
+    assert ready["executor"]["check_requested_at"] == prepared["requested_at"]
+    assert ex.record is None and not ex.journal.exists()
+    assert_work(ex, False, False)
+    assert_idle_poll(ex)
+    # Create through the real TaskService using that poll's check, without seed's extra check.
+    task = request("/fixture/create", expected_status=201)["data"]
+    assert task["status"] == "pending"
+    assert task["target_revision"] == "2" * 40
+    assert task["target_image"] == executor.IMAGE
+    assert task["target_digest"] == new_ref.rsplit("@", 1)[1]
+    assert_work(ex, False, True)
+    request("/fixture/expire-check", expected_status=200)
+    assert not request("/fixture/state", "GET")["data"]["installation"]["available"]
+    # Backdating only checked_at also makes the retained preparation newer than the check.
+    assert_work(ex, True, True)  # Pending work remains visible despite the expired check.
+    with unittest_patch.object(ex, "api", wraps=ex.api) as api:
+        ex.poll()
+    calls = [(call.args[0], call.args[1]) for call in api.call_args_list]
+    assert calls[:4] == [("GET", "/api/updates/executor/work"),
+                         ("GET", "/api/updates/executor/runtime"),
+                         ("POST", "/api/updates/executor/check"),
+                         ("POST", "/api/updates/executor/claim")]
+    assert_status(task["id"], "succeeded")
+    assert ex.record["closed"] and ex.record["confirmed"] == "succeeded"
+    assert current_id(ex) != cid
+    assert ex.runtime()["revision"] == "2" * 40
+    assert Path(cfg["image_file"]).read_text().strip() == "UPDATE_IMAGE=" + new_ref
+    assert (data / "sentinel").read_text() == "preserved"
+    assert Path(ex.record["backup_path"], "backup.zip").is_file()
+    if cfg["mode"] == "docker":
+        assert_old_removed(ex)
+    print(cfg["mode"] + ": idle has no Engine/check commands; expired prepare persists without wake; poll checks, then executes an expired-check pending task to success", flush=True)
 
 
 def test_offline_wal(old_ref):
@@ -357,12 +454,16 @@ def test_attention(ex, task, cid):
     killed_child(die_after_save)
     ex.load_record()
     assert ex.record["pending"] == ["needs_attention"] and ex.record["error_code"] == "interrupted_destructive_step"
-    rejected(ex.run, "manual_reconciliation_required")
+    with unittest_patch.object(ex, "api", wraps=ex.api) as api:
+        rejected(ex.poll, "manual_reconciliation_required")
+    assert all(call.args[1] != "/api/updates/executor/work" for call in api.call_args_list)
     assert_status(task["id"], "needs_attention")
     # Emulate the old incomplete journal; idempotent owned reporting reconciles it.
     ex.record.update(step="attention", confirmed="stopping", pending=[])
     ex.save()
-    rejected(ex.run, "manual_reconciliation_required")
+    with unittest_patch.object(ex, "api", wraps=ex.api) as api:
+        rejected(ex.poll, "manual_reconciliation_required")
+    assert all(call.args[1] != "/api/updates/executor/work" for call in api.call_args_list)
     assert ex.record["confirmed"] == "needs_attention" and not ex.record["closed"]
     assert current_id(ex) == cid and ex.inspect(cid)["State"]["Running"]
     occupied = seed(ex)
@@ -395,7 +496,7 @@ def test_mode(mode, old_ref, new_ref, new_digest, attention=False, scenario=""):
             "log_driver": "json-file", "log_options": {"max-size": "10m", "max-file": "3"}}
     if scenario in ("backup-failure", "stop-interruption"):
         opts["restart"] = "always"
-    executor.atomic_write(case / "app.env", "FIXTURE_TARGET_DIGEST=" + new_digest + "\nFIXTURE_TARGET_REVISION=" + "2" * 40 + "\n")
+    executor.atomic_write(case / "app.env", "FIXTURE_TARGET_DIGEST=" + new_digest + "\nFIXTURE_TARGET_REVISION=" + "2" * 40 + "\nUPDATE_EXECUTOR_WAKE_URL=\n")
     cfg = {"url": "http://127.0.0.1:1", "instance_id": "0" * 32,
            "token_file": str(case / "token"), "state_dir": str(case / "state"),
            "backup_dir": str(case / "backups"), "platform": "linux/amd64", "mode": mode,
@@ -454,6 +555,19 @@ def test_mode(mode, old_ref, new_ref, new_digest, attention=False, scenario=""):
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         blocked = subprocess.run(["python3", str(Path(__file__).with_name("executor.py")), "claim", str(ex.config_path)], capture_output=True, text=True)
         assert blocked.returncode != 0 and "executor_already_running" in blocked.stderr
+        before = request("/fixture/state", "GET")["data"]
+        busy = subprocess.run(["python3", str(Path(__file__).with_name("executor.py")), "poll", str(ex.config_path)], capture_output=True, text=True, timeout=30)
+        assert busy.returncode == 0 and busy.stdout.strip() == "busy" and not busy.stderr
+        after = request("/fixture/state", "GET")["data"]
+        assert after["executor"].get("checked_at") == before["executor"].get("checked_at")
+        assert after["task"] == before["task"] and not ex.journal.exists()
+    if scenario == "low-frequency":
+        test_low_frequency(ex, cfg, cid, new_ref)
+        assert (external / "blob").read_bytes() == b"external-blob"
+        if mode == "compose":
+            assert docker("compose", "-p", prefix, "--env-file", str(image_file), "-f", str(compose), "ps", "-q", "other") == other_id
+            assert json.loads(docker("inspect", other_id))[0]["Mounts"] == other_mounts
+        return
     task = seed(ex)
     if attention:
         test_attention(ex, task, cid)
@@ -702,7 +816,7 @@ def test_mode(mode, old_ref, new_ref, new_digest, attention=False, scenario=""):
                     os.kill(os.getpid(), signal.SIGKILL)
                 normal_phase(step, status)
             ex.phase = phase
-            ex.run()
+            ex.poll()
         child = multiprocessing.Process(target=killed_run)
         child.start()
         child.join(180)
@@ -715,7 +829,7 @@ def test_mode(mode, old_ref, new_ref, new_digest, attention=False, scenario=""):
         assert ex.record["step"] == "replace_intent"
         assert ex.target_running()
     try:
-        ex.run()
+        ex.poll()
         raise AssertionError("lost final response was treated as success")
     except executor.Stop as error:
         assert str(error) == "http_transport", str(error)
@@ -770,9 +884,19 @@ def test_mode(mode, old_ref, new_ref, new_digest, attention=False, scenario=""):
     assert ex.record["download"]["image_id"] != ex.record["download"]["requested_digest"]
     # Rotate after final commit: old token may retry only its own final report.
     request("/fixture/rotate")
+    # The current config uses the new token; the journal must retain its original one.
+    next_token = case / "token-next"
+    shutil.copyfile(data / "token-next", next_token)
+    next_token.chmod(0o600)
+    cfg["token_file"] = str(next_token)
     recovered = new_executor(cfg)
     recovered.load_record()
-    recovered.run()
+    assert recovered.record["token_file"] != recovered.cfg["token_file"]
+    with unittest_patch.object(recovered, "api", wraps=recovered.api) as api:
+        recovered.poll()
+    assert all(call.args[1] != "/api/updates/executor/work" for call in api.call_args_list)
+    event_calls = [call for call in api.call_args_list if call.args[1].endswith("/events")]
+    assert event_calls and all(call.kwargs.get("token") == recovered.record["token_file"] for call in event_calls)
     assert recovered.record["closed"]
     assert current_id(recovered) == new_id
     if mode == "docker":
@@ -787,7 +911,7 @@ def test_mode(mode, old_ref, new_ref, new_digest, attention=False, scenario=""):
     recovered.record["confirmed"] = "verifying"
     recovered.queue("succeeded")
     try:
-        recovered.run()
+        recovered.poll()
         raise AssertionError("revoked token accepted")
     except executor.Stop as error:
         assert str(error) == "http_401"
@@ -854,6 +978,8 @@ if __name__ == "__main__":
             test_offline_wal(refs[0][0])
             test_mode("docker", refs[0][0], refs[1][0], refs[1][1])
             test_mode("compose", refs[0][0], refs[1][0], refs[1][1])
+            for mode in ("docker", "compose"):
+                test_mode(mode, refs[0][0], refs[1][0], refs[1][1], scenario="low-frequency")
             test_mode("docker", refs[0][0], refs[1][0], refs[1][1], attention=True)
             for scenario in ("cleanup-failure", "cleanup-interruption", "cleanup-check", "space-failure", "writer-conflict", "pending-restore", "download-failure", "registry-offline", "backup-failure", "forced-stop", "verify-failure", "verify-reconcile", "start-failure", "migration-failure", "runtime-revision-mismatch", "runtime-instance-mismatch", "stop-interruption"):
                 test_mode("docker", refs[0][0], refs[1][0], refs[1][1], scenario=scenario)

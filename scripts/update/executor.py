@@ -818,6 +818,28 @@ class Executor:
         self.record["closed"] = True
         self.save()
 
+    def poll(self):
+        if self.record is None:
+            self.load_record()
+        self.archive_closed()
+        if self.record is not None:
+            # Recovery uses the journal's pinned credential before any new work query.
+            self.run()
+            return
+        try:
+            work = self.api("GET", "/api/updates/executor/work")
+        except Stop as error:
+            if str(error) not in ("http_404", "http_405"):
+                raise
+            self.run()
+            return
+        require(isinstance(work, dict), "executor_work_invalid")
+        require(work.get("instance_id") == self.cfg["instance_id"], "instance_mismatch")
+        require(type(work.get("check_requested")) is bool and
+                type(work.get("task_available")) is bool, "executor_work_invalid")
+        if work["check_requested"] or work["task_available"]:
+            self.run()
+
     def archive_closed(self):
         if self.record and self.record["closed"]:
             self.cleanup_previous()  # One final retry; cleanup failure cannot hold the next task.
@@ -860,7 +882,7 @@ class Executor:
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("check", "claim", "report", "run", "reconcile"))
+    parser.add_argument("action", choices=("check", "claim", "report", "run", "poll", "reconcile"))
     parser.add_argument("config")
     parser.add_argument("--task")
     parser.add_argument("--outcome", choices=("verify", "failed"))
@@ -875,6 +897,9 @@ def main():
             try:
                 fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError:
+                if args.action == "poll":
+                    print("busy")
+                    return 0
                 raise Stop("executor_already_running") from None
             ex.load_record()
             if args.action == "check":
@@ -885,6 +910,9 @@ def main():
             elif args.action == "report":
                 require(ex.record is not None, "no_local_record")
                 ex.flush()
+            elif args.action == "poll":
+                ex.poll()
+                print("idle" if ex.record is None else "task=" + ex.record["task"]["id"] + " step=" + ex.record["step"])
             else:
                 ex.archive_closed()
                 if args.action == "claim":

@@ -125,3 +125,85 @@ func TestMigrateDBCreatesUpdateStateAndRemovesOnlyDelegatedUpdateGrant(t *testin
 		}
 	}
 }
+
+// This is the credential schema shipped before check_requested_at existed.
+type legacyUpdateExecutorCredential struct {
+	ID                uint       `gorm:"primaryKey"`
+	Name              string     `gorm:"type:varchar(100);not null"`
+	TokenHash         string     `gorm:"type:varchar(64);not null;uniqueIndex"`
+	TokenPrefix       string     `gorm:"type:varchar(16);not null"`
+	ExpiresAt         *time.Time `gorm:"index"`
+	LastSeenAt        *time.Time
+	CheckedAt         *time.Time
+	InstanceID        string `gorm:"type:varchar(32)"`
+	ExecutorVersion   string `gorm:"type:varchar(20)"`
+	Platform          string `gorm:"type:varchar(30)"`
+	InstalledRevision string `gorm:"type:varchar(40)"`
+	CheckOK           bool
+	SupersededAt      *time.Time `gorm:"index"`
+	RevokedAt         *time.Time `gorm:"index"`
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
+}
+
+func (legacyUpdateExecutorCredential) TableName() string {
+	return "update_executor_credentials"
+}
+
+func TestMigrateDBUpgradesPopulatedLegacyUpdateCredentialWithoutLosingTask(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "legacy-update.db")), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
+	if err := db.AutoMigrate(&legacyUpdateExecutorCredential{}, &UpdateTask{}); err != nil {
+		t.Fatal(err)
+	}
+	checked := time.Now().UTC().Truncate(time.Second)
+	legacy := legacyUpdateExecutorCredential{
+		Name: "original executor", TokenHash: strings.Repeat("a", 64), TokenPrefix: "enu_original",
+		CheckedAt: &checked, LastSeenAt: &checked, InstanceID: strings.Repeat("b", 32),
+		ExecutorVersion: "u6-1", Platform: "linux/amd64", InstalledRevision: strings.Repeat("c", 40), CheckOK: true,
+	}
+	if err := db.Create(&legacy).Error; err != nil {
+		t.Fatal(err)
+	}
+	slot := uint(1)
+	task := UpdateTask{
+		PublicID: "original-task", RequestedByUserID: PrimaryAdminUserID, Channel: "edge",
+		TargetImage: "ghcr.io/ynby233/echo-noise", TargetDigest: "sha256:" + strings.Repeat("d", 64),
+		TargetRevision: strings.Repeat("e", 40), Status: "claimed", ExecutorCredentialID: &legacy.ID, ActiveSlot: &slot,
+	}
+	if err := db.Create(&task).Error; err != nil {
+		t.Fatal(err)
+	}
+	if db.Migrator().HasColumn(&legacyUpdateExecutorCredential{}, "check_requested_at") {
+		t.Fatal("legacy fixture already has new request column")
+	}
+	for range 2 {
+		if err := MigrateDB(db); err != nil {
+			t.Fatal(err)
+		}
+		if !db.Migrator().HasColumn(&UpdateExecutorCredential{}, "check_requested_at") {
+			t.Fatal("migration did not add request column")
+		}
+		var credential UpdateExecutorCredential
+		if err := db.First(&credential, legacy.ID).Error; err != nil {
+			t.Fatal(err)
+		}
+		if credential.CheckRequestedAt != nil || credential.TokenHash != legacy.TokenHash || credential.TokenPrefix != legacy.TokenPrefix || credential.CheckedAt == nil || !credential.CheckedAt.Equal(checked) || !credential.CheckOK || credential.InstalledRevision != legacy.InstalledRevision {
+			t.Fatalf("migration changed original credential: %#v", credential)
+		}
+		var preserved UpdateTask
+		if err := db.First(&preserved, task.ID).Error; err != nil {
+			t.Fatal(err)
+		}
+		if preserved.PublicID != task.PublicID || preserved.Status != task.Status || preserved.TargetDigest != task.TargetDigest || preserved.TargetRevision != task.TargetRevision || preserved.ActiveSlot == nil || *preserved.ActiveSlot != slot || preserved.ExecutorCredentialID == nil || *preserved.ExecutorCredentialID != legacy.ID {
+			t.Fatalf("migration changed original task: %#v", preserved)
+		}
+	}
+}
