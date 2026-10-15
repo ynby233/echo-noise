@@ -17,7 +17,7 @@ editor, search, feed, notification and comment features mount only on demand. --
           <div class="profile-card">
             <div class="profile-head">
               <button type="button" class="avatar-wrap nw-tooltip-anchor nw-tooltip-below" data-tooltip="后台" aria-label="后台" @click="openAdmin">
-                <img class="avatar-lg" :src="profileAvatar" :alt="profileName" @error="handleAvatarError">
+                <img v-if="profileAvatar" class="avatar-lg" :src="profileAvatar" :alt="profileName" @error="handleAvatarError">
                 <span class="avatar-status" :class="isOnline ? 'bg-green-500' : 'bg-gray-400'"></span>
               </button>
               <div class="profile-identity">
@@ -1160,36 +1160,25 @@ const profileName = computed(() => {
   return wname || '匿名'
 })
 const fallbackAvatarURL = '/favicon.svg'
-const adminWelcome = ref<any>(null)
+const failedAvatarURLs = ref<string[]>([])
 
 const profileAvatar = computed(() => {
   const u = userStore.user as any
   const raw = String(u?.avatar_url || u?.AvatarURL || '').trim()
   const base = useRuntimeConfig().public.baseApi || '/api'
-  // 头像同样可能存着旧主机名的受管附件地址，交给统一解析器跟随当前 origin。
-  const pick = (s: string) => resolveManagedAttachmentURL(base, s)
-  if (raw) {
-    return pick(raw)
-  }
-  const useAdmin = !!((frontendConfig.value as any)?.welcomeUseAdmin)
-  const araw = String((adminWelcome.value?.avatar_url || '')).trim()
-  if (useAdmin && araw) return pick(araw)
+  // 统一解析受管附件地址，再跳过已经加载失败的候选，避免回退到同一地址。
   const wraw = String((frontendConfig.value as any)?.welcomeAvatarURL || '').trim()
-  if (wraw) return pick(wraw)
-  return fallbackAvatarURL
-})
-const profileAvatarFallback = computed(() => {
-  const useAdmin = !!((frontendConfig.value as any)?.welcomeUseAdmin)
-  const araw = String((adminWelcome.value?.avatar_url || '')).trim()
-  if (useAdmin && araw) return araw
-  const wraw = String((frontendConfig.value as any)?.welcomeAvatarURL || '').trim()
-  if (wraw) return wraw
-  return fallbackAvatarURL
+  const candidates = [raw, wraw, fallbackAvatarURL]
+    .filter(Boolean)
+    .map((url) => resolveManagedAttachmentURL(base, url))
+  return candidates.find((url) => !failedAvatarURLs.value.includes(url)) || ''
 })
 const handleAvatarError = (e: Event) => {
   const img = e.target as HTMLImageElement
-  const next = profileAvatarFallback.value || fallbackAvatarURL
-  if (img && img.src !== next) img.src = next
+  const failed = img?.getAttribute('src')
+  if (failed && !failedAvatarURLs.value.includes(failed)) {
+    failedAvatarURLs.value = [...failedAvatarURLs.value, failed]
+  }
 }
 const profileDesc = computed(() => {
   const u = userStore.user as any
@@ -1198,9 +1187,6 @@ const profileDesc = computed(() => {
   if (isOnline.value) {
     return ''
   }
-  const useAdmin = !!((frontendConfig.value as any)?.welcomeUseAdmin)
-  const ad = String((adminWelcome.value?.description || '')).trim()
-  if (useAdmin && ad) return ad
   const wd = String((frontendConfig.value as any)?.welcomeDescription || '').trim()
   return wd || '执迷不悟'
 })
@@ -2285,7 +2271,7 @@ const headerImageStyle = computed(() => ({
     welcomeAvatarURL: '/favicon.svg',
     welcomeName: '站长',
     welcomeDescription: '欢迎访问',
-    welcomeUseAdmin: true,
+    welcomeUseAdmin: false,
     backgrounds: [
       normalizeHeaderBackground('https://picsum.photos/1600/500'),
     ],
@@ -2657,19 +2643,6 @@ const fetchStatus = async () => {
     if (r && r.code === 1) status.value = r.data
   } catch {}
 }
-const loadAdminWelcome = async () => {
-  try {
-    const useAdmin = !!((frontendConfig.value as any)?.welcomeUseAdmin)
-    const logged = !!(userStore.user)
-    const sname = String((status.value as any)?.username || '').trim()
-    if (logged || !useAdmin || !sname) { adminWelcome.value = null; return }
-    const resp = await fetch(`/api/users/profile?username=${encodeURIComponent(sname)}`, { credentials: 'include', headers: { 'Accept': 'application/json' } })
-    const js = await resp.json().catch(() => null)
-    adminWelcome.value = js?.data || null
-  } catch { adminWelcome.value = null }
-}
-watch(() => [userStore.user, status.value, (frontendConfig.value as any)?.welcomeUseAdmin], () => { loadAdminWelcome() }, { deep: false })
-onMounted(() => { loadAdminWelcome() })
 const allVisibleTags = computed(() => {
   const arr = Array.isArray(tags.value) ? [...tags.value] : []
   const excluded = ['留言', 'guestbook']

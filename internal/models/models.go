@@ -513,7 +513,7 @@ type SiteConfig struct {
 	WelcomeAvatarURL   string `gorm:"type:varchar(255)"`
 	WelcomeName        string `gorm:"type:varchar(100)"`
 	WelcomeDescription string `gorm:"type:varchar(255)"`
-	WelcomeUseAdmin    bool   `gorm:"default:true"`
+	WelcomeUseAdmin    bool   `gorm:"default:false"`
 	// 广告位配置（左侧）
 	LeftAdEnabled     bool   `gorm:"default:true"`
 	LeftAds           string `gorm:"type:text"`

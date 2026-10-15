@@ -54,7 +54,7 @@ func getDefaultConfig() map[string]interface{} {
 			"welcomeAvatarURL":       neutralAvatarURL,
 			"welcomeName":            neutralOwnerName,
 			"welcomeDescription":     neutralDescription,
-			"welcomeUseAdmin":        true,
+			"welcomeUseAdmin":        false,
 			"pwaEnabled":             true,
 			"pwaTitle":               "",
 			"pwaDescription":         neutralPwaDescription,

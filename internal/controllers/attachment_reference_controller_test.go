@@ -112,6 +112,71 @@ func TestServeAttachmentReferenceAllowsAnonymousPublicSiteConfigUsage(t *testing
 	}
 }
 
+func TestServeAttachmentReferencePublishesOnlyConfiguredWelcomeAvatar(t *testing.T) {
+	db, r, primary, _ := setupCommentAccountTest(t)
+	if primary.ID != models.PrimaryAdminUserID {
+		t.Fatalf("primary fixture ID = %d", primary.ID)
+	}
+	if err := db.Model(&primary).Update("is_admin", true).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&models.AttachmentBlob{}, &models.AttachmentReference{}); err != nil {
+		t.Fatal(err)
+	}
+	other := models.User{Username: "private-avatar-user"}
+	if err := db.Create(&other).Error; err != nil {
+		t.Fatal(err)
+	}
+	content := []byte("welcome avatar bytes")
+	sum := sha256.Sum256(content)
+	store := attachmentregistry.NewLocalStore(t.TempDir())
+	createAvatar := func(user models.User) string {
+		t.Helper()
+		reference, err := attachmentregistry.NewRegistry(db).Create(context.Background(), store, attachmentregistry.CreateInput{
+			Kind: "image", OwnerUserID: user.ID, OriginalName: "avatar.webp", ContentType: "image/webp",
+			ContentHash: hex.EncodeToString(sum[:]), Size: int64(len(content)),
+		}, bytes.NewReader(content))
+		if err != nil {
+			t.Fatal(err)
+		}
+		path := attachmentregistry.ReferenceURL(reference, "local")
+		if err := db.Model(&user).Update("avatar_url", path).Error; err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	primaryAvatar := createAvatar(primary)
+	otherAvatar := createAvatar(other)
+	site := models.SiteConfig{WelcomeUseAdmin: true, AvatarURL: "/favicon.svg", WelcomeAvatarURL: "/favicon.svg"}
+	if err := db.Create(&site).Error; err != nil {
+		t.Fatal(err)
+	}
+	r.GET("/api/images/*name", serveLocalAttachment("image", t.TempDir(), store.Root()))
+	request := func(path string) *httptest.ResponseRecorder {
+		response := httptest.NewRecorder()
+		r.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+		return response
+	}
+	if response := request(primaryAvatar); response.Code != http.StatusNotFound || response.Header().Get("Cache-Control") != "private, no-store" {
+		t.Fatalf("unconfigured admin avatar response = %d, cache = %q", response.Code, response.Header().Get("Cache-Control"))
+	}
+	if err := db.Model(&site).Updates(map[string]interface{}{"welcome_avatar_url": primaryAvatar, "welcome_use_admin": false}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if response := request(primaryAvatar); response.Code != http.StatusOK || response.Body.String() != string(content) || response.Header().Get("Cache-Control") != "public, max-age=300" {
+		t.Fatalf("configured welcome avatar response = %d %q, cache = %q", response.Code, response.Body.String(), response.Header().Get("Cache-Control"))
+	}
+	if response := request(otherAvatar); response.Code != http.StatusNotFound || response.Header().Get("Cache-Control") != "private, no-store" {
+		t.Fatalf("ordinary avatar response = %d, cache = %q", response.Code, response.Header().Get("Cache-Control"))
+	}
+	if err := db.Model(&site).Update("welcome_avatar_url", "/favicon.svg").Error; err != nil {
+		t.Fatal(err)
+	}
+	if response := request(primaryAvatar); response.Code != http.StatusNotFound || response.Header().Get("Cache-Control") != "private, no-store" {
+		t.Fatalf("removed welcome avatar response = %d, cache = %q", response.Code, response.Header().Get("Cache-Control"))
+	}
+}
+
 func TestServeAttachmentReferenceNeutralizesStoredActiveContent(t *testing.T) {
 	db, r, owner, _ := setupCommentAccountTest(t)
 	if err := db.AutoMigrate(&models.AttachmentBlob{}, &models.AttachmentReference{}); err != nil {

@@ -16,6 +16,32 @@ func TestDefaultFrontendConfigDoesNotExposeLegacyBranding(t *testing.T) {
 	assertNoLegacyPublicBranding(t, string(raw))
 }
 
+func TestWelcomeConfigDefaultsToIndependentFields(t *testing.T) {
+	defaults := getDefaultConfig()["frontendSettings"].(map[string]interface{})
+	if defaults["welcomeUseAdmin"] != false || defaults["welcomeAvatarURL"] != neutralAvatarURL {
+		t.Fatalf("welcome defaults = %#v", defaults)
+	}
+	db := setupUserServiceTestDB(t)
+	if err := db.Create(&models.SiteConfig{}).Error; err != nil {
+		t.Fatal(err)
+	}
+	var site models.SiteConfig
+	if err := db.First(&site).Error; err != nil {
+		t.Fatal(err)
+	}
+	if site.WelcomeUseAdmin {
+		t.Fatal("new site must not enable dynamic admin welcome information")
+	}
+	config, err := GetFrontendConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	settings := config["frontendSettings"].(map[string]interface{})
+	if settings["welcomeUseAdmin"] != false || settings["welcomeAvatarURL"] != neutralAvatarURL {
+		t.Fatalf("public welcome defaults = %#v", settings)
+	}
+}
+
 func TestVoceChatNotificationFallbackDoesNotExposeLegacyBranding(t *testing.T) {
 	markdown := buildVoceChatNotificationMarkdown(models.SiteConfig{}, models.UserNotification{
 		Type: "comment",
