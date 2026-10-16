@@ -1,9 +1,25 @@
 import { withStableInsertionPoint } from './dom-stable-insertion'
 
+type VideoDimensions = { width: number; height: number }
+// A live preview replaces its video elements on each edit. Keep metadata with
+// the preview root so replacement elements can use their final layout at once.
+const videoDimensionsByRoot = new WeakMap<HTMLElement, Map<string, VideoDimensions>>()
+
 // Owns the DOM grouping and loading placeholders for rendered image/video runs.
 // Callers provide the current render root after each preview replacement.
 export const applyRenderedMediaLayout = (root: HTMLElement | null, keepImagesFullSize = false) => {
   if (!root) return;
+  const videoDimensions = videoDimensionsByRoot.get(root) || new Map<string, VideoDimensions>()
+  videoDimensionsByRoot.set(root, videoDimensions)
+  const dimensionsForVideo = (video: HTMLVideoElement): VideoDimensions | undefined => {
+    const source = video.currentSrc || video.src || video.querySelector('source')?.src || ''
+    if (video.readyState >= 1 && video.videoWidth > 0 && video.videoHeight > 0) {
+      const dimensions = { width: video.videoWidth, height: video.videoHeight }
+      if (source) videoDimensions.set(source, dimensions)
+      return dimensions
+    }
+    return source ? videoDimensions.get(source) : undefined
+  }
 
   root.querySelectorAll('.image-grid, .single-media, .full-image-attachment').forEach((node) => {
     const parent = node.parentElement
@@ -261,9 +277,22 @@ export const applyRenderedMediaLayout = (root: HTMLElement | null, keepImagesFul
                 }
               } else if (tagName === 'video') {
                 const vid = only as HTMLVideoElement
-                const runCheck = () => applyPortrait(vid.videoWidth, vid.videoHeight)
-                if (vid.readyState >= 1 && vid.videoWidth && vid.videoHeight) runCheck()
-                else vid.addEventListener('loadedmetadata', runCheck, { once: true })
+                const runCheck = () => {
+                  const dimensions = dimensionsForVideo(vid)
+                  if (!dimensions) return
+                  const { width, height } = dimensions
+                  if (height > width) {
+                    vid.style.aspectRatio = ''
+                    applyPortrait(width, height)
+                  } else {
+                    wrapper.classList.remove('ar-11')
+                    vid.style.height = 'auto'
+                    vid.style.objectFit = ''
+                    vid.style.aspectRatio = `${width} / ${height}`
+                  }
+                }
+                runCheck()
+                if (vid.readyState < 1) vid.addEventListener('loadedmetadata', runCheck, { once: true })
               }
             }
           }
@@ -337,8 +366,9 @@ export const applyRenderedMediaLayout = (root: HTMLElement | null, keepImagesFul
                  else portraitCount++;
                }
              } else if (vid) {
-               if (vid.readyState >= 1) {
-                 const r = vid.videoWidth / vid.videoHeight;
+               const dimensions = dimensionsForVideo(vid as HTMLVideoElement)
+               if (dimensions) {
+                 const r = dimensions.width / dimensions.height;
                  if (Math.abs(r - 1) < 0.15) squareCount++;
                  else if (r > 1) landscapeCount++;
                  else portraitCount++;
