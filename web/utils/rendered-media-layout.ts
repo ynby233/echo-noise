@@ -4,6 +4,7 @@ type VideoDimensions = { width: number; height: number }
 // A live preview replaces its video elements on each edit. Keep metadata with
 // the preview root so replacement elements can use their final layout at once.
 const videoDimensionsByRoot = new WeakMap<HTMLElement, Map<string, VideoDimensions>>()
+const fullImageDimensionsByRoot = new WeakMap<HTMLElement, Map<string, VideoDimensions>>()
 
 // Owns the DOM grouping and loading placeholders for rendered image/video runs.
 // Callers provide the current render root after each preview replacement.
@@ -19,6 +20,25 @@ export const applyRenderedMediaLayout = (root: HTMLElement | null, keepImagesFul
       return dimensions
     }
     return source ? videoDimensions.get(source) : undefined
+  }
+  const imageDimensions = fullImageDimensionsByRoot.get(root) || new Map<string, VideoDimensions>()
+  fullImageDimensionsByRoot.set(root, imageDimensions)
+  const preserveFullImageDimensions = (image: HTMLImageElement) => {
+    const restore = () => {
+      const source = image.currentSrc || image.src || ''
+      if (image.naturalWidth > 0 && image.naturalHeight > 0) {
+        if (source) imageDimensions.set(source, { width: image.naturalWidth, height: image.naturalHeight })
+      }
+      const known = source ? imageDimensions.get(source) : undefined
+      if (!known) return
+      // Full images use width:auto in CSS; attributes alone do not reserve a
+      // box while their replacement node is still loading. Preserve the natural
+      // width and ratio, with max-width:100% continuing to fit narrow containers.
+      image.style.setProperty('width', `${known.width}px`, 'important')
+      image.style.aspectRatio = `auto ${known.width} / ${known.height}`
+    }
+    restore()
+    if (!image.complete) image.addEventListener('load', restore, { once: true })
   }
 
   root.querySelectorAll('.image-grid, .single-media, .full-image-attachment').forEach((node) => {
@@ -209,6 +229,8 @@ export const applyRenderedMediaLayout = (root: HTMLElement | null, keepImagesFul
             const movedNodes = new Set(mediaItems.map(({ node }) => node))
             const inserted = withStableInsertionPoint(parentNode, firstBlock, (insertionPoint) => {
               for (const { node } of mediaItems) {
+                const image = getPlainImage(node)
+                if (image) preserveFullImageDimensions(image)
                 const wrapper = document.createElement('div')
                 wrapper.className = 'full-image-attachment'
                 parentNode.insertBefore(wrapper, insertionPoint)
@@ -433,18 +455,24 @@ export const applyImageLoadingPlaceholders = (root: HTMLElement | null) => {
     ph.className = 'image-loading-placeholder';
     ph.textContent = '图片正在加载中，请稍后';
     const ref = img.closest('.image-grid-item') ? (img.closest('.image-grid-item') as HTMLElement).firstChild : img;
-    container.insertBefore(ph, ref as Node);
-    img.style.opacity = '0';
+    const hasReservedSize = !!img.closest('.full-image-attachment') &&
+      !!fullImageDimensionsByRoot.get(root)?.has(img.currentSrc || img.src || '')
+    if (!hasReservedSize) {
+      container.insertBefore(ph, ref as Node);
+      img.style.opacity = '0';
+    }
     const onLoad = () => {
       img.style.opacity = '1';
       ph.remove();
     };
     const onError = () => {
+      if (!ph.parentNode) container.insertBefore(ph, ref as Node);
       ph.textContent = '图片加载失败';
       ph.classList.add('image-loading-error');
       img.style.display = 'none';
     };
     img.addEventListener('load', onLoad, { once: true });
     img.addEventListener('error', onError, { once: true });
+    if (img.complete && !img.naturalWidth) onError();
   });
 };
