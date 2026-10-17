@@ -145,7 +145,6 @@ the composer is visible; its component owns editor teardown. -->
             @click.stop="togglePublishPicker('year')"
           >
             <span>{{ publishPickerMonth.getFullYear() }}年</span>
-            <UIcon name="i-heroicons-chevron-down-20-solid" class="w-3 h-3" />
           </button>
           <button
             ref="publishMonthPickerButton"
@@ -157,7 +156,6 @@ the composer is visible; its component owns editor teardown. -->
             @click.stop="togglePublishPicker('month')"
           >
             <span>{{ publishPickerMonth.getMonth() + 1 }}月</span>
-            <UIcon name="i-heroicons-chevron-down-20-solid" class="w-3 h-3" />
           </button>
         </div>
         <button type="button" class="floating-icon-btn" aria-label="下个月" @click="movePublishMonth(1)">

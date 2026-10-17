@@ -694,7 +694,7 @@ html.dark .publish-datetime-menu {
 
 .publish-picker-trigger {
   min-height: 28px;
-  padding: 0 7px;
+  padding: 0 6px;
   border-radius: 8px;
   border: 1px solid var(--nw-floating-border);
   background: var(--nw-picker-button-bg);
@@ -702,7 +702,6 @@ html.dark .publish-datetime-menu {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 3px;
   white-space: nowrap;
 }
 
@@ -717,8 +716,8 @@ html.dark .publish-datetime-menu {
   outline: none;
 }
 
-.publish-picker-trigger:first-child { width: 75px; }
-.publish-picker-trigger:last-child { width: 50px; }
+.publish-picker-trigger:first-child { width: 60px; }
+.publish-picker-trigger:last-child { width: 44px; }
 
 .floating-icon-btn {
   width: 28px;
@@ -740,7 +739,7 @@ html.dark .publish-datetime-menu {
   gap: 4px;
   max-height: 204px;
   overflow-y: auto;
-  padding: 8px;
+  padding: 8px 4px;
   border: 1px solid var(--nw-floating-border);
   border-radius: 10px;
   background: var(--nw-floating-bg);
@@ -760,7 +759,7 @@ html.dark .publish-datetime-menu {
   min-height: 28px;
   min-width: 0;
   width: 100%;
-  padding: 0 6px;
+  padding: 0 2px;
   border-radius: 8px;
   border: 1px solid transparent;
   color: inherit;
@@ -772,7 +771,7 @@ html.dark .publish-datetime-menu {
   transition: background-color .15s ease, border-color .15s ease, color .15s ease;
 }
 
-.publish-picker-floating-menu.is-month .publish-picker-floating-option { min-height: 24px; padding: 0 4px; }
+.publish-picker-floating-menu.is-month .publish-picker-floating-option { min-height: 24px; padding: 0 2px; }
 .publish-picker-floating-option:hover,
 .publish-picker-floating-option:focus-visible { outline: none; border-color: var(--nw-floating-hover-border); background: var(--nw-floating-hover-bg); }
 .publish-picker-floating-option.is-selected { border-color: var(--nw-floating-selected-border); background: var(--nw-floating-selected-bg); color: var(--nw-floating-text); }

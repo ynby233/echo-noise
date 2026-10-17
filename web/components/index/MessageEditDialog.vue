@@ -149,7 +149,6 @@ MessageList opens/closes it but does not mutate its internal draft. -->
             @click.stop="toggleEditPublishPicker('year')"
           >
             <span>{{ editPublishPickerMonth.getFullYear() }}年</span>
-            <UIcon name="i-heroicons-chevron-down-20-solid" class="w-3 h-3" />
           </button>
           <button
             ref="editPublishMonthPickerButton"
@@ -161,7 +160,6 @@ MessageList opens/closes it but does not mutate its internal draft. -->
             @click.stop="toggleEditPublishPicker('month')"
           >
             <span>{{ editPublishPickerMonth.getMonth() + 1 }}月</span>
-            <UIcon name="i-heroicons-chevron-down-20-solid" class="w-3 h-3" />
           </button>
         </div>
         <button type="button" class="floating-icon-btn" aria-label="下个月" @click="moveEditPublishMonth(1)">

@@ -17,7 +17,6 @@
           @click="togglePicker('year')"
         >
           <span>{{ currentYear }}年</span>
-          <UIcon name="i-heroicons-chevron-down-20-solid" class="w-3 h-3" />
         </button>
         <button
           ref="monthPickerButton"
@@ -29,7 +28,6 @@
           @click="togglePicker('month')"
         >
           <span>{{ currentMonthNumber }}月</span>
-          <UIcon name="i-heroicons-chevron-down-20-solid" class="w-3 h-3" />
         </button>
       </div>
       <span class="calendar-scope">{{ scopeLabel }}</span>
@@ -490,7 +488,7 @@ onBeforeUnmount(() => {
 .calendar-select {
   height: 24px;
   min-width: 0;
-  padding: 0 7px;
+  padding: 0 6px;
   border-radius: 8px;
   border: 1px solid var(--calendar-control-border);
   background: var(--calendar-control-bg);
@@ -506,11 +504,6 @@ onBeforeUnmount(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 3px;
-}
-
-.calendar-select-button svg {
-  opacity: 0.72;
 }
 
 .calendar-select:hover,
@@ -520,11 +513,11 @@ onBeforeUnmount(() => {
 }
 
 .year-select {
-  width: 75px;
+  width: 60px;
 }
 
 .month-select {
-  width: 55px;
+  width: 44px;
 }
 
 .calendar-nav {
@@ -669,7 +662,7 @@ onBeforeUnmount(() => {
   gap: 4px;
   max-height: 204px;
   overflow-y: auto;
-  padding: 8px;
+  padding: 8px 4px;
   border-radius: 10px;
   border: 1px solid var(--nw-floating-border);
   background: var(--nw-floating-bg);
@@ -707,7 +700,7 @@ onBeforeUnmount(() => {
 
 .calendar-floating-menu.is-month .calendar-floating-option {
   min-height: 24px;
-  padding: 0 4px;
+  padding: 0 2px;
 }
 
 .calendar-floating-option {
@@ -718,7 +711,7 @@ onBeforeUnmount(() => {
   min-height: 28px;
   min-width: 0;
   width: 100%;
-  padding: 0 6px;
+  padding: 0 2px;
   border-radius: 8px;
   border: 1px solid transparent;
   color: inherit;
