@@ -16,7 +16,6 @@ import (
 var (
 	messageTagExtractRegexp = regexp.MustCompile(`#([^\s#\p{P}\p{S}]+)([/?=&][^\s#]*)?`)
 	invalidMessageTagRegexp = regexp.MustCompile(`[/?=&]|^(song|video|playlist)\?id=\d+$`)
-	markdownImageRegexp     = regexp.MustCompile(`!\[.*?\]\((.*?)\)`)
 )
 
 func extractMessageTags(content string) []string {
@@ -83,11 +82,7 @@ func GetCurrentUserHomeStats(c *gin.Context) {
 		if strings.TrimSpace(msg.ImageURL) != "" {
 			imageURLs = append(imageURLs, msg.ImageURL)
 		}
-		for _, match := range markdownImageRegexp.FindAllStringSubmatch(msg.Content, -1) {
-			if len(match) > 1 && strings.TrimSpace(match[1]) != "" {
-				imageURLs = append(imageURLs, match[1])
-			}
-		}
+		imageURLs = append(imageURLs, extractMessageImages(msg.Content)...)
 	}
 
 	// 与最新图集保持同一口径：附件已被删除的图片不再计入，避免统计数虚高。
@@ -240,15 +235,12 @@ func GetAllImages(c *gin.Context) {
 			})
 		}
 
-		matches := markdownImageRegexp.FindAllStringSubmatch(msg.Content, -1)
-		for _, match := range matches {
-			if len(match) > 1 {
-				candidates = append(candidates, ImageInfo{
-					ID:        msg.ID,
-					ImageURL:  match[1],
-					CreatedAt: msg.CreatedAt,
-				})
-			}
+		for _, imageURL := range extractMessageImages(msg.Content) {
+			candidates = append(candidates, ImageInfo{
+				ID:        msg.ID,
+				ImageURL:  imageURL,
+				CreatedAt: msg.CreatedAt,
+			})
 		}
 	}
 

@@ -1,7 +1,7 @@
 <template>
   <div class="calendar-wrapper" :class="{ 'heatmap-compact': props.compact }">
     <div class="calendar-container" ref="calendarContainer" :class="isDark ? 'heatmap-dark' : 'heatmap-light'">
-      <div class="heatmap-grid" :style="{ width: gridViewportWidth }">
+      <div ref="calendarGrid" class="heatmap-grid" :style="{ width: gridViewportWidth }" @scroll.passive="rememberCalendarScroll">
         <div v-for="(week, i) in calendarData" :key="i" class="heatmap-week">
           <div 
             v-for="(day, j) in week" 
@@ -24,17 +24,51 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, computed, watch, inject, nextTick } from 'vue'
 import { useUserStore } from '~/store/user'
+import { generateHeatmapCalendar, type HeatItem, type CalendarDay } from '~/utils/heatmapCalendar'
 
-interface HeatItem { date: string; count: number }
-interface CalendarDay { date: string; count: number; level: number }
 const props = withDefaults(defineProps<{ activeTab?: string; compact?: boolean }>(), { activeTab: 'latest', compact: false })
 const userStore = useUserStore()
 const rawData = ref<HeatItem[]>([])
 const calendarData = ref<CalendarDay[][]>([])
 const calendarContainer = ref<HTMLElement | null>(null)
+const calendarGrid = ref<HTMLElement | null>(null)
 const heatmapTooltip = ref<HTMLElement | null>(null)
 const tooltip = ref({ visible: false, text: '', x: 0, y: 0 })
 const gridViewportWidth = ref('100%')
+let followLatest = true
+let savedScrollLeft = 0
+let scrollRevision = 0
+let layoutPending = false
+let programmedScrollLeft: number | undefined
+let layoutObserver: ResizeObserver | undefined
+
+const rememberCalendarScroll = () => {
+  const grid = calendarGrid.value
+  // Hidden elements and layout changes must not overwrite the user's position.
+  if (!grid || !grid.clientWidth || layoutPending || grid.scrollWidth <= grid.clientWidth) return
+  if (programmedScrollLeft !== undefined && Math.abs(grid.scrollLeft - programmedScrollLeft) <= 1) {
+    programmedScrollLeft = undefined
+    return
+  }
+  programmedScrollLeft = undefined
+  savedScrollLeft = grid.scrollLeft
+  followLatest = grid.scrollWidth - grid.clientWidth - grid.scrollLeft <= 2
+}
+
+const scheduleCalendarScroll = async () => {
+  const revision = ++scrollRevision
+  layoutPending = true
+  await nextTick()
+  if (revision !== scrollRevision) return
+  const grid = calendarGrid.value
+  if (grid && grid.clientWidth > 0) {
+    // ResizeObserver retries when a hidden widget becomes measurable again.
+    const right = Math.max(0, grid.scrollWidth - grid.clientWidth)
+    programmedScrollLeft = followLatest ? right : Math.min(savedScrollLeft, right)
+    grid.scrollTo({ left: programmedScrollLeft, behavior: 'instant' })
+  }
+  layoutPending = false
+}
 
 // 主题注入与样式类
 const injectedTheme = inject('contentTheme', ref('light')) as any
@@ -208,17 +242,6 @@ const fetchHeatmapData = async () => {
     tooltip.value.visible = false
   }
   
-  const formatDate = (date: Date) => {
-    const year = date.getFullYear()
-    const month = String(date.getMonth() + 1).padStart(2, '0')
-    const day = String(date.getDate()).padStart(2, '0')
-    return `${year}-${month}-${day}`
-  }
-  const parseDate = (s: string) => {
-    const [y, m, d] = s.split('-').map(n => parseInt(n))
-    const dt = new Date(y, (m || 1) - 1, d || 1)
-    return dt
-  }
   const getHeatmapSizing = () => {
     const isMobile = typeof window !== 'undefined' && window.matchMedia('(max-width: 1024px)').matches
     return {
@@ -244,101 +267,14 @@ const fetchHeatmapData = async () => {
     const width = columns * daySize + Math.max(0, columns - 1) * gap
     gridViewportWidth.value = `${width}px`
   }
-  const requiredColumns = () => {
-    return visibleColumnCount()
-  }
-  const ensureFillColumns = (calendar: CalendarDay[][], dateMap: Map<string, number>) => {
-    const need = requiredColumns()
-    if (!need) return
-    if (calendar.length >= need) return
-    let deficit = need - calendar.length
-    while (deficit > 0) {
-      const firstWeek = calendar[0]
-      const firstDateStr = firstWeek?.[0]?.date
-      const start = firstDateStr ? parseDate(firstDateStr) : new Date()
-      start.setDate(start.getDate() - 7)
-      const weekData: CalendarDay[] = []
-      for (let day = 0; day < 7; day++) {
-        const ds = formatDate(start)
-        const count = dateMap.get(ds) || 0
-        weekData.push({ date: ds, count, level: count ? Math.min(Math.ceil(count / 2), 5) : 0 })
-        start.setDate(start.getDate() + 1)
-      }
-      calendar.unshift(weekData)
-      deficit--
-    }
-  }
-  
   const generateCalendarData = () => {
-    if (!rawData.value.length) return;
-    
-    // 获取最早和最新的日期
-    const times = rawData.value.map(item => new Date(item.date).getTime());
-    const firstDate = new Date(Math.min(...times));
-    const lastDate = new Date(Math.max(...times));
-    
-    // 从最早发布的月份起始开始，右侧对齐到最新日期所在周的结束，确保近期日期完整可见
-    const startDate = new Date(firstDate);
-    startDate.setDate(1);
-    const endDate = new Date(lastDate);
-    endDate.setDate(endDate.getDate() + (6 - endDate.getDay()));
-    
-    // 创建日期映射
-    const dateMap = new Map<string, number>();
-    rawData.value.forEach(item => {
-      if (item && item.date && item.count !== undefined) {
-        dateMap.set(item.date, item.count);
-      }
-    });
-    
-    // 生成日历网格
-    const calendar: CalendarDay[][] = [];
-    
-    // 从周日开始填充
-    let currentDate = new Date(startDate);
-    currentDate.setDate(currentDate.getDate() - currentDate.getDay());
-    
-    while (currentDate <= endDate) {
-      const weekData: CalendarDay[] = [];
-      for (let day = 0; day < 7; day++) {
-        const dateStr = formatDate(currentDate);
-        const count = dateMap.get(dateStr) || 0;
-        weekData.push({
-          date: dateStr,
-          count: count,
-          level: count ? Math.min(Math.ceil(count / 2), 5) : 0
-        });
-        currentDate.setDate(currentDate.getDate() + 1);
-      }
-      calendar.push(weekData);
-    }
-    ensureFillColumns(calendar, dateMap)
-    calendarData.value = calendar;
+    calendarData.value = generateHeatmapCalendar(rawData.value)
+    scheduleCalendarScroll()
   }
-  
+
   const generateEmptyCalendar = () => {
-    const today = new Date()
-    const startDate = new Date(today)
-    startDate.setMonth(today.getMonth() - 11)
-    startDate.setDate(1)
-    const endDate = new Date(startDate)
-    endDate.setMonth(startDate.getMonth() + 11)
-    endDate.setDate(endDate.getDate() + (6 - endDate.getDay()))
-
-    const calendar: CalendarDay[][] = []
-    let currentDate = new Date(startDate)
-    currentDate.setDate(currentDate.getDate() - currentDate.getDay())
-
-    while (currentDate <= endDate) {
-      const weekData: CalendarDay[] = []
-      for (let day = 0; day < 7; day++) {
-        weekData.push({ date: formatDate(currentDate), count: 0, level: 0 })
-        currentDate.setDate(currentDate.getDate() + 1)
-      }
-      calendar.push(weekData)
-    }
-    ensureFillColumns(calendar, new Map<string, number>())
-    calendarData.value = calendar
+    calendarData.value = generateHeatmapCalendar([])
+    scheduleCalendarScroll()
   }
 
   const refreshCalendarLayout = () => {
@@ -355,14 +291,22 @@ const fetchHeatmapData = async () => {
     () => { fetchHeatmapData() }
   )
 
+  watch(() => props.compact, refreshCalendarLayout)
+
   onMounted(() => {
     generateEmptyCalendar()
     syncGridViewportWidth()
     window.addEventListener('resize', refreshCalendarLayout)
+    if (typeof ResizeObserver !== 'undefined' && calendarContainer.value) {
+      layoutObserver = new ResizeObserver(refreshCalendarLayout)
+      layoutObserver.observe(calendarContainer.value)
+    }
     fetchHeatmapData()
   })
 
   onBeforeUnmount(() => {
+    scrollRevision++
+    layoutObserver?.disconnect()
     window.removeEventListener('resize', refreshCalendarLayout)
   })
   </script>
