@@ -641,6 +641,14 @@ def test_mode(mode, old_ref, new_ref, new_digest, attention=False, scenario=""):
             rejected(lambda: ex.check_writers(ex.inspect(cid), allow_old=True), "another_container_can_write_data")
             docker("update", "--restart=no", writer)
             held = open(data / "sentinel", "rb")
+            def check_reader_in_child():
+                held.close()
+                ex.check_writers(ex.inspect(cid), allow_old=True)
+            child = multiprocessing.Process(target=check_reader_in_child)
+            child.start(); child.join(30)
+            assert child.exitcode == 0
+            held.close()
+            held = open(data / "sentinel", "r+b")
             def check_in_child():
                 # Parent holding the file remains an independently visible process.
                 held.close()

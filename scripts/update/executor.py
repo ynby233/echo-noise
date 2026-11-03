@@ -554,27 +554,83 @@ class Executor:
                 require(not mount["RW"] or all(not path.is_relative_to(s) and not s.is_relative_to(path) for s in sources),
                         "another_container_can_write_data")
         require(allow_old or not current["State"]["Running"], "old_writer_still_running")
-        # Also refuse ordinary host processes holding registered files open.
-        # A future privileged administrator can always start another writer;
+        # Snapshot of current host writers, including shared writable mappings.
+        # Directory/O_PATH handles alone do not write data. A later openat via
+        # those handles, like a future privileged writer, is outside this snapshot;
         # deployment instructions require suspending external writer schedules.
         allowed = {os.getpid()}
         if allow_old and current["State"]["Running"]:
             allowed.update(int(p) for p in command(["docker", "top", current["Id"], "-eo", "pid"]).split() if p.isdigit())
+
+        # Linux may report O_LARGEFILE even when Python exposes it as zero.
+        known_flags = 0o100000
+        for name in dir(os):
+            if name.startswith("O_") and isinstance(getattr(os, name), int):
+                known_flags |= getattr(os, name)
+
+        def registered(target):
+            path = Path(target.removesuffix(" (deleted)"))
+            return path.is_absolute() and any(path.is_relative_to(s) for s in sources)
+
         for proc in Path("/proc").iterdir():
             if not proc.name.isdigit() or int(proc.name) in allowed:
                 continue
             try:
                 for fd in (proc / "fd").iterdir():
                     try:
-                        target = Path(os.readlink(fd))
-                        require(not target.is_absolute() or all(not target.is_relative_to(s) for s in sources),
+                        if not registered(os.readlink(fd)):
+                            continue
+                        mode = fd.stat().st_mode  # Follow the actual FD, not its pathname.
+                        try:
+                            info = (proc / "fdinfo" / fd.name).read_text()
+                        except FileNotFoundError:
+                            fd.stat()  # Only tolerate a genuinely vanished FD/process.
+                            raise Stop("host_fd_flags_unavailable") from None
+                        flags = re.findall(r"^flags:[ \t]*([0-7]+)[ \t]*$", info, re.MULTILINE)
+                        require(len(flags) == 1, "host_fd_flags_unavailable")
+                        flags = int(flags[0], 8)
+                        require(not flags & ~known_flags, "host_fd_flags_unavailable")
+                        access = flags & os.O_ACCMODE
+                        require(access in (os.O_RDONLY, os.O_WRONLY, os.O_RDWR),
+                                "host_fd_flags_unavailable")
+                        path_only = bool(flags & getattr(os, "O_PATH", 0))
+                        require(path_only or (access == os.O_RDONLY and
+                                (stat.S_ISDIR(mode) or stat.S_ISREG(mode))),
                                 "host_process_can_write_data")
                     except FileNotFoundError:
                         pass
+                # A shared writable mmap survives closing its original writable FD.
+                # Check every process, even one with no remaining registered FDs.
+                try:
+                    with (proc / "maps").open() as maps:
+                        for line in maps:
+                            fields = line.split(None, 5)
+                            require(len(fields) >= 5 and
+                                    re.fullmatch(r"[r-][w-][x-][ps]", fields[1]),
+                                    "host_process_maps_unavailable")
+                            if fields[1][1] != "w" or fields[1][3] != "s" or len(fields) < 6:
+                                continue
+                            target = fields[5].removesuffix("\n")
+                            decoded = re.sub(r"\\([0-7]{3})", lambda m: chr(int(m[1], 8)), target)
+                            require(not registered(target) and not registered(decoded),
+                                    "host_process_can_write_data")
+                except FileNotFoundError:
+                    proc.stat()
+                    raise Stop("host_process_maps_unavailable") from None
             except FileNotFoundError:
-                pass
+                try:
+                    proc.stat()
+                except FileNotFoundError:
+                    continue
+                except PermissionError:
+                    raise Stop("root_required_to_check_writers") from None
+                except OSError:
+                    raise Stop("host_writer_inspection_failed") from None
+                raise Stop("host_writer_inspection_failed") from None
             except PermissionError:
                 raise Stop("root_required_to_check_writers") from None
+            except OSError:
+                raise Stop("host_writer_inspection_failed") from None
 
     def prepare_shutdown(self):
         self.api("POST", "/api/updates/executor/tasks/" + self.record["task"]["id"] + "/prepare", {}, token=self.record["token_file"])
