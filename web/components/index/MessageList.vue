@@ -79,17 +79,13 @@ toolbox listeners are delegated to modules with their own cleanup. -->
             <div :class="['content-container', innerContainerClass, listThemeClass, { 'is-dark': isContentDark, 'file-attachment-shadow-open': isFileAttachmentShadowOpen(msg.id), 'file-attachment-shadow-clip': isFileAttachmentShadowClipped(msg.id) }]" :data-msg-id="msg.id">
               <div class="flex items-center gap-2 mb-1 author-row">
                 <span v-if="msg.is_tombstone" class="message-tombstone-icon"><UIcon name="i-heroicons-archive-box-x-mark" /></span>
-                <img v-else :src="authorAvatar(msg)" alt="avatar" class="avatar-img w-9 h-9 rounded-full object-cover" @error="authorAvatarOnError($event, msg.username || '匿名')" @mouseenter="showAuthorCard($event, msg)" @mouseleave="hideAuthorCard" @click="toggleAuthorCard($event, msg)" />
-                <div v-if="!msg.is_tombstone && openAuthorId === msg.id" class="site-author-card bg-white text-black dark:bg-[var(--home-surface-dark-elevated)] dark:text-white" :style="openAuthorStyle">
-                  <div class="site-author-card-header">
-                    <img :src="authorProfileAvatar(msg)" class="avatar-img w-10 h-10 rounded-full object-cover" />
-                    <div class="font-semibold leading-tight text-[14px]">{{ msg.username }}</div>
-                  </div>
-                  <div class="site-author-card-body">
-                    <div class="site-author-card-sign"><span :class="['site-author-card-scroll', { 'center': !authorSignShouldScroll(msg) }]">{{ authorProfileDesc(msg) }}</span></div>
-                    <div class="author-card-muted text-[12px] whitespace-nowrap">笔记 {{ authorProfileCount(msg) }}</div>
-                  </div>
-                </div>
+                <AuthorCard
+                  v-else :avatar="authorAvatar(msg)" :profile-avatar="authorProfileAvatar(msg)"
+                  :username="msg.username" :description="authorProfileDesc(msg)" :count="authorProfileCount(msg)"
+                  :dark="isContentDark" :layout-key="`${props.wide}:${props.masonry}`"
+                  @open="fetchAuthorProfile(String(msg.username || ''))"
+                  @avatar-error="authorAvatarOnError($event, msg.username || '匿名')"
+                />
                 <div class="min-w-0">
                   <div class="text-sm font-semibold leading-tight">{{ msg.is_tombstone ? '原笔记已永久删除' : (msg.username || siteConfig.username || '匿名') }}</div>
                   <div class="flex items-center gap-2">
@@ -308,6 +304,7 @@ import { useMessageStore } from "~/store/message";
 import { useUserStore } from "~/store/user";
 import MarkdownRenderer from "~/components/index/MarkdownRenderer.vue";
 import MessageEditDialog from './MessageEditDialog.vue'
+import AuthorCard from './AuthorCard.vue'
 import { messageVisibility, messageVisibilityIcon, messageVisibilityLabel } from '~/utils/message-visibility'
 import { asyncFeature } from '~/utils/async-feature'
 const BuiltinComments = asyncFeature(() => import('../comments/BuiltinComments.vue'), '评论')
@@ -538,10 +535,6 @@ const listThemeClass = computed(() => isContentDark.value ? 'bg-[var(--home-surf
 const listThemeTextClass = computed(() => isContentDark.value ? 'text-white' : 'text-black')
 const gradientClass = computed(() => isContentDark.value ? 'from-[var(--home-surface-dark)] via-[rgba(32,42,54,0.82)] to-transparent' : 'from-[rgba(255,255,255,1)] via-[rgba(255,255,255,0.8)] to-transparent')
 const authorProfiles = ref<Record<string, any>>({})
-const openAuthorId = ref<number | null>(null)
-const openAuthorStyle = ref<Record<string, string>>({})
-let authorHoverTimer: any = null
-let authorLeaveTimer: any = null
 const fetchAuthorProfile = async (uname: string) => {
   const key = String(uname || '').trim()
   if (!key || authorProfiles.value[key]) return
@@ -552,40 +545,6 @@ const fetchAuthorProfile = async (uname: string) => {
     const d = js?.data || {}
     if (d && d.username) authorProfiles.value[key] = d
   } catch {}
-}
-const showAuthorCard = async (ev: MouseEvent, msg: any) => {
-  clearTimeout(authorLeaveTimer)
-  authorHoverTimer = setTimeout(async () => {
-    openAuthorId.value = msg.id
-    try {
-      const target = ev.target as HTMLElement
-      const rect = target.getBoundingClientRect()
-      const top = Math.max(8, rect.top - 32)
-      const left = rect.left + rect.width + 8
-      openAuthorStyle.value = { position: 'fixed', top: `${top}px`, left: `${left}px`, zIndex: '2147483647' }
-    } catch {}
-    await fetchAuthorProfile(String(msg?.username || ''))
-  }, 120)
-}
-const hideAuthorCard = () => {
-  clearTimeout(authorHoverTimer)
-  authorLeaveTimer = setTimeout(() => { openAuthorId.value = null }, 120)
-}
-const toggleAuthorCard = async (ev: MouseEvent, msg: any) => {
-  if (openAuthorId.value === msg.id) { openAuthorId.value = null; return }
-  openAuthorId.value = msg.id
-  try {
-    const target = ev.target as HTMLElement
-    const rect = target.getBoundingClientRect()
-    const top = Math.max(8, rect.top - 32)
-    const left = rect.left + rect.width + 8
-    openAuthorStyle.value = { position: 'fixed', top: `${top}px`, left: `${left}px`, zIndex: '2147483647' }
-  } catch {}
-  await fetchAuthorProfile(String(msg?.username || ''))
-}
-const authorSignShouldScroll = (msg: any) => {
-  const t = String(authorProfileDesc(msg) || '').trim()
-  return t.length > 12
 }
 const authorProfileAvatar = (msg: any) => {
   const uname = String(msg?.username || '').trim()
@@ -2381,21 +2340,6 @@ onMounted(() => {
   border-radius: 8px !important;
 }
 
-/* 作者悬停卡片 */
-.site-author-card { position: absolute; top: -28px; left: 36px; z-index: 2147483647; border-radius: 12px; padding: 10px 12px; min-width: 300px; box-shadow: 0 8px 24px rgba(0,0,0,0.25); border: 1px solid rgba(0,0,0,0.08); transform: translate3d(0,0,0); isolation: isolate; backdrop-filter: none; -webkit-backdrop-filter: none; overflow: visible; }
-.site-author-card::after { content: ''; position: absolute; left: -10px; top: 27px; width: 0; height: 0; border-top: 10px solid transparent; border-bottom: 10px solid transparent; z-index: 1; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.25)); }
-:global(html.dark) .site-author-card { --home-surface-dark-elevated: rgb(15, 24, 39); background: var(--home-surface-dark-elevated) !important; border-color: rgba(255,255,255,0.14); box-shadow: 0 10px 24px rgba(0,0,0,0.38); }
-:global(html.dark) .site-author-card::after { border-right: 8px solid var(--home-surface-dark-elevated); }
-:global(html:not(.dark)) .site-author-card::after { border-right: 8px solid #ffffff; }
-.site-author-card-header { display: flex; gap: 10px; align-items: center; margin-bottom: 8px; pointer-events: auto; }
-.site-author-card-body { display: flex; gap: 10px; align-items: center; justify-content: flex-end; }
-.site-author-card-sign { overflow: hidden; font-size: 12px; line-height: 16px; white-space: nowrap; flex: 1; text-align: center; }
-.site-author-card-scroll { display: inline-block; white-space: nowrap; will-change: transform; animation: author-sign-scroll 12s linear infinite; }
-.site-author-card-scroll.center { animation: none; }
-.author-card-muted { color: #7a7f85 }
-@keyframes author-sign-scroll { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } }
-.author-card-muted { color: #7a7f85 }
-@media (max-width: 640px) { .site-author-card { position: fixed; left: 12px; right: 12px; top: auto; bottom: auto; min-width: auto; z-index: 2147483647; } .site-author-card::after { display: none; } }
 .pager-done-wrap {
   margin-top: 16px;
   text-align: center;
