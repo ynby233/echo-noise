@@ -192,57 +192,78 @@ func TestAuthorSubscriptionCurrentEligibilityAndHydration(t *testing.T) {
 	if err := db.Create(&notification).Error; err != nil {
 		t.Fatal(err)
 	}
-	assertAllowed := func(want bool) {
+	assertAllowed := func(wantDelivery, wantHistory bool) {
 		t.Helper()
 		allowed, err := AuthorSubscriptionNotificationAllowed(db, notification)
-		if err != nil || allowed != want {
-			t.Fatalf("allowed=%v want=%v err=%v", allowed, want, err)
+		if err != nil || allowed != wantDelivery {
+			t.Fatalf("allowed=%v want=%v err=%v", allowed, wantDelivery, err)
 		}
-		hydrated := HydrateUserNotifications(db, subscriber.ID, []models.UserNotification{notification})
-		if len(hydrated.Items) != 1 {
-			t.Fatalf("items=%d", len(hydrated.Items))
+		page, err := QueryUserNotificationPage(db, subscriber.ID, 1, 20)
+		if err != nil || page.Total != 1 || page.UnreadCount != 1 {
+			t.Fatalf("history page counts changed: total=%d unread=%d err=%v", page.Total, page.UnreadCount, err)
 		}
-		item := hydrated.Items[0]
-		if want && (item.TargetStatus != UserNotificationTargetStatusAvailable || item.Message == nil || item.TargetURL == "") {
-			t.Fatalf("missing available target: %+v", item)
-		}
-		if !want && (item.Message != nil || item.TargetStatus == UserNotificationTargetStatusAvailable || item.TargetURL != "") {
-			t.Fatalf("stale preview or jump leaked: %+v", item)
+		for _, hydrated := range []UserNotificationHydration{
+			HydrateUserNotifications(db, subscriber.ID, []models.UserNotification{notification}),
+			page.Hydration,
+		} {
+			if len(hydrated.Items) != 1 {
+				t.Fatalf("items=%d", len(hydrated.Items))
+			}
+			item := hydrated.Items[0]
+			if wantHistory && (item.TargetStatus != UserNotificationTargetStatusAvailable || item.Message == nil || item.TargetURL == "") {
+				t.Fatalf("missing available target: %+v", item)
+			}
+			if !wantHistory && (item.Message != nil || item.TargetStatus != UserNotificationTargetStatusUnavailable || item.TargetURL != "") {
+				t.Fatalf("stale preview or jump leaked: %+v", item)
+			}
 		}
 	}
-	assertAllowed(true)
+	assertAllowed(true, true)
 	notification.AuthorSubscriptionID = nil
-	assertAllowed(false)
+	assertAllowed(false, true)
 	notification.AuthorSubscriptionID = &subscriptionID
 	if err := db.Model(&message).Updates(map[string]interface{}{"visibility": MessageVisibilityPrivate, "private": true}).Error; err != nil {
 		t.Fatal(err)
 	}
-	assertAllowed(false)
+	assertAllowed(false, false)
 	if err := db.Model(&message).Updates(map[string]interface{}{"visibility": MessageVisibilityPublic, "private": false}).Error; err != nil {
 		t.Fatal(err)
 	}
+	assertAllowed(true, true)
+	if err := db.Model(&message).Updates(map[string]interface{}{"visibility": MessageVisibilityUsers, "private": true}).Error; err != nil {
+		t.Fatal(err)
+	}
+	assertAllowed(true, true)
 	if err := db.Delete(&subscription).Error; err != nil {
 		t.Fatal(err)
 	}
-	assertAllowed(false)
+	assertAllowed(false, true)
 	// Resubscribing later must not revive a queued publication from the old subscription.
 	subscription.ID = 0
 	subscription.CreatedAt = publishedAt
 	if err := db.Create(&subscription).Error; err != nil {
 		t.Fatal(err)
 	}
-	assertAllowed(false)
+	assertAllowed(false, true)
 	if err := db.Model(&subscription).Update("created_at", publishedAt.Add(-time.Hour)).Error; err != nil {
 		t.Fatal(err)
 	}
-	assertAllowed(false)
+	assertAllowed(false, true)
 	if err := db.Model(&notification).Update("author_subscription_id", subscription.ID).Error; err != nil {
 		t.Fatal(err)
 	}
 	subscriptionID = subscription.ID
-	assertAllowed(true)
+	assertAllowed(true, true)
+	if err := db.Model(&message).Updates(map[string]interface{}{"visibility": MessageVisibilityContacts, "private": true}).Error; err != nil {
+		t.Fatal(err)
+	}
+	assertAllowed(false, false)
+	if err := db.Model(&message).Updates(map[string]interface{}{"visibility": MessageVisibilityPublic, "private": false}).Error; err != nil {
+		t.Fatal(err)
+	}
+	assertAllowed(true, true)
 	if err := db.Model(&message).Update("deleted_at", publishedAt).Error; err != nil {
 		t.Fatal(err)
 	}
-	assertAllowed(false)
+	assertAllowed(false, false)
 }
