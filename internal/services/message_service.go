@@ -531,11 +531,25 @@ func CreateMessage(message *models.Message) error {
 	if err := ApplyMessageVisibilityForSave(message); err != nil {
 		return err
 	}
-	if err := repository.CreateMessage(message); err != nil {
-		return err
-	}
+	contactsAllowed := false
 	if StoredMessageVisibility(*message) == MessageVisibilityContacts {
 		_ = RefreshVoceChatContactCacheForAuthor(message.UserID)
+		contactsAllowed = voceChatContactsVisibilityEnabled() && voceChatContactAuthorEligible(message.UserID)
+	}
+	publishedAt := time.Now().UTC()
+	var notificationIDs []uint
+	if err := repository.CreateMessage(message, func(tx *gorm.DB) error {
+		var err error
+		notificationIDs, err = createAuthorSubscriptionNotifications(tx, *message, publishedAt, contactsAllowed)
+		return err
+	}); err != nil {
+		return err
+	}
+	for _, notificationID := range notificationIDs {
+		queueUserNotificationPush(notificationID)
+	}
+	if len(notificationIDs) > 0 {
+		WakeWebPushDispatcher()
 	}
 	return nil
 }

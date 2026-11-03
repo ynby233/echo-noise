@@ -154,7 +154,7 @@ export const getRequest = async <T>(url: string, params?: any, options?: { crede
     }
 };
 
-export const putRequest = async <T>(url: string, body: object, options?: { credentials?: RequestCredentials; silent?: boolean; signal?: AbortSignal }) => {
+export const putRequest = async <T>(url: string, body?: object, options?: { credentials?: RequestCredentials; silent?: boolean; signal?: AbortSignal }) => {
     const BASE_API = useRuntimeConfig().public.baseApi || '/api';
     const toast = useToast();
     const userStore = useUserStore();

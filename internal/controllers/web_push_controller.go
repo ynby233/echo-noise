@@ -33,14 +33,15 @@ type webPushUnsubscribeRequest struct {
 }
 
 type webPushPreferenceRequest struct {
-	Enabled                bool `json:"enabled"`
-	CommentEnabled         bool `json:"comment_enabled"`
-	ReplyEnabled           bool `json:"reply_enabled"`
-	GuestbookEnabled       bool `json:"guestbook_enabled"`
-	LikeEnabled            bool `json:"like_enabled"`
-	AnnouncementEnabled    bool `json:"announcement_enabled"`
-	AccountSecurityEnabled bool `json:"account_security_enabled"`
-	ShowPreview            bool `json:"show_preview"`
+	Enabled                bool  `json:"enabled"`
+	CommentEnabled         bool  `json:"comment_enabled"`
+	ReplyEnabled           bool  `json:"reply_enabled"`
+	GuestbookEnabled       bool  `json:"guestbook_enabled"`
+	LikeEnabled            bool  `json:"like_enabled"`
+	AnnouncementEnabled    bool  `json:"announcement_enabled"`
+	SubscriptionEnabled    *bool `json:"subscription_enabled"`
+	AccountSecurityEnabled bool  `json:"account_security_enabled"`
+	ShowPreview            bool  `json:"show_preview"`
 }
 
 func newWebPushSessionID() (string, error) {

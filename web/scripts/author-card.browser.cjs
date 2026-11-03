@@ -10,17 +10,25 @@ const web = path.resolve(__dirname, '..')
 const styles = []
 const entry = `
 import { createApp, h, reactive } from 'vue'
+import { createPinia } from 'pinia'
 import AuthorCard from './components/index/AuthorCard.vue'
 const state = window.fixture = reactive({ columns: 1, dark: false, layoutKey: 'single', description: '欢迎访问', count: 5, active: true })
+window.fixtureUser = reactive({ isLogin: false, user: null, token: '' })
+window.subscriptionCalls = []
+window.fixtureSubscribed = false
 const avatar = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><rect width="40" height="40" fill="#3b82f6"/><text x="12" y="27" fill="white">J</text></svg>')
 createApp({ setup: () => () => state.active ? h('div', { class: 'frame', style: { gridTemplateColumns: 'repeat(' + state.columns + ', minmax(0,1fr))' } }, Array.from({ length: state.columns }, (_, index) => h('article', { class: 'message-list-item', 'data-note': index }, [
-  h('header', [h(AuthorCard, { avatar, profileAvatar: avatar, username: '作者' + index, description: state.description, count: state.count, dark: state.dark, layoutKey: state.layoutKey }), h('span', '作者' + index)]),
+  h('header', [h(AuthorCard, { avatar, profileAvatar: avatar, authorId: 8, username: '作者' + index, description: state.description, count: state.count, dark: state.dark, layoutKey: state.layoutKey }), h('span', '作者' + index)]),
   h('p', '用于验证作者浮卡定位和遮挡的笔记内容。'), h('div', { class: 'note-cover' }, '笔记叠层')
-]))) : null }).mount('#app')
+]))) : null }).use(createPinia()).mount('#app')
 `
 async function bundle() {
   let count = 0
   const result = await build({ stdin: { contents: entry, resolveDir: web, loader: 'js' }, bundle: true, write: false, format: 'iife', platform: 'browser', define: { 'process.env.NODE_ENV': '"test"' }, plugins: [{ name: 'author-card-fixture', setup(b) {
+    b.onResolve({ filter: /^~\/(store\/user|utils\/api)$/ }, args => ({ path: args.path, namespace: 'subscription-fixture' }))
+    b.onLoad({ filter: /.*/, namespace: 'subscription-fixture' }, args => ({ contents: args.path.endsWith('/user')
+      ? 'export const useUserStore = () => window.fixtureUser'
+      : `const request = (method, url) => { window.subscriptionCalls.push({ method, url }); if (method !== 'GET') window.fixtureSubscribed = method === 'PUT'; return Promise.resolve({ code: 1, data: { author_id: 8, subscribed: window.fixtureSubscribed } }); }; export const getRequest = url => request('GET', url); export const putRequest = url => request('PUT', url); export const deleteRequest = url => request('DELETE', url);`, loader: 'js', resolveDir: web }))
     b.onResolve({ filter: /^~\// }, args => ({ path: path.join(web, args.path.slice(2) + '.ts') }))
     b.onLoad({ filter: /\.vue$/ }, args => {
       const { descriptor, errors } = parse(fs.readFileSync(args.path, 'utf8'), { filename: args.path })
@@ -85,11 +93,31 @@ async function main() {
           const value = await assertPlacement(columns - 1)
           results.push({ width, columns, dark, placement: value.placement })
           assert.equal(await card.evaluate(element => getComputedStyle(element).color), dark ? 'rgb(255, 255, 255)' : 'rgb(17, 24, 39)')
+          assert.equal(await card.locator('.author-card-subscribe').count(), 0, 'guest has no subscription control')
+          assert(await card.evaluate(element => { const name = element.querySelector('strong').getBoundingClientRect(); const count = element.querySelector('.author-card-count').getBoundingClientRect(); return Math.abs(name.top - count.top) < 5 }), 'note count remains beside the username')
           await page.keyboard.press('Escape')
           await card.waitFor({ state: 'detached' })
         }
       }
     }
+    assert.equal(await page.evaluate(() => window.subscriptionCalls.length), 0, 'guest must not request restricted subscription APIs')
+    await page.setViewportSize({ width: 375, height: 850 })
+    await page.evaluate(() => { Object.assign(window.fixtureUser, { isLogin: true, user: { userid: 3 }, token: 'member' }); Object.assign(window.fixture, { columns: 2, layoutKey: 'subscriptions' }) })
+    await trigger(0).click()
+    await card.locator('.author-card-subscribe:not(:disabled)').waitFor()
+    await card.locator('.author-card-subscribe').click()
+    await page.waitForFunction(() => document.querySelector('.author-card-subscribe')?.getAttribute('aria-pressed') === 'true')
+    assert(await card.locator('.author-card-subscribe').evaluate(element => element.classList.contains('nw-action-btn--primary')))
+    await trigger(1).click()
+    await card.waitFor({ state: 'visible' })
+    assert.equal(await card.locator('.author-card-subscribe').getAttribute('aria-pressed'), 'true', 'same author cards share status')
+    assert.equal(await page.evaluate(() => window.subscriptionCalls.filter(item => item.method === 'GET').length), 1)
+    await card.locator('.author-card-subscribe').click()
+    await page.waitForFunction(() => document.querySelector('.author-card-subscribe')?.getAttribute('aria-pressed') === 'false')
+    await page.evaluate(() => { window.fixtureUser.user = { userid: 8 } })
+    await page.waitForFunction(() => !document.querySelector('.author-card-subscribe'))
+    await page.evaluate(() => Object.assign(window.fixtureUser, { isLogin: false, user: null, token: '' }))
+    await page.keyboard.press('Escape')
     // Hover may cross the avatar/card gap without dismissing, then closes on exit.
     await page.setViewportSize({ width: 1280, height: 850 })
     await page.evaluate(() => Object.assign(window.fixture, { columns: 1, dark: false, layoutKey: 'hover' }))

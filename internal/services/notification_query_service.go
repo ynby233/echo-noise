@@ -378,7 +378,7 @@ func hydrateUserNotifications(db *gorm.DB, viewerScope ContentReadScope, viewerS
 			result.Items = append(result.Items, state)
 			continue
 		}
-		if notification.Type != models.UserNotificationTypeLike && commentErr != nil {
+		if notification.Type != models.UserNotificationTypeLike && notification.Type != models.UserNotificationTypeAuthorSubscription && commentErr != nil {
 			state.TargetStatus = UserNotificationTargetStatusLoadError
 			result.Items = append(result.Items, state)
 			continue
@@ -386,6 +386,17 @@ func hydrateUserNotifications(db *gorm.DB, viewerScope ContentReadScope, viewerS
 
 		valid := true
 		switch notification.Type {
+		case models.UserNotificationTypeAuthorSubscription:
+			valid = notification.CommentID == nil && notification.ParentCommentID == nil && authorSubscriptionSource(message) && messageInteractive[message.ID]
+			if valid {
+				allowed, err := AuthorSubscriptionNotificationAllowed(db, notification)
+				if err != nil {
+					state.TargetStatus = UserNotificationTargetStatusLoadError
+					result.Items = append(result.Items, state)
+					continue
+				}
+				valid = allowed
+			}
 		case models.UserNotificationTypeLike:
 			if notification.ActorUserID == nil || !activeLikes[notificationLikePairKey(message.ID, *notification.ActorUserID)] {
 				valid = false

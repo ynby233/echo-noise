@@ -17,21 +17,37 @@
       >
         <div class="author-card-header">
           <img :src="profileAvatar || avatar" alt="" class="avatar-img" @error="emit('avatar-error', $event)" />
-          <strong>{{ username || '匿名' }}</strong>
+          <div class="author-card-identity">
+            <strong>{{ username || '匿名' }}</strong>
+            <span class="author-card-count">笔记 {{ count }}</span>
+          </div>
+          <button
+            v-if="canSubscribe" type="button" class="author-card-subscribe nw-action-btn nw-action-btn--label"
+            :class="{ 'nw-action-btn--primary': subscription?.subscribed }"
+            :aria-pressed="subscription?.subscribed || false" :aria-busy="subscription?.busy || false"
+            :aria-label="subscription?.subscribed ? '已订阅，点击取消订阅' : '订阅作者'"
+            :disabled="!subscription?.ready || subscription.busy || !!subscription.error"
+            @click.stop="runSubscriptionAction(false)"
+          >{{ subscription?.busy ? '处理中…' : subscription?.subscribed ? '已订阅' : '订阅' }}</button>
         </div>
         <p class="author-card-description">{{ description || '—' }}</p>
-        <p class="author-card-count">笔记 {{ count }}</p>
+        <div v-if="canSubscribe && subscription?.error" class="author-card-error" role="status">
+          <span>{{ subscription.error }}</span>
+          <button type="button" class="nw-action-btn nw-action-btn--label" :disabled="subscription.busy" @click.stop="runSubscriptionAction(true)">重试</button>
+        </div>
       </section>
     </template>
   </Teleport>
 </template>
 
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { positionAuthorCard } from '~/utils/author-card-position'
+import { useAuthorSubscriptionStore } from '~/store/author-subscriptions'
 
 const props = defineProps<{
   avatar: string
+  authorId?: number
   profileAvatar?: string
   username?: string
   description?: string
@@ -47,6 +63,24 @@ const trigger = ref<HTMLButtonElement | null>(null)
 const card = ref<HTMLElement | null>(null)
 const probe = ref<HTMLElement | null>(null)
 const opened = ref(false)
+const subscriptions = useAuthorSubscriptionStore()
+const canSubscribe = computed(() => {
+  void subscriptions.sessionKey
+  return subscriptions.canSubscribe(props.authorId)
+})
+const subscription = computed(() => {
+  void subscriptions.sessionKey
+  return subscriptions.entry(props.authorId)
+})
+watch(() => [opened.value, props.authorId, subscriptions.sessionKey] as const, () => {
+  if (opened.value && canSubscribe.value) void subscriptions.load(props.authorId)
+}, { deep: false })
+function runSubscriptionAction(retry: boolean) {
+  // Disabling a focused button blurs it; keep focus inside the card while saving.
+  card.value?.focus({ preventScroll: true })
+  if (retry) void subscriptions.load(props.authorId)
+  else void subscriptions.toggle(props.authorId)
+}
 let pinned = false
 let hoverTimer: ReturnType<typeof setTimeout> | undefined
 let leaveTimer: ReturnType<typeof setTimeout> | undefined
@@ -199,8 +233,12 @@ onBeforeUnmount(close)
 .author-card.is-dark { border-color: rgba(255,255,255,.14); background: rgb(15,24,39); color: #fff; }
 .author-card-header { display: flex; gap: 10px; align-items: center; }
 .author-card-header .avatar-img { flex: 0 0 40px; width: 40px; height: 40px; }
-.author-card-header strong { min-width: 0; }
-.author-card-description { margin: 10px 0 6px; white-space: pre-wrap; font-size: 12px; }
-.author-card-count { margin: 0; color: #6b7280; font-size: 12px; }
+.author-card-identity { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 6px; }
+.author-card-header strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.author-card-subscribe { flex: 0 0 auto; }
+.author-card-description { margin: 10px 0 0; white-space: pre-wrap; font-size: 12px; }
+.author-card-count { flex: 0 0 auto; white-space: nowrap; color: #6b7280; font-size: 12px; }
 .author-card.is-dark .author-card-count { color: #9ca3af; }
+.author-card-error { display: flex; gap: 8px; align-items: center; margin-top: 8px; font-size: 12px; color: #dc2626; }
+.author-card.is-dark .author-card-error { color: #fca5a5; }
 </style>

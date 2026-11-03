@@ -134,6 +134,11 @@ func UpdateUserToken(userID uint, token string) error {
 // DeleteUser 删除用户
 func DeleteUser(id uint) error {
 	err := database.DB.Transaction(func(tx *gorm.DB) error {
+		if tx.Migrator().HasTable(&models.AuthorSubscription{}) {
+			if err := tx.Where("subscriber_user_id = ? OR author_user_id = ?", id, id).Delete(&models.AuthorSubscription{}).Error; err != nil {
+				return err
+			}
+		}
 		if tx.Migrator().HasTable(&models.WebPushDelivery{}) {
 			if err := tx.Where("recipient_user_id = ?", id).Delete(&models.WebPushDelivery{}).Error; err != nil {
 				return err

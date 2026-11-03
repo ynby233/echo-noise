@@ -63,7 +63,7 @@ func GetMessageByID(id uint, showPrivate bool) (*models.Message, error) {
 }
 
 // CreateMessage 保存一条留言
-func CreateMessage(message *models.Message) error {
+func CreateMessage(message *models.Message, afterSave ...func(*gorm.DB) error) error {
 	// 防止 XSS 攻击，使用 bluemonday 清理器来清理 HTML 标签
 	// p := bluemonday.UGCPolicy()                   // 创建一个新的 HTML 清理器
 	// message.Content = p.Sanitize(message.Content) // 清理内容中的 HTML 标签
@@ -79,7 +79,17 @@ func CreateMessage(message *models.Message) error {
 		if err := tx.Create(message).Error; err != nil {
 			return err
 		}
-		return models.SyncLocalAttachmentGrants(tx, message)
+		if err := models.SyncLocalAttachmentGrants(tx, message); err != nil {
+			return err
+		}
+		for _, callback := range afterSave {
+			if callback != nil {
+				if err := callback(tx); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
 	})
 }
 

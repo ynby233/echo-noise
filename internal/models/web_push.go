@@ -51,6 +51,7 @@ type WebPushPreference struct {
 	GuestbookEnabled       bool       `gorm:"not null;default:true" json:"guestbook_enabled"`
 	LikeEnabled            bool       `gorm:"not null;default:false" json:"like_enabled"`
 	AnnouncementEnabled    bool       `gorm:"not null;default:true" json:"announcement_enabled"`
+	SubscriptionEnabled    bool       `gorm:"not null;default:true" json:"subscription_enabled"`
 	AccountSecurityEnabled bool       `gorm:"not null;default:true" json:"account_security_enabled"`
 	ShowPreview            bool       `gorm:"not null;default:false" json:"show_preview"`
 	LastTestSentAt         *time.Time `json:"-"`
@@ -58,9 +59,9 @@ type WebPushPreference struct {
 	UpdatedAt              time.Time  `json:"-"`
 }
 
-// WebPushDelivery is a durable outbox row. PayloadJSON is the privacy-filtered
-// snapshot that will be retried after process restarts without re-reading
-// content that may later become hidden or deleted.
+// WebPushDelivery is a durable outbox row. PayloadJSON stores the privacy-filtered
+// snapshot. Author subscription payloads are refreshed from the current allowed
+// source and preferences before sending.
 type WebPushDelivery struct {
 	ID              uint       `gorm:"primaryKey" json:"id"`
 	SourceKind      string     `gorm:"type:varchar(30);not null;uniqueIndex:idx_web_push_event_delivery,priority:1;index" json:"source_kind"`

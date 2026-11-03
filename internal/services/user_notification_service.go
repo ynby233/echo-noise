@@ -350,9 +350,13 @@ func sendUserNotificationToVoceChat(ctx context.Context, notificationID uint) er
 	if err := db.First(&notification, notificationID).Error; err != nil {
 		return err
 	}
+	allowed, err := AuthorSubscriptionNotificationAllowed(db, notification)
+	if err != nil || !allowed {
+		return err
+	}
 
 	var recipient models.User
-	if err := db.Select("id, username, is_admin, voce_chat_user_id, voce_chat_notification_enabled").First(&recipient, notification.RecipientUserID).Error; err != nil {
+	if err := db.Select("id, username, is_admin, voce_chat_user_id, voce_chat_email, voce_chat_notification_enabled").First(&recipient, notification.RecipientUserID).Error; err != nil {
 		return err
 	}
 	if !recipient.VoceChatNotificationEnabled {
@@ -381,6 +385,35 @@ func sendUserNotificationToVoceChat(ctx context.Context, notificationID uint) er
 	if recipientVoceChatUserID == "" {
 		return nil
 	}
+
+	// Recipient resolution can perform remote I/O. Reload the event and recipient
+	// before reading content, since access or the account binding may have changed.
+	var currentNotification models.UserNotification
+	if err := db.First(&currentNotification, notificationID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil
+		}
+		return err
+	}
+	if currentNotification.RecipientUserID != notification.RecipientUserID {
+		return nil
+	}
+	var currentRecipient models.User
+	if err := db.Select("id, voce_chat_user_id, voce_chat_email, voce_chat_notification_enabled").First(&currentRecipient, recipient.ID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil
+		}
+		return err
+	}
+	if !currentRecipient.VoceChatNotificationEnabled || strings.TrimSpace(currentRecipient.VoceChatUserID) != recipientVoceChatUserID ||
+		!strings.EqualFold(strings.TrimSpace(currentRecipient.VoceChatEmail), strings.TrimSpace(recipient.VoceChatEmail)) {
+		return nil
+	}
+	allowed, err = AuthorSubscriptionNotificationAllowed(db, currentNotification)
+	if err != nil || !allowed {
+		return err
+	}
+	notification = currentNotification
 
 	markdown := buildVoceChatNotificationMarkdown(siteConfig, notification)
 	if strings.TrimSpace(markdown) == "" {
@@ -470,6 +503,8 @@ func userNotificationPushTitle(notificationType string, actorName string) string
 		return fmt.Sprintf("%s 发表了留言", actorName)
 	case models.UserNotificationTypeLike:
 		return fmt.Sprintf("%s 点赞了你的动态", actorName)
+	case models.UserNotificationTypeAuthorSubscription:
+		return fmt.Sprintf("%s 发布了新笔记", actorName)
 	default:
 		return ""
 	}

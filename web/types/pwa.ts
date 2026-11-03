@@ -7,6 +7,7 @@ export type WebPushPreferences = {
   guestbook_enabled: boolean
   like_enabled: boolean
   announcement_enabled: boolean
+  subscription_enabled: boolean
   account_security_enabled: boolean
   show_preview: boolean
 }

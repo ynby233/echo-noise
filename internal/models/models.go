@@ -154,6 +154,7 @@ const (
 	UserNotificationTypeVoceChatPasswordChanged  = "vocechat_password_changed"
 	UserNotificationTypePasswordUpdateIncomplete = "password_update_incomplete"
 	UserNotificationTypeContentDeletion          = "content_deletion"
+	UserNotificationTypeAuthorSubscription       = "author_subscription"
 )
 
 type UserNotification struct {
@@ -161,6 +162,8 @@ type UserNotification struct {
 	RecipientUserID      uint       `gorm:"not null;index;index:idx_user_notifications_recipient_created_id,priority:1" json:"recipient_user_id"`
 	ActorUserID          *uint      `gorm:"index" json:"actor_user_id,omitempty"`
 	Type                 string     `gorm:"type:varchar(30);not null;index" json:"type"`
+	EventKey             *string    `gorm:"type:varchar(191);uniqueIndex:idx_user_notifications_event_key" json:"-"`
+	AuthorSubscriptionID *uint      `gorm:"index" json:"-"`
 	MessageID            *uint      `gorm:"index" json:"message_id,omitempty"`
 	CommentID            *uint      `gorm:"index" json:"comment_id,omitempty"`
 	ParentCommentID      *uint      `gorm:"index" json:"parent_comment_id,omitempty"`

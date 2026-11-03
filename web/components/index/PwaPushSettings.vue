@@ -117,6 +117,7 @@ const draft = reactive<WebPushPreferences>({
   guestbook_enabled: true,
   like_enabled: false,
   announcement_enabled: true,
+  subscription_enabled: true,
   account_security_enabled: true,
   show_preview: false,
 })
@@ -128,6 +129,7 @@ const preferenceOptions: Array<{ key: Exclude<keyof WebPushPreferences, 'show_pr
   { key: 'guestbook_enabled', label: '新留言', description: '留言板出现与你相关的新留言时提醒。' },
   { key: 'like_enabled', label: '点赞', description: '有人点赞你的内容时提醒，默认关闭。' },
   { key: 'announcement_enabled', label: '站点公告', description: '站长发布并选择推送公告时提醒。' },
+  { key: 'subscription_enabled', label: '订阅作者的新笔记', description: '关闭后仅停止浏览器推送，保留作者订阅和站内通知。' },
   { key: 'account_security_enabled', label: '账号安全', description: '密码等账号安全状态发生变化时提醒。' },
 ]
 
@@ -144,7 +146,7 @@ const appleMobile = typeof navigator !== 'undefined' && (
 const permissionDeniedHelp = computed(() => appleMobile
   ? '通知已被系统阻止。请到 iPhone 或 iPad 的“设置”→“通知”中找到本应用并打开“允许通知”，再返回应用；也可点击下方按钮重新检查。'
   : '通知已被系统或浏览器阻止。请在设备的通知设置或当前网站的浏览器权限设置中允许“通知”，再返回应用；也可点击下方按钮重新检查。')
-const changed = computed(() => Object.keys(draft).some(key => draft[key as keyof WebPushPreferences] !== pwa.preferences.value[key as keyof WebPushPreferences]))
+const changed = computed(() => Object.keys(draft).some(key => draft[key as keyof WebPushPreferences] !== (key === 'subscription_enabled' ? (pwa.preferences.value.subscription_enabled ?? true) : pwa.preferences.value[key as keyof WebPushPreferences])))
 const statusLabel = computed(() => {
   if (loadError.value) return '读取失败'
   if (!pushConfigured.value) return '站点未配置'
@@ -176,7 +178,7 @@ const diagnosticText = computed(() => [
   `平台：${navigator.userAgent}`,
 ].join('\n'))
 
-const copyPreferences = () => Object.assign(draft, pwa.preferences.value)
+const copyPreferences = () => Object.assign(draft, pwa.preferences.value, { subscription_enabled: pwa.preferences.value.subscription_enabled ?? true })
 
 const load = async () => {
   loading.value = true

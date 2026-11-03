@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import ts from 'typescript'
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const notificationCenter = await readFile(join(root, 'components/index/UserNotificationCenter.vue'), 'utf8')
@@ -81,5 +82,34 @@ assert.match(
   /const\s+revealComment\s*=\s*async\s*\(commentId:\s*number\)\s*=>\s*\{[\s\S]*?visibleCount\.value\s*=\s*rootIndex\s*\+\s*1[\s\S]*?visibleChildrenCount\.value\[rootId\]\s*=\s*childIndex\s*\+\s*1/,
   'comment focusing should reveal hidden root comments and folded child replies before highlighting'
 )
+
+// Execute the component's actual helpers, including TypeScript annotations.
+const jumpHelpers = notificationCenter.slice(
+  notificationCenter.indexOf('const parseTargetUrlNumber ='),
+  notificationCenter.indexOf('const scrollInlineReplyIntoView =')
+)
+const compiledHelpers = ts.transpileModule(jumpHelpers, {
+  compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None },
+}).outputText
+const { targetCommentId, canReply, jumpPayload } = new Function('isTargetUnavailable', `${compiledHelpers}; return { targetCommentId, canReply, jumpPayload }`)(item => Boolean(item.target_status && item.target_status !== 'available'))
+
+for (const source of [
+  { message_id: 42, comment_id: 7 },
+  { message: { id: 42 }, comment: { id: 8 } },
+  { target_url: '/?message_id=42&comment_id=9' },
+]) {
+  const item = { ...source, type: 'author_subscription', message: { can_interact: true, ...source.message } }
+  assert.equal(targetCommentId(item), 0, 'subscription notifications must ignore every comment id source')
+  assert.equal(canReply(item), false, 'subscription notifications must never offer inline replies')
+  assert.equal(jumpPayload(item).target_message_id, 42)
+  assert.equal(jumpPayload(item).target_comment_id, null, 'subscription jumps must only focus the note')
+}
+const reply = { type: 'reply', message_id: 42, comment_id: 8, parent_comment_id: 7, message: { can_interact: true } }
+assert.equal(jumpPayload(reply).target_comment_id, 8, 'reply jumps must still focus the concrete reply')
+assert.equal(canReply(reply), true)
+assert.equal(canReply({ ...reply, target_status: 'deleted' }), false)
+assert.equal(canReply({ ...reply, message: { can_interact: false } }), false)
+assert.equal(targetCommentId({ ...reply, type: 'like' }), 0)
+assert.equal(targetCommentId({ type: 'comment', target_url: '/?message_id=42&comment_id=9' }), 9)
 
 console.log('notification jump target tests passed')

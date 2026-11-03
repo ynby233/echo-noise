@@ -47,6 +47,7 @@ type WebPushPreferenceInput struct {
 	GuestbookEnabled       bool
 	LikeEnabled            bool
 	AnnouncementEnabled    bool
+	SubscriptionEnabled    *bool
 	AccountSecurityEnabled bool
 	ShowPreview            bool
 }
@@ -219,7 +220,7 @@ func defaultWebPushPreference(userID uint) models.WebPushPreference {
 	return models.WebPushPreference{
 		UserID: userID, Enabled: true, CommentEnabled: true, ReplyEnabled: true,
 		GuestbookEnabled: true, LikeEnabled: false, AnnouncementEnabled: true,
-		AccountSecurityEnabled: true, ShowPreview: false,
+		SubscriptionEnabled: true, AccountSecurityEnabled: true, ShowPreview: false,
 	}
 }
 
@@ -257,6 +258,9 @@ func UpdateWebPushPreference(db *gorm.DB, userID uint, input WebPushPreferenceIn
 	preference.GuestbookEnabled = input.GuestbookEnabled
 	preference.LikeEnabled = input.LikeEnabled
 	preference.AnnouncementEnabled = input.AnnouncementEnabled
+	if input.SubscriptionEnabled != nil {
+		preference.SubscriptionEnabled = *input.SubscriptionEnabled
+	}
 	preference.AccountSecurityEnabled = input.AccountSecurityEnabled
 	preference.ShowPreview = input.ShowPreview
 	err = db.Save(&preference).Error
@@ -276,6 +280,8 @@ func webPushPreferenceAllows(preference models.WebPushPreference, notificationTy
 		return preference.GuestbookEnabled
 	case models.UserNotificationTypeLike:
 		return preference.LikeEnabled
+	case models.UserNotificationTypeAuthorSubscription:
+		return preference.SubscriptionEnabled
 	case models.UserNotificationTypeVoceChatCredentials,
 		models.UserNotificationTypeVoceChatPasswordChanged,
 		models.UserNotificationTypePasswordUpdateIncomplete:
@@ -295,18 +301,7 @@ func notificationSourceVersion(notification models.UserNotification) int64 {
 	return time.Now().UnixNano()
 }
 
-func QueueWebPushForNotification(db *gorm.DB, notification models.UserNotification) error {
-	if db == nil || notification.ID == 0 || notification.RecipientUserID == 0 {
-		return nil
-	}
-	if !db.Migrator().HasTable(&models.WebPushSubscription{}) || !db.Migrator().HasTable(&models.WebPushDelivery{}) {
-		return nil
-	}
-	preference, err := loadWebPushPreference(db, notification.RecipientUserID)
-	if err != nil || !webPushPreferenceAllows(preference, notification.Type) {
-		return err
-	}
-
+func buildWebPushNotificationPayload(db *gorm.DB, notification models.UserNotification, preference models.WebPushPreference) ([]byte, error) {
 	var siteConfig models.SiteConfig
 	_ = db.Order("id ASC").First(&siteConfig).Error
 	siteTitle := strings.TrimSpace(siteConfig.SiteTitle)
@@ -330,12 +325,27 @@ func QueueWebPushForNotification(db *gorm.DB, notification models.UserNotificati
 			body = previewBody
 		}
 	}
-	payload, err := json.Marshal(webPushPayload{
+	return json.Marshal(webPushPayload{
 		Title: title, Body: body, Icon: "/android-chrome-192x192.png",
 		Badge: "/android-chrome-192x192.png", Tag: fmt.Sprintf("notification-%d", notification.ID),
 		URL:            fmt.Sprintf("/?tab=notifications&notification_id=%d", notification.ID),
 		NotificationID: notification.ID, UnreadCount: unreadCount,
 	})
+}
+
+func QueueWebPushForNotification(db *gorm.DB, notification models.UserNotification) error {
+	if db == nil || notification.ID == 0 || notification.RecipientUserID == 0 {
+		return nil
+	}
+	if !db.Migrator().HasTable(&models.WebPushSubscription{}) || !db.Migrator().HasTable(&models.WebPushDelivery{}) {
+		return nil
+	}
+	preference, err := loadWebPushPreference(db, notification.RecipientUserID)
+	if err != nil || !webPushPreferenceAllows(preference, notification.Type) {
+		return err
+	}
+
+	payload, err := buildWebPushNotificationPayload(db, notification, preference)
 	if err != nil {
 		return err
 	}
@@ -630,20 +640,38 @@ func finishWebPushDelivery(db *gorm.DB, deliveryID uint, updates map[string]inte
 	return db.Model(&models.WebPushDelivery{}).Where("id = ?", deliveryID).Updates(updates).Error
 }
 
-func webPushDeliveryAllowedNow(db *gorm.DB, delivery models.WebPushDelivery) (bool, error) {
+func webPushDeliveryAllowedNow(db *gorm.DB, delivery *models.WebPushDelivery) (bool, error) {
 	switch delivery.SourceKind {
 	case models.WebPushSourceTest:
 		return true, nil
 	case models.WebPushSourceNotification:
 		var notification models.UserNotification
-		if err := db.Select("id", "type").First(&notification, delivery.SourceID).Error; err != nil {
+		if err := db.First(&notification, delivery.SourceID).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return false, nil
 			}
 			return false, err
 		}
+		if notification.RecipientUserID != delivery.RecipientUserID {
+			return false, nil
+		}
 		preference, err := loadWebPushPreference(db, delivery.RecipientUserID)
-		return err == nil && webPushPreferenceAllows(preference, notification.Type), err
+		if err != nil || !webPushPreferenceAllows(preference, notification.Type) {
+			return false, err
+		}
+		if notification.Type != models.UserNotificationTypeAuthorSubscription {
+			return true, nil
+		}
+		allowed, err := AuthorSubscriptionNotificationAllowed(db, notification)
+		if err != nil || !allowed {
+			return false, err
+		}
+		payload, err := buildWebPushNotificationPayload(db, notification, preference)
+		if err != nil {
+			return false, err
+		}
+		delivery.PayloadJSON = string(payload)
+		return true, nil
 	case models.WebPushSourceAnnouncement:
 		var announcement models.Announcement
 		if err := db.Select("id", "status", "push_enabled").First(&announcement, delivery.SourceID).Error; err != nil {
@@ -706,6 +734,15 @@ func DispatchPendingWebPush(ctx context.Context, db *gorm.DB, sender WebPushSend
 			result.Skipped++
 			continue
 		}
+		if subscription.UserID != delivery.RecipientUserID {
+			if err := finishWebPushDelivery(db, delivery.ID, map[string]interface{}{
+				"status": models.WebPushDeliverySkipped, "last_error": "subscription_recipient_mismatch",
+			}); err != nil {
+				return result, err
+			}
+			result.Skipped++
+			continue
+		}
 		var recipient models.User
 		recipientErr := db.Select("id", "is_admin").First(&recipient, delivery.RecipientUserID).Error
 		if errors.Is(recipientErr, gorm.ErrRecordNotFound) {
@@ -738,7 +775,7 @@ func DispatchPendingWebPush(ctx context.Context, db *gorm.DB, sender WebPushSend
 			result.Skipped++
 			continue
 		}
-		allowed, err := webPushDeliveryAllowedNow(db, delivery)
+		allowed, err := webPushDeliveryAllowedNow(db, &delivery)
 		if err != nil {
 			return result, err
 		}

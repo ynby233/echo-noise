@@ -26,7 +26,7 @@ func setupMessagePublishTimeTest(t *testing.T) (*gorm.DB, *gin.Engine, *uint) {
 	if err != nil {
 		t.Fatalf("open test db: %v", err)
 	}
-	if err := db.AutoMigrate(&models.User{}, &models.Message{}, &models.Comment{}, &models.SiteConfig{}, &models.AdminCapabilityGrant{}, &models.AdminAuditLog{}, &models.AdminAuditConfig{}); err != nil {
+	if err := db.AutoMigrate(&models.User{}, &models.Message{}, &models.AuthorSubscription{}, &models.Comment{}, &models.SiteConfig{}, &models.AdminCapabilityGrant{}, &models.AdminAuditLog{}, &models.AdminAuditConfig{}); err != nil {
 		t.Fatalf("migrate test db: %v", err)
 	}
 	database.DB = db

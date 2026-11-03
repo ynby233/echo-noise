@@ -82,7 +82,7 @@ toolbox listeners are delegated to modules with their own cleanup. -->
                 <AuthorCard
                   v-else :avatar="authorAvatar(msg)" :profile-avatar="authorProfileAvatar(msg)"
                   :username="msg.username" :description="authorProfileDesc(msg)" :count="authorProfileCount(msg)"
-                  :dark="isContentDark" :layout-key="`${props.wide}:${props.masonry}`"
+                  :author-id="authorId(msg)" :dark="isContentDark" :layout-key="`${props.wide}:${props.masonry}`"
                   @open="fetchAuthorProfile(String(msg.username || ''))"
                   @avatar-error="authorAvatarOnError($event, msg.username || '匿名')"
                 />
@@ -306,6 +306,7 @@ import MarkdownRenderer from "~/components/index/MarkdownRenderer.vue";
 import MessageEditDialog from './MessageEditDialog.vue'
 import AuthorCard from './AuthorCard.vue'
 import { messageVisibility, messageVisibilityIcon, messageVisibilityLabel } from '~/utils/message-visibility'
+import { validAuthorId } from '~/utils/author-subscriptions'
 import { asyncFeature } from '~/utils/async-feature'
 const BuiltinComments = asyncFeature(() => import('../comments/BuiltinComments.vue'), '评论')
 import { writeClipboardText } from '~/utils/clipboard'
@@ -535,16 +536,30 @@ const listThemeClass = computed(() => isContentDark.value ? 'bg-[var(--home-surf
 const listThemeTextClass = computed(() => isContentDark.value ? 'text-white' : 'text-black')
 const gradientClass = computed(() => isContentDark.value ? 'from-[var(--home-surface-dark)] via-[rgba(32,42,54,0.82)] to-transparent' : 'from-[rgba(255,255,255,1)] via-[rgba(255,255,255,0.8)] to-transparent')
 const authorProfiles = ref<Record<string, any>>({})
-const fetchAuthorProfile = async (uname: string) => {
+let authorProfileGeneration = 0
+const authorProfileFlights = new Map<string, Promise<void>>()
+const fetchAuthorProfile = (uname: string): Promise<void> => {
   const key = String(uname || '').trim()
-  if (!key || authorProfiles.value[key]) return
-  try {
-    const resp = await fetch(`${BASE_API}/users/profile?username=${encodeURIComponent(key)}`, { credentials: 'include', headers: { 'Accept': 'application/json' } })
-    if (!resp.ok) return
-    const js = await resp.json()
-    const d = js?.data || {}
-    if (d && d.username) authorProfiles.value[key] = d
-  } catch {}
+  if (!key || authorProfiles.value[key]) return Promise.resolve()
+  const pending = authorProfileFlights.get(key)
+  if (pending) return pending
+  const generation = authorProfileGeneration
+  const request = (async () => {
+    try {
+      const resp = await fetch(`${BASE_API}/users/profile?username=${encodeURIComponent(key)}`, { credentials: 'include', headers: { 'Accept': 'application/json' } })
+      if (!resp.ok) return
+      const js = await resp.json()
+      const d = js?.data || {}
+      if (generation === authorProfileGeneration && d?.username) authorProfiles.value[key] = d
+    } catch {} finally {
+      if (generation === authorProfileGeneration) authorProfileFlights.delete(key)
+    }
+  })()
+  authorProfileFlights.set(key, request)
+  return request
+}
+const authorId = (msg: { user_id?: unknown; userId?: unknown; username?: string }) => {
+  return validAuthorId(msg.user_id) || validAuthorId(msg.userId) || validAuthorId(authorProfiles.value[String(msg.username || '').trim()]?.id)
 }
 const authorProfileAvatar = (msg: any) => {
   const uname = String(msg?.username || '').trim()
@@ -582,6 +597,14 @@ const prefetchAuthorProfilesForList = () => {
   names.forEach((n) => fetchAuthorProfile(n))
 }
 watch(() => message.messages, () => { prefetchAuthorProfilesForList() }, { deep: false, immediate: true })
+const authorProfileViewer = useUserStore()
+watch(() => [authorProfileViewer.isLogin, authorProfileViewer.user?.userid, authorProfileViewer.token] as const, () => {
+  authorProfileGeneration++
+  authorProfiles.value = {}
+  authorProfileFlights.clear()
+  prefetchAuthorProfilesForList()
+}, { flush: 'sync' })
+onBeforeUnmount(() => { authorProfileGeneration++; authorProfileFlights.clear() })
 
 const isCommentEnabled = computed(() => {
   const v: any = (props.siteConfig as any)?.commentEnabled

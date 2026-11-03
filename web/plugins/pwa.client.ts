@@ -18,6 +18,7 @@ const defaultPreferences = (): WebPushPreferences => ({
   guestbook_enabled: true,
   like_enabled: false,
   announcement_enabled: true,
+  subscription_enabled: true,
   account_security_enabled: true,
   show_preview: false,
 })
@@ -371,7 +372,7 @@ export default defineNuxtPlugin(() => {
 
   const savePreferences = async (next: WebPushPreferences) => {
     const saved = await fetchJSON<WebPushPreferences>('/api/web-push/preferences', {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(next),
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...next, subscription_enabled: next.subscription_enabled ?? true }),
     })
     preferences.value = { ...defaultPreferences(), ...saved }
   }

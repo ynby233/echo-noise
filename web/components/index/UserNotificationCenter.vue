@@ -57,6 +57,7 @@
                 <div class="notification-actor-line">
                   <span class="notification-actor-name">{{ actorName(item) }}</span>
                   <span v-if="item.type === 'like'" class="like-action-inline">赞了</span>
+                  <span v-if="item.type === 'author_subscription'" class="like-action-inline">发布了新笔记</span>
                 </div>
                 <div class="notification-time">{{ formatTime(item.created_at) }}</div>
               </div>
@@ -398,7 +399,7 @@ const actorName = (item: UserNotification) => {
   if (item.type === 'content_deletion') return String(item.deletion_actor_label || '内容管理方')
   if (item.type === 'vocechat_credentials' || item.type === 'vocechat_password_changed' || item.type === 'password_update_incomplete') return '系统提醒'
   const name = String(item.actor?.username || '').trim()
-  return name || '有用户'
+  return name || (item.type === 'author_subscription' ? '订阅的作者' : '有用户')
 }
 
 const deletionEventLabel = (item: UserNotification) => item.deletion_event === 'permanently_deleted' ? '你的内容已被永久删除' : '你的内容已被移入回收站'
@@ -422,6 +423,7 @@ const messageOwnerName = (item: UserNotification) => {
 
 const actorContent = (item: UserNotification) => {
   if (isTargetUnavailable(item)) return ''
+  if (item.type === 'author_subscription') return '你订阅的作者发布了新笔记'
   if (item.type === 'like' || item.type === 'guestbook') return ''
   return truncate(item.comment?.content || '', 160)
 }
@@ -431,6 +433,7 @@ const isTargetUnavailable = (item: UserNotification) => {
 }
 
 const unavailableTitle = (item: UserNotification) => {
+  if (item.type === 'author_subscription') return '订阅作者的新笔记暂不可用'
   if (item.type === 'vocechat_password_changed') return 'VoceChat 密码可能已变更'
   if (item.type === 'vocechat_credentials') return 'VoceChat 账号信息可能已变化'
   if (item.type === 'password_update_incomplete') return '密码修改未完成'
@@ -458,6 +461,7 @@ const targetOwner = (item: UserNotification) => {
 }
 
 const targetFallbackText = (item: UserNotification) => {
+  if (item.type === 'author_subscription') return '查看订阅作者的新笔记'
   if (item.type === 'like') return '查看被点赞的笔记'
   if (item.type === 'reply') return '查看对应回复'
   if (item.type === 'guestbook') return '查看留言'
@@ -465,6 +469,7 @@ const targetFallbackText = (item: UserNotification) => {
 }
 
 const targetAriaLabel = (item: UserNotification) => {
+  if (item.type === 'author_subscription') return '查看订阅作者的新笔记位置'
   if (item.type === 'guestbook') return '查看对应留言位置'
   if (item.type === 'reply') return '查看对应回复位置'
   if (item.type === 'like') return '查看被点赞笔记位置'
@@ -492,7 +497,7 @@ const parseTargetUrlNumber = (item: UserNotification, key: 'message_id' | 'comme
 
 const targetMessageId = (item: UserNotification) => Number(item.message_id || item.comment?.message_id || item.parent_comment?.message_id || item.message?.id || parseTargetUrlNumber(item, 'message_id') || 0)
 const targetCommentId = (item: UserNotification) => {
-  if (item.type === 'like') return 0
+  if (item.type === 'like' || item.type === 'author_subscription') return 0
   return Number(item.comment_id || item.comment?.id || parseTargetUrlNumber(item, 'comment_id') || 0)
 }
 const replyCommentId = (item: UserNotification) => {
@@ -507,6 +512,7 @@ const replyCommentAuthor = (item: UserNotification) => {
 }
 
 const canReply = (item: UserNotification) => {
+  if (item.type === 'author_subscription') return false
   return !isTargetUnavailable(item) && item.message?.can_interact === true && item.type !== 'like' && replyCommentId(item) > 0 && targetMessageId(item) > 0
 }
 const jumpPayload = (item: UserNotification): NotificationJumpPayload => ({
