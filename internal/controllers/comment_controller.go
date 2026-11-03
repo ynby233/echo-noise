@@ -221,22 +221,12 @@ func GetCommentCounts(c *gin.Context) {
 	var req struct {
 		IDs []uint `json:"ids"`
 	}
-	if err := c.ShouldBindJSON(&req); err != nil || len(req.IDs) == 0 {
+	if err := c.ShouldBindJSON(&req); err != nil || len(req.IDs) == 0 || len(req.IDs) > services.MaxCommentSummaryIDs {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "请求参数错误"})
 		return
 	}
-	db, _ := database.GetDB()
-	var messages []models.Message
-	if err := db.Where("id IN ?", req.IDs).Find(&messages).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "获取评论数量失败"})
-		return
-	}
-	messageMap := make(map[uint]models.Message, len(messages))
-	for _, message := range messages {
-		messageMap[message.ID] = message
-	}
-	var comments []models.Comment
-	if err := db.Where("message_id IN ?", req.IDs).Order("created_at ASC").Find(&comments).Error; err != nil {
+	db, err := database.GetDB()
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "获取评论数量失败"})
 		return
 	}
@@ -250,25 +240,10 @@ func GetCommentCounts(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "获取评论数量失败"})
 		return
 	}
-	counts := make(map[uint]int64)
-	commentMap := services.CommentMap(comments)
-	for _, comment := range comments {
-		if comment.ParentID != nil {
-			continue
-		}
-		message, ok := messageMap[comment.MessageID]
-		if !ok {
-			continue
-		}
-		if scope.CanReadComment(message, comment, commentMap) {
-			counts[comment.MessageID]++
-		}
-	}
-	result := make([]gin.H, 0, len(counts))
-	for _, id := range req.IDs {
-		if cnt, ok := counts[id]; ok {
-			result = append(result, gin.H{"id": id, "count": cnt})
-		}
+	result, err := services.LoadCommentSummaries(db, scope, req.IDs)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "获取评论数量失败"})
+		return
 	}
 	c.JSON(http.StatusOK, gin.H{"code": 1, "data": result})
 }

@@ -28,17 +28,19 @@ const loadMetingPlayer = async () => {
   if (!customElements.get('meting-js')) await loadAsset('https://cdn.jsdelivr.net/npm/meting@2.0.1/dist/Meting.min.js')
 }
 
-export const enhanceMetingPlayers = async (root: HTMLElement) => {
-  if (!root.querySelector('meting-js')) return
+export const enhanceMetingPlayers = async (root: HTMLElement, isCurrent: () => boolean = () => true) => {
+  const embeds = Array.from(root.querySelectorAll('meting-js'))
+  const isActive = () => isCurrent() && root.isConnected && embeds.some(embed => root.contains(embed))
+  if (!isActive()) return
   root.querySelector('.music-load-retry')?.remove()
   try { await loadMetingPlayer() }
   catch {
-    if (!root.isConnected || root.querySelector('.music-load-retry')) return
+    if (!isActive() || root.querySelector('.music-load-retry')) return
     const retry = document.createElement('button')
     retry.type = 'button'
     retry.className = 'music-load-retry nw-action-btn'
     retry.textContent = '音乐加载失败，点击重试'
-    retry.onclick = () => { void enhanceMetingPlayers(root) }
+    retry.onclick = () => { if (isActive()) void enhanceMetingPlayers(root, isCurrent) }
     root.appendChild(retry)
   }
 }

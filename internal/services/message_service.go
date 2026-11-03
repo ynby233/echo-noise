@@ -353,6 +353,97 @@ func messagePinOrder(pinScope string) string {
 	return "pinned DESC, CASE WHEN pinned_at IS NULL THEN 1 ELSE 0 END ASC, pinned_at DESC, created_at DESC, id DESC"
 }
 
+// Keep the projection and cursor comparison aligned with messagePinOrder.
+// Content is selected only by the exact-tag scan, never by ordinary locate.
+type messagePageCursor struct {
+	ID        uint
+	PagePin   *bool
+	PagePinAt *time.Time
+	CreatedAt *time.Time
+	Content   string
+}
+
+const messageTagScanBatchSize = 256
+
+func messagePinColumns(pinScope string) (string, string) {
+	if pinScope == MessagePinScopePersonal {
+		return "personal_pinned", "personal_pinned_at"
+	}
+	return "pinned", "pinned_at"
+}
+
+func messageCursorProjection(pinScope string) string {
+	pin, pinAt := messagePinColumns(pinScope)
+	return "id, " + pin + " AS page_pin, " + pinAt + " AS page_pin_at, created_at"
+}
+
+// nullableMessageOrderBoundary adds one descending key to a lexicographic
+// comparison. The schema permits NULL in legacy pin flags and creation times.
+func nullableMessageOrderBoundary(column string, value interface{}, isNull, nullsFirst, before bool, tail string, args []interface{}) (string, []interface{}) {
+	if isNull {
+		condition := column + " IS NULL AND (" + tail + ")"
+		if before != nullsFirst {
+			condition = column + " IS NOT NULL OR (" + condition + ")"
+		}
+		return "(" + condition + ")", args
+	}
+	op := "<"
+	if before {
+		op = ">"
+	}
+	condition := column + " " + op + " ? OR (" + column + " = ? AND (" + tail + "))"
+	if before == nullsFirst {
+		condition = column + " IS NULL OR " + condition
+	}
+	return "(" + condition + ")", append([]interface{}{value, value}, args...)
+}
+
+// Match messagePinOrder exactly: pin timestamps always put NULL last, while
+// pin flags and creation times retain the database's native DESC NULL order.
+func messageCursorBoundary(cursor messagePageCursor, pinScope string, before bool, dialect string) (string, []interface{}) {
+	pin, pinAt := messagePinColumns(pinScope)
+	op := "<"
+	if before {
+		op = ">"
+	}
+	tail := "id " + op + " ?"
+	args := []interface{}{cursor.ID}
+	nullsFirst := dialect == "postgres"
+	tail, args = nullableMessageOrderBoundary("created_at", cursor.CreatedAt, cursor.CreatedAt == nil, nullsFirst, before, tail, args)
+	tail, args = nullableMessageOrderBoundary(pinAt, cursor.PagePinAt, cursor.PagePinAt == nil, false, before, tail, args)
+	return nullableMessageOrderBoundary(pin, cursor.PagePin, cursor.PagePin == nil, nullsFirst, before, tail, args)
+}
+
+// scanMessageTagMatches bounds memory to one narrow batch and the caller's
+// retained IDs. Keyset traversal avoids increasingly large OFFSET scans.
+func scanMessageTagMatches(q *gorm.DB, tag, pinScope string, visit func(uint, int64)) (int64, error) {
+	var total int64
+	var cursor *messagePageCursor
+	for {
+		batchQuery := q.Session(&gorm.Session{}).Select(messageCursorProjection(pinScope) + ", content")
+		if cursor != nil {
+			condition, args := messageCursorBoundary(*cursor, pinScope, false, q.Dialector.Name())
+			batchQuery = batchQuery.Where(condition, args...)
+		}
+		var batch []messagePageCursor
+		if err := batchQuery.Order(messagePinOrder(pinScope)).Limit(messageTagScanBatchSize).Find(&batch).Error; err != nil {
+			return 0, err
+		}
+		for _, candidate := range batch {
+			if messageMatchesTag(candidate.Content, tag) {
+				visit(candidate.ID, total)
+				total++
+			}
+		}
+		if len(batch) < messageTagScanBatchSize {
+			return total, nil
+		}
+		last := batch[len(batch)-1]
+		last.Content = ""
+		cursor = &last
+	}
+}
+
 func messagePageBaseQuery(userID *uint, authorID *uint, username *string, date *string, keyword *string, tag *string, pinScope string, excludeID *uint) (*gorm.DB, error) {
 	normalizedPinScope, err := normalizeMessagePinScope(pinScope)
 	if err != nil {
@@ -403,25 +494,20 @@ func GetMessagesByPage(page, pageSize int, userID *uint, authorID *uint, usernam
 	var messages []models.Message
 	var total int64
 	if tag != nil && strings.TrimSpace(*tag) != "" {
-		var candidates []models.Message
-		if err := q.Order(messagePinOrder(normalizedPinScope)).Find(&candidates).Error; err != nil {
+		pageIDs := make([]uint, 0, pageSize)
+		total, err = scanMessageTagMatches(q, *tag, normalizedPinScope, func(id uint, index int64) {
+			if index/int64(pageSize)+1 == int64(page) {
+				pageIDs = append(pageIDs, id)
+			}
+		})
+		if err != nil {
 			return dto.PageQueryResult{}, err
 		}
-		matched := make([]models.Message, 0, len(candidates))
-		for _, candidate := range candidates {
-			if messageMatchesTag(candidate.Content, *tag) {
-				matched = append(matched, candidate)
+		messages = []models.Message{}
+		if len(pageIDs) > 0 {
+			if err := q.Session(&gorm.Session{}).Where("id IN ?", pageIDs).Order(messagePinOrder(normalizedPinScope)).Find(&messages).Error; err != nil {
+				return dto.PageQueryResult{}, err
 			}
-		}
-		total = int64(len(matched))
-		if offset < len(matched) {
-			end := offset + pageSize
-			if end > len(matched) {
-				end = len(matched)
-			}
-			messages = matched[offset:end]
-		} else {
-			messages = []models.Message{}
 		}
 		ApplyMessageViewerState(messages, userID)
 		return dto.PageQueryResult{Total: total, Items: messages}, nil
@@ -444,77 +530,55 @@ func LocateMessagePage(messageID uint, pageSize int, userID *uint, authorID *uin
 		return dto.MessagePageLocateResult{}, err
 	}
 
-	targetQuery, err := messagePageBaseQuery(userID, authorID, username, date, keyword, tag, normalizedPinScope, excludeID)
+	q, err := messagePageBaseQuery(userID, authorID, username, date, keyword, tag, normalizedPinScope, excludeID)
 	if err != nil {
 		return dto.MessagePageLocateResult{}, err
 	}
-	var target models.Message
-	if err := targetQuery.Where("id = ?", messageID).First(&target).Error; err != nil {
+	var target messagePageCursor
+	projection := messageCursorProjection(normalizedPinScope)
+	hasTag := tag != nil && strings.TrimSpace(*tag) != ""
+	if hasTag {
+		projection += ", content"
+	}
+	if err := q.Session(&gorm.Session{}).Select(projection).Where("id = ?", messageID).Take(&target).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return dto.MessagePageLocateResult{}, fmt.Errorf("消息不存在或无权访问")
 		}
 		return dto.MessagePageLocateResult{}, err
 	}
 
-	if tag != nil && strings.TrimSpace(*tag) != "" {
-		candidateQuery, err := messagePageBaseQuery(userID, authorID, username, date, keyword, tag, normalizedPinScope, excludeID)
+	var total, targetIndex int64
+	if hasTag {
+		if !messageMatchesTag(target.Content, *tag) {
+			return dto.MessagePageLocateResult{}, fmt.Errorf("消息不存在或无权访问")
+		}
+		targetIndex = -1
+		total, err = scanMessageTagMatches(q, *tag, normalizedPinScope, func(id uint, index int64) {
+			if id == messageID {
+				targetIndex = index
+			}
+		})
 		if err != nil {
 			return dto.MessagePageLocateResult{}, err
-		}
-		var candidates []models.Message
-		if err := candidateQuery.Order(messagePinOrder(normalizedPinScope)).Find(&candidates).Error; err != nil {
-			return dto.MessagePageLocateResult{}, err
-		}
-		targetIndex := -1
-		total := 0
-		for _, candidate := range candidates {
-			if !messageMatchesTag(candidate.Content, *tag) {
-				continue
-			}
-			if candidate.ID == target.ID {
-				targetIndex = total
-			}
-			total++
 		}
 		if targetIndex < 0 {
 			return dto.MessagePageLocateResult{}, fmt.Errorf("消息不存在或无权访问")
 		}
-		return dto.MessagePageLocateResult{
-			MessageID: messageID,
-			Page:      targetIndex/pageSize + 1,
-			PageSize:  pageSize,
-			Total:     int64(total),
-		}, nil
-	}
-
-	candidateQuery, err := messagePageBaseQuery(userID, authorID, username, date, keyword, tag, normalizedPinScope, excludeID)
-	if err != nil {
-		return dto.MessagePageLocateResult{}, err
-	}
-	var candidates []models.Message
-	if err := candidateQuery.Order(messagePinOrder(normalizedPinScope)).Find(&candidates).Error; err != nil {
-		return dto.MessagePageLocateResult{}, err
-	}
-	targetIndex := -1
-	total := 0
-	for _, candidate := range candidates {
-		if tag != nil && strings.TrimSpace(*tag) != "" && !messageMatchesTag(candidate.Content, *tag) {
-			continue
+	} else {
+		if err := q.Session(&gorm.Session{}).Count(&total).Error; err != nil {
+			return dto.MessagePageLocateResult{}, err
 		}
-		if candidate.ID == target.ID {
-			targetIndex = total
+		condition, args := messageCursorBoundary(target, normalizedPinScope, true, q.Dialector.Name())
+		if err := q.Session(&gorm.Session{}).Where(condition, args...).Count(&targetIndex).Error; err != nil {
+			return dto.MessagePageLocateResult{}, err
 		}
-		total++
-	}
-	if targetIndex < 0 {
-		return dto.MessagePageLocateResult{}, errors.New(models.MessageNotFoundMessage)
 	}
 
 	return dto.MessagePageLocateResult{
 		MessageID: messageID,
-		Page:      targetIndex/pageSize + 1,
+		Page:      int(targetIndex/int64(pageSize)) + 1,
 		PageSize:  pageSize,
-		Total:     int64(total),
+		Total:     total,
 	}, nil
 }
 

@@ -1,6 +1,7 @@
 import { defineStore } from "pinia";
-import { ref } from "vue";
+import { ref, watch } from "vue";
 import type { Message, MessagePageLocateResult, PageQuery, PageQueryResult } from "~/types/models";
+import { useUserStore } from "~/store/user";
 
 export const useMessageStore = defineStore("messageStore", () => {
   // 状态
@@ -15,9 +16,9 @@ export const useMessageStore = defineStore("messageStore", () => {
   const tags = ref<any[]>([]);  // 添加标签状态
   const images = ref<any[]>([]); // 添加图片状态
   const notifyConfig = ref<any>(null); // 添加推送配置状态
-  let pageController: AbortController | null = null
-  let pageRequestSeq = 0
-  const prefetchCache = ref<Record<string, PageQueryResult>>({})
+  const userStore = useUserStore();
+  let requestController: AbortController | null = null;
+  let requestSeq = 0;
   const currentListQueryKey = ref("")
 
   const listQueryKey = (query: PageQuery) => JSON.stringify({
@@ -31,22 +32,56 @@ export const useMessageStore = defineStore("messageStore", () => {
     excludeId: query.excludeId ?? null,
   })
 
-  const pageCacheKey = (query: PageQuery) => JSON.stringify({
-    page: query.page,
-    ...JSON.parse(listQueryKey(query)),
-  })
+  // 只跟踪影响读取权限的身份字段，资料刷新不应中断正在加载的列表。
+  const identityKey = () => JSON.stringify([
+    userStore.token,
+    userStore.isLogin,
+    userStore.user?.userid ?? userStore.user?.id ?? userStore.user?.user_id ?? userStore.user?.ID ?? null,
+    userStore.user?.username ?? userStore.user?.Username ?? "",
+    userStore.user?.is_admin ?? userStore.user?.IsAdmin ?? false,
+  ]);
+
+  // 分页和定位属于同一条导航链；任何新请求均使旧链中的未完成请求失效。
+  const cancelRequests = () => {
+    requestSeq += 1;
+    const controller = requestController;
+    requestController = null;
+    loading.value = false;
+    controller?.abort();
+  };
+
+  const beginRequest = (isPage: boolean) => {
+    cancelRequests();
+    const controller = new AbortController();
+    requestController = controller;
+    const seq = requestSeq;
+    const identity = identityKey();
+    loading.value = isPage;
+    const isCurrent = () => seq === requestSeq && !controller.signal.aborted && identity === identityKey();
+    return {
+      signal: controller.signal,
+      isCurrent,
+      finish: () => {
+        if (!isCurrent()) return;
+        requestController = null;
+        loading.value = false;
+      },
+    };
+  };
 
   // 重置状态
   const reset = () => {
+    cancelRequests();
     messages.value = [];
     total.value = 0;
     hasMore.value = true;
     page.value = 1;
     loading.value = false;
     currentListQueryKey.value = "";
-    try { pageController?.abort() } catch {}
-    pageRequestSeq += 1;
   };
+
+  // 在登录、退出或会话恢复的同一调用栈清除旧身份的数据与请求。
+  watch(identityKey, reset, { flush: 'sync' });
  // 获取网站配置
  const getSiteConfig = async () => {
   try {
@@ -105,25 +140,56 @@ const updateSiteConfig = async (key: string, value: any) => {
   }
 };
 
-  // 分页获取笔记列表
-const getMessages = async (query: PageQuery) => {
-  const requestSeq = pageRequestSeq + 1;
-  pageRequestSeq = requestSeq;
+// 两个分页入口共享请求与应用逻辑，旧入口保留按已加载条数判断 hasMore 的行为。
+const requestMessagePage = async (query: PageQuery, options: { append: boolean; legacy?: boolean }) => {
   const requestListKey = listQueryKey(query);
-  loading.value = true;
+  const requestQuery = { ...query };
+  const request = beginRequest(true);
 
   try {
-    try { pageController?.abort() } catch {}
-    const controller = new AbortController()
-    pageController = controller
-    const response = await postRequest<PageQueryResult>("messages/page", query, {
+    const response = await postRequest<PageQueryResult>("messages/page", requestQuery, {
       credentials: 'include',
       silent: true,
-      signal: controller.signal
+      signal: request.signal
     });
-    if (requestSeq !== pageRequestSeq) return null;
-    
-    if (!response) {
+    if (!request.isCurrent()) return null;
+    if (!response || response.code !== 1 || !Array.isArray(response.data?.items)) {
+      if (options.legacy) {
+        toast.add({
+          title: "获取笔记列表失败",
+          description: response?.msg || "请稍后重试",
+          icon: "i-fluent-error-circle-16-filled",
+          color: "red",
+          timeout: 2000,
+        });
+      }
+      return null;
+    }
+
+    if (options.append && currentListQueryKey.value === requestListKey) {
+      const existing = new Set(messages.value.map(item => item.id));
+      const newItems = response.data.items.filter(item => {
+        if (existing.has(item.id)) return false;
+        existing.add(item.id);
+        return true;
+      });
+      messages.value = [...messages.value, ...newItems];
+    } else {
+      messages.value = response.data.items;
+    }
+    total.value = response.data.total;
+    page.value = requestQuery.page;
+    pageSize.value = requestQuery.pageSize;
+    hasMore.value = options.legacy
+      ? messages.value.length < total.value
+      : page.value * pageSize.value < total.value;
+    currentListQueryKey.value = requestListKey;
+
+    return response.data;
+  } catch (error) {
+    if (!request.isCurrent() || (error && typeof error === 'object' && 'name' in error && error.name === 'AbortError')) return null;
+    console.error("获取笔记列表失败:", error);
+    if (options.legacy) {
       toast.add({
         title: "获取笔记列表失败",
         description: "请稍后重试",
@@ -131,114 +197,20 @@ const getMessages = async (query: PageQuery) => {
         color: "red",
         timeout: 2000,
       });
-      return null;
     }
-
-    // 过滤重复数据
-    const newItems = response.data.items.filter(newMsg => 
-      !messages.value.some(existingMsg => existingMsg.id === newMsg.id)
-    );
-
-    if (query.page === 1) {
-      messages.value = response.data.items;
-    } else {
-      messages.value = [...messages.value, ...newItems];
-    }
-
-    total.value = response.data.total;
-    page.value = query.page;
-    pageSize.value = query.pageSize;
-    hasMore.value = messages.value.length < total.value;
-    currentListQueryKey.value = requestListKey;
-
-    return response.data;
-  } catch (error) {
-    if (requestSeq !== pageRequestSeq) return null;
-    if ((error as any)?.name === 'AbortError') return null;
-    console.error("获取笔记列表失败:", error);
-    toast.add({
-      title: "获取笔记列表失败",
-      description: "请稍后重试",
-      icon: "i-fluent-error-circle-16-filled",
-      color: "red",
-      timeout: 2000,
-    });
     return null;
   } finally {
-    if (requestSeq === pageRequestSeq) loading.value = false;
+    request.finish();
   }
 };
 
-// 预取指定页（不修改当前列表，仅缓存）
-const prefetchPage = async (query: PageQuery) => {
-  const cacheKey = pageCacheKey(query)
-  if (prefetchCache.value[cacheKey]) return prefetchCache.value[cacheKey]
-  try {
-    const controller = new AbortController()
-    const resp = await postRequest<PageQueryResult>("messages/page", query, {
-      credentials: 'include',
-      silent: true,
-      signal: controller.signal
-    })
-    if (resp && resp.code === 1) {
-      prefetchCache.value[cacheKey] = resp.data
-      return resp.data
-    }
-    return null as any
-  } catch { return null as any }
-}
+const getMessages = (query: PageQuery) => requestMessagePage(query, { append: query.page !== 1, legacy: true });
 
-// 读取并应用缓存页（命中则避免网络请求）
-const applyPrefetchedOrLoad = async (query: PageQuery) => {
-  const cached = prefetchCache.value[pageCacheKey(query)]
-  if (cached && Array.isArray(cached.items)) return cached
-  const res = await getMessages(query)
-  return res as any
-}
-
-const loadMessagePage = async (query: PageQuery, options: { append?: boolean } = {}) => {
-  const requestSeq = pageRequestSeq + 1;
-  pageRequestSeq = requestSeq;
-  const requestListKey = listQueryKey(query);
-  loading.value = true;
-
-  try {
-    try { pageController?.abort() } catch {}
-    const controller = new AbortController()
-    pageController = controller
-    const response = await postRequest<PageQueryResult>("messages/page", query, {
-      credentials: 'include',
-      silent: true,
-      signal: controller.signal
-    });
-    if (requestSeq !== pageRequestSeq) return null;
-
-    if (!response || response.code !== 1) return null;
-
-    if (options.append && currentListQueryKey.value === requestListKey) {
-      const existing = new Set(messages.value.map(item => item.id))
-      messages.value = [...messages.value, ...response.data.items.filter(item => !existing.has(item.id))]
-    } else {
-      messages.value = response.data.items;
-    }
-    total.value = response.data.total;
-    page.value = query.page;
-    pageSize.value = query.pageSize;
-    hasMore.value = page.value * pageSize.value < total.value;
-    currentListQueryKey.value = requestListKey;
-
-    return response.data;
-  } catch (error) {
-    if (requestSeq !== pageRequestSeq) return null;
-    if ((error as any)?.name === 'AbortError') return null;
-    console.error("获取笔记列表失败:", error);
-    return null;
-  } finally {
-    if (requestSeq === pageRequestSeq) loading.value = false;
-  }
-}
+const loadMessagePage = (query: PageQuery, options: { append?: boolean } = {}) =>
+  requestMessagePage(query, { append: !!options.append });
 
 const locateMessagePage = async (query: PageQuery & { messageId: number }) => {
+  const request = beginRequest(false);
   try {
     const response = await postRequest<MessagePageLocateResult>("messages/locate", {
       messageId: query.messageId,
@@ -252,13 +224,18 @@ const locateMessagePage = async (query: PageQuery & { messageId: number }) => {
       excludeId: query.excludeId,
     }, {
       credentials: 'include',
-      silent: true
+      silent: true,
+      signal: request.signal
     });
+    if (!request.isCurrent()) return null;
     if (!response || response.code !== 1) return null;
     return response.data;
   } catch (error) {
+    if (!request.isCurrent() || (error && typeof error === 'object' && 'name' in error && error.name === 'AbortError')) return null;
     console.error("定位笔记分页失败:", error);
     return null;
+  } finally {
+    request.finish();
   }
 }
 
@@ -593,11 +570,10 @@ const createMessage = async (message: Message) => {
   listQueryKey,
   siteConfig,
   reset,
+  cancelRequests,
   getMessages,
   loadMessagePage,
   locateMessagePage,
-  prefetchPage,
-  applyPrefetchedOrLoad,
   deleteMessage,
   updateMessage,
   setPrivate,

@@ -1641,7 +1641,7 @@ const musicPlaybackConfig = computed(() => ({
   musicSource: publicMusic.state.value?.source || frontendConfig.value.musicSource || 'netease'
 }))
 const resolveMusicSource = (cfg: any) => {
-  const kind = cfg?.musicSource === 'local' ? 'local' : 'netease'
+  const kind: 'local' | 'netease' = cfg?.musicSource === 'local' ? 'local' : 'netease'
   const playlistId = kind === 'local' ? '' : String(cfg?.musicPlaylistId || '').trim()
   const songId = kind === 'local' || playlistId ? '' : String(cfg?.musicSongId || '').trim()
   const tracks = kind === 'local' ? publicMusic.state.value?.tracks || [] : []
@@ -2694,74 +2694,54 @@ const handleTagClick = async (tag: string) => {
   })
   await messageList.value?.refreshList?.()
 }
-// 修改 onMounted 钩子
+// Configuration determines the layout; decorative images must not block it.
+let homeDisposed = false
+let initialBackgroundImage: HTMLImageElement | null = null
+let homeReadyTimer: ReturnType<typeof setTimeout> | undefined
+const onFirstHomeInteraction = () => scheduleMusicPlayerReconcile('first-interaction')
+onUnmounted(() => {
+  homeDisposed = true
+  clearTimeout(homeReadyTimer)
+  window.removeEventListener('pointerdown', onFirstHomeInteraction)
+  if (initialBackgroundImage) initialBackgroundImage.onload = initialBackgroundImage.onerror = null
+})
 onMounted(async () => {
   try {
-    // 确保在任何异步操作之前设置加载状态
-    isLoaded.value = false;
-    const hardTimeout = setTimeout(() => {
-      if (!isLoaded.value) isLoaded.value = true
-    }, 4500)
-
-    // 关键内容优先加载
     await Promise.race([
       fetchConfig(),
-      new Promise<void>((resolve) => setTimeout(() => resolve(), 2500))
+      new Promise<void>((resolve) => { homeReadyTimer = setTimeout(resolve, 2500) })
     ])
+    if (homeDisposed) return
+    clearTimeout(homeReadyTimer)
+    isLoaded.value = true
     scheduleMusicPlayerReconcile('mounted')
-    runIdle(() => { scheduleMusicPlayerReconcile('mounted-idle') })
-    const onceInit = () => { scheduleMusicPlayerReconcile('first-interaction') }
-    window.addEventListener('pointerdown', onceInit, { once: true })
-    
-    // 非关键内容延迟加载
+    runIdle(() => { if (!homeDisposed) scheduleMusicPlayerReconcile('mounted-idle') })
+    window.addEventListener('pointerdown', onFirstHomeInteraction, { once: true })
+
     runIdle(async () => {
+      if (homeDisposed) return
       if (frontendConfig.value.popularTagsEnabled !== false) await fetchTags()
-      await preloadImages(frontendConfig.value.backgrounds)
+      if (!homeDisposed) await preloadImages(frontendConfig.value.backgrounds)
     })
 
-    // 确保配置加载完成后再执行后续操作
     const headerBackgrounds = normalizeHeaderBackgrounds(frontendConfig.value.backgrounds)
     if (headerBackgrounds.length > 0) {
-      const initialBackground = headerBackgrounds[
-        Math.floor(Math.random() * headerBackgrounds.length)
-      ]
+      const initialBackground = headerBackgrounds[Math.floor(Math.random() * headerBackgrounds.length)]
       const initialImage = initialBackground.url
       currentBackground.value = initialBackground
-      
-      // 先加载低质量版本
-      const lowQualityImage = `${initialImage}?imageView2/2/w/100/q/30`
-      currentImage.value = lowQualityImage
-
-      // 后台预加载其他图片
-      runIdle(async () => {
-        await preloadImages(frontendConfig.value.backgrounds)
-      })
-      
-      // 加载高质量初始图片
+      currentImage.value = `${initialImage}?imageView2/2/w/100/q/30`
       const img = new Image()
-      img.src = initialImage
+      initialBackgroundImage = img
       img.onload = () => {
-        requestAnimationFrame(() => {
-          currentImage.value = initialImage
-          isLoaded.value = true; // 在高质量图片加载完成后设置为已加载
-        })
+        if (!homeDisposed && currentBackground.value?.url === initialImage) currentImage.value = initialImage
       }
-      img.onerror = () => {
-        // 若加载失败，直接结束加载遮罩，避免阻塞交互
-        isLoaded.value = true
-      }
-      // 最长等待时间到达后也结束加载遮罩，避免卡顿
-      setTimeout(() => {
-        if (!isLoaded.value) isLoaded.value = true
-      }, 2000)
-    } else {
-      isLoaded.value = true
+      img.src = initialImage
     }
-    clearTimeout(hardTimeout)
-
   } catch (error) {
     console.error('初始化失败:', error)
-    isLoaded.value = true
+  } finally {
+    clearTimeout(homeReadyTimer)
+    if (!homeDisposed) isLoaded.value = true
   }
 })
 const selectedDate = ref<Date>(new Date())

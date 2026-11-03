@@ -160,7 +160,7 @@ import MusicTrackCover from './MusicTrackCover.vue'
 import { adminDraftAccountKey, adminDraftsKey } from './config-draft'
 import { conflictMessage, useMusicWorkbench } from './use-music-workbench'
 
-const props = defineProps<{ theme: { mutedText?: string, [key: string]: unknown }, adminPanelCardClass: string | string[] | Record<string, boolean> }>()
+const props = defineProps<{ theme: Record<string, string>, adminPanelCardClass: string | string[] | Record<string, boolean> }>()
 const { theme, adminPanelCardClass } = toRefs(props)
 const { can, refreshCapabilities } = useAdminCapabilities()
 const canManage = computed(() => can('music.manage'))

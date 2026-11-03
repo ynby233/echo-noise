@@ -122,9 +122,12 @@ assert.match(
 )
 assert.match(
   indexPage,
-  /scheduleMusicPlayerReconcile\('mounted'\)[\s\S]*?scheduleMusicPlayerReconcile\('mounted-idle'\)[\s\S]*?scheduleMusicPlayerReconcile\('first-interaction'\)/,
+  /scheduleMusicPlayerReconcile\('mounted'\)[\s\S]*?scheduleMusicPlayerReconcile\('mounted-idle'\)/,
   'mount and first-interaction triggers must use the same music reconciler'
 )
+assert.match(indexPage, /const onFirstHomeInteraction = \(\) => scheduleMusicPlayerReconcile\('first-interaction'\)/, 'first interaction must use the shared music reconciler')
+assert.match(indexPage, /window\.addEventListener\('pointerdown', onFirstHomeInteraction, \{ once: true \}\)/, 'first interaction must run once')
+assert.match(indexPage, /window\.removeEventListener\('pointerdown', onFirstHomeInteraction\)/, 'unmounted home must release its interaction listener')
 
 const nmpScript = await readFile(join(webRoot, 'public/assets/netease-mini-player/netease-mini-player-v2.js'), 'utf8')
 assert.match(nmpScript, /async apiRequest\(endpoint, params = \{\}\)\s*\{\s*if \(this\.destroyed \|\| this\.config\.source === 'local'\) throw/, 'local players must never issue NetEase API requests')

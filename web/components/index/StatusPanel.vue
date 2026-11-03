@@ -18,7 +18,7 @@ store. Each selected section owns its data requests, form state and cleanup. -->
               <UIcon v-show="!sidebarCollapsed" name="i-heroicons-chevron-down" class="admin-nav-group-chevron h-4 w-4" :class="navGroupOpen[group.key] ? 'admin-nav-group-chevron-open' : ''" />
             </button>
             <div v-if="!sidebarCollapsed && navGroupOpen[group.key]" class="mt-2 space-y-1">
-              <button v-for="item in group.items" :key="item.key" class="admin-nav-item" :class="activeSection === item.key ? 'admin-nav-item-active' : ''" @click="setActive(item.key)"><span class="flex items-center gap-2"><UIcon :name="item.icon" class="h-4 w-4" /><span class="text-sm">{{ item.label }}</span></span></button>
+              <button v-for="item in group.items" :key="item.key" class="admin-nav-item" :class="activeSection === item.key ? 'admin-nav-item-active' : ''" @pointerenter="warmSection(item.key)" @focus="warmSection(item.key)" @click="setActive(item.key)"><span class="flex items-center gap-2"><UIcon :name="item.icon" class="h-4 w-4" /><span class="text-sm">{{ item.label }}</span></span></button>
             </div>
           </div>
         </nav>
@@ -37,12 +37,17 @@ store. Each selected section owns its data requests, form state and cleanup. -->
 
         <div ref="mainScroll" class="admin-content-scroll flex-1 overflow-y-auto">
           <div class="admin-form-shell w-full px-4 pb-20 pt-3 md:pt-4">
+            <div v-if="navigationError" class="mb-3 flex items-center gap-3 rounded-lg border border-red-300 px-4 py-3" role="alert">
+              <span>{{ navigationError }}</span><UButton size="sm" @click="failedSection && setActive(failedSection)">重试切换</UButton>
+            </div>
             <div v-if="adminCapabilitiesLoading" id="admin-capabilities-loading" :class="adminShellCardClass"><div class="flex min-h-56 items-center justify-center gap-2 px-4 py-6" :class="theme.mutedText"><UIcon name="i-heroicons-arrow-path" class="h-5 w-5 animate-spin" /><span>正在加载管理权限…</span></div></div>
-            <KeepAlive v-else :key="draftAccount" :max="3">
+            <KeepAlive v-else :key="sectionContext" :max="3">
               <AdminSectionHost
                 v-if="activeSectionLoader"
                 :key="activeSection"
                 :loader="activeSectionLoader"
+                :module-cache="sectionModuleCache"
+                :section-title="activeSectionTitle"
                 :section-key="activeSection"
                 :theme="theme"
                 :admin-shell-card-class="adminShellCardClass"
@@ -74,9 +79,11 @@ import { resolveManagedAttachmentURL } from '~/utils/media-url'
 import adminSectionCapabilities from '~/config/admin-section-capabilities.json'
 import AdminSectionHost from '~/components/admin/sections/AdminSectionHost.vue'
 import { adminSectionLoaders, type AdminSectionKey } from '~/components/admin/sections/registry'
+import { createAdminSectionModuleCache } from '~/components/admin/sections/module-cache'
 
 import { adminDraftAccountKey, adminDraftsKey } from '~/components/admin/sections/config-draft'
 const adminDrafts = new Map()
+const sectionModuleCache = createAdminSectionModuleCache()
 provide(adminDraftsKey, adminDrafts)
 
 defineEmits<{ 'restore-success': [] }>()
@@ -85,14 +92,15 @@ type NavItem = { key: AdminSectionKey, label: string, icon: string }
 type NavGroup = { key: string, label: string, icon: string, items: NavItem[] }
 const userStore = useUserStore()
 const draftAccount = computed(() => userStore.isLogin ? String((userStore.user as any)?.userid ?? (userStore.user as any)?.id ?? (userStore.user as any)?.ID ?? '') : '')
-provide(adminDraftAccountKey, draftAccount)
-watch(draftAccount, () => adminDrafts.clear(), { flush: 'sync' })
 const router = useRouter()
 const { logout } = useUser()
-const { isPrimaryAdmin, isLoading: adminCapabilitiesLoading, isReady: adminCapabilitiesReady, can, refreshCapabilities } = useAdminCapabilities()
+const { capabilities: adminCapabilities, isPrimaryAdmin, isLoading: adminCapabilitiesLoading, isReady: adminCapabilitiesReady, can, refreshCapabilities } = useAdminCapabilities()
 const isAdmin = computed(() => !!(userStore.isLogin && ((userStore.user as any)?.is_admin || (userStore.user as any)?.IsAdmin)))
 const activeSection = ref<AdminSectionKey>('dashboard')
-const activeSectionLoader = computed(() => adminSectionLoaders[activeSection.value])
+const activeSectionLoader = computed(() => accessibleSectionKeys.value.includes(activeSection.value) ? adminSectionLoaders[activeSection.value] : undefined)
+const navigationError = ref('')
+const failedSection = ref<AdminSectionKey | null>(null)
+let navigationSequence = 0
 const sectionCapabilities: Partial<Record<AdminSectionKey, string>> = adminSectionCapabilities
 const canSection = (section: AdminSectionKey) => {
   if (!isAdmin.value) return ['dashboard', 'user', 'widgets', 'system-push', 'personal-notes', 'personal-note-recycle-bin', 'personal-interactions', 'personal-interaction-recycle-bin'].includes(section)
@@ -111,6 +119,46 @@ const adminNavGroups = computed<NavGroup[]>(() => {
   return groups.map(group => ({ ...group, items: group.items.filter(item => canSection(item.key)) })).filter(group => group.items.length > 0)
 })
 const accessibleSectionKeys = computed(() => adminNavGroups.value.flatMap(group => group.items.map(item => item.key)))
+const activeSectionTitle = computed(() => adminNavGroups.value.flatMap(group => group.items).find(item => item.key === activeSection.value)?.label || '管理配置')
+const sectionContext = computed(() => JSON.stringify([draftAccount.value, isAdmin.value, isPrimaryAdmin.value, adminCapabilitiesReady.value, [...adminCapabilities.value].sort(), accessibleSectionKeys.value]))
+provide(adminDraftAccountKey, sectionContext)
+let mounted = false
+let cancelWarmup = () => {}
+const warmSection = (section: AdminSectionKey) => {
+  if (!mounted || !userStore.isLogin || !adminCapabilitiesReady.value || !accessibleSectionKeys.value.includes(section)) return
+  const loader = adminSectionLoaders[section]
+  if (loader) void sectionModuleCache.load(loader).catch(() => undefined)
+}
+const scheduleWarmup = () => {
+  cancelWarmup()
+  if (!mounted || !userStore.isLogin || !adminCapabilitiesReady.value) return
+  // Only download code, one section at a time during idle periods. Data stays
+  // owned by the selected section; warming never creates component instances.
+  const queue = accessibleSectionKeys.value.filter(key => key !== activeSection.value)
+  let stopped = false
+  let timer = 0
+  let idle = 0
+  cancelWarmup = () => {
+    stopped = true
+    window.clearTimeout(timer)
+    if (idle) window.cancelIdleCallback(idle)
+  }
+  const schedule = () => {
+    if (stopped || !queue.length) return
+    if (typeof window.requestIdleCallback === 'function') idle = window.requestIdleCallback(() => { void next() }, { timeout: 1500 })
+    else timer = window.setTimeout(() => { void next() }, 100)
+  }
+  const next = async () => {
+    if (stopped) return
+    const key = queue.shift()!
+    const loader = adminSectionLoaders[key]
+    if (loader && accessibleSectionKeys.value.includes(key)) await sectionModuleCache.load(loader).catch(() => undefined)
+    schedule()
+  }
+  schedule()
+}
+watch(sectionContext, () => { ++navigationSequence; navigationError.value = ''; failedSection.value = null; adminDrafts.clear(); sectionModuleCache.clear(); scheduleWarmup() }, { flush: 'sync' })
+watch(adminCapabilitiesReady, scheduleWarmup)
 const sectionGroupMap = computed(() => Object.fromEntries(adminNavGroups.value.flatMap(group => group.items.map(item => [item.key, group.key]))))
 const navGroupOpen = reactive<Record<string, boolean>>({ overview: true, 'site-display': true, 'content-interaction': true, 'account-security': true, 'storage-maintain': true })
 const sidebarOpen = ref(false)
@@ -150,8 +198,26 @@ const normalizeHash = (raw: string): AdminSectionKey | null => {
   if (key === 'attachment-storage') key = 'storage'
   return accessibleSectionKeys.value.includes(key as AdminSectionKey) ? key as AdminSectionKey : null
 }
-const setActive = (section: AdminSectionKey, updateHash = true) => {
+const setActive = async (section: AdminSectionKey, updateHash = true) => {
   if (!accessibleSectionKeys.value.includes(section)) section = resolveAccessibleAdminSection(section, accessibleSectionKeys.value, 'dashboard')
+  const loader = adminSectionLoaders[section]
+  if (!loader) return
+  const sequence = ++navigationSequence
+  const owner = sectionContext.value
+  navigationError.value = ''
+  failedSection.value = null
+  // Keep the current real form mounted until the next module can render in
+  // the same frame. A cold import never replaces it with a loading screen.
+  try {
+    if (!sectionModuleCache.get(loader)) await sectionModuleCache.load(loader)
+  } catch (error: any) {
+    if (sequence === navigationSequence && owner === sectionContext.value) {
+      navigationError.value = error?.message || '板块暂时无法打开，请重试。'
+      failedSection.value = section
+    }
+    return
+  }
+  if (sequence !== navigationSequence || owner !== sectionContext.value || !accessibleSectionKeys.value.includes(section)) return
   activeSection.value = section
   const group = sectionGroupMap.value[section]
   if (group) navGroupOpen[group] = true
@@ -170,6 +236,8 @@ watch(panelTheme, syncRootTheme)
 watch(sidebarCollapsed, value => localStorage.setItem('adminSidebarCollapsed', value ? '1' : '0'))
 watch([adminCapabilitiesReady, accessibleSectionKeys], ([ready, keys]) => { if (!ready) return; const fromHash = normalizeHash(location.hash); setActive(fromHash || resolveAccessibleAdminSection(activeSection.value, keys, 'dashboard'), !fromHash) }, { immediate: true })
 onMounted(async () => {
+  mounted = true
+  scheduleWarmup()
   previousRootDark = document.documentElement.classList.contains('dark')
   const savedTheme = localStorage.getItem('adminTheme') as AdminTheme | null
   if (savedTheme && savedTheme in themeMap) panelTheme.value = savedTheme
@@ -182,7 +250,7 @@ onMounted(async () => {
   const section = normalizeHash(location.hash)
   if (section) setActive(section, false)
 })
-onUnmounted(() => { window.removeEventListener('hashchange', onHashChange); document.documentElement.classList.toggle('dark', previousRootDark); document.body.style.overflow = '' })
+onUnmounted(() => { ++navigationSequence; mounted = false; cancelWarmup(); sectionModuleCache.clear(); adminDrafts.clear(); window.removeEventListener('hashchange', onHashChange); document.documentElement.classList.toggle('dark', previousRootDark); document.body.style.overflow = '' })
 </script>
 
 <style src="~/assets/css/admin.css"></style>

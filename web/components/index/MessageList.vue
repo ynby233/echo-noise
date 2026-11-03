@@ -126,6 +126,7 @@ toolbox listeners are delegated to modules with their own cleanup. -->
                   :enableGithubCard="siteConfig?.enableGithubCard === true"
                   :message-id="Number(msg.id)"
                   :task-list-editable="canEditMessageTasks(msg)"
+                  :bounded-rendering="props.masonry"
                   :inherit-font="true"
                   @tagClick="handleTagClick"
                   @rendered="checkContentHeight"
@@ -184,7 +185,6 @@ toolbox listeners are delegated to modules with their own cleanup. -->
               </div>
               <div v-if="(msg.is_tombstone || expandedCommentsMap[msg.id] || activeCommentId === msg.id) && isCommentEnabled && !isGuestbookMessage(msg)" :id="`comment-container-${msg.id}`" class="mt-2" style="position: relative;">
                 <BuiltinComments
-                  v-if="apiReachable"
                   :key="(commentRefreshKey[msg.id] || 0)"
                   :ref="builtinCommentsRefFor(msg.id)"
                   :message-id="msg.id"
@@ -203,8 +203,6 @@ toolbox listeners are delegated to modules with their own cleanup. -->
       </div>
         </component>
       <ContinuousLoadTrigger v-if="props.masonry && props.pageReady && !isPersonalGuest" :loading="isPageLoading || continuousLoading || !!props.targetMessageId || !targetListReady" :has-more="!!message.hasMore" :error="continuousError" @load="loadContinuousPage" />
-      <!-- 预取下一页哨兵 -->
-      <div v-if="showPager" ref="prefetchSentinel" style="height:1px"></div>
       <!-- 分页控制区域 -->
       <div v-if="showPager" class="pager-shell" :class="{ 'is-dark': isContentDark }">
         <div class="pager-nav-group">
@@ -366,7 +364,7 @@ const authorAvatarOnError = (e: Event, seed: string) => {
 // 主题切换改为纯 CSS（html.dark）控制，避免组件重渲染导致媒体刷新
 
 const contentStyle = (index: number) => {
-  return index < 5 ? '' : 'content-visibility:auto;contain-intrinsic-size:700px';
+  return props.masonry || index < 5 ? '' : 'content-visibility:auto;contain-intrinsic-size:700px';
 }
 
 const toolbox = createMessageToolbox()
@@ -426,7 +424,9 @@ const alignCurrentPageFirstBlockToTop = (behavior: ScrollBehavior = 'instant') =
   if (target) scrollElementTopToViewportTop(target, behavior)
 }
 const scheduleCurrentPageFirstBlockTopScroll = async () => {
+  const requestId = listRefreshSeq
   await nextTick()
+  if (disposed || requestId !== listRefreshSeq) return
   clearPageTopScrollSchedule()
   alignCurrentPageFirstBlockToTop('instant')
   if (typeof window === 'undefined') return
@@ -450,23 +450,7 @@ const jumpToPage = async () => {
     return;
   }
 
-  try {
-    const result = await fetchListPage(pageQueryFor(page));
-
-    if (!applyPageResult(result, page)) {
-      throw new Error('跳转页面失败');
-    }
-
-    syncTargetPageToCurrent();
-    await scheduleCurrentPageFirstBlockTopScroll();
-  } catch (error) {
-    console.error('跳转页面失败:', error);
-    useToast().add({
-      title: '跳转失败',
-      color: 'red',
-      timeout: 2000
-    });
-  }
+  await navigateToPage(page)
 };
 // 添加 props 定义
 const props = defineProps({
@@ -538,20 +522,31 @@ const gradientClass = computed(() => isContentDark.value ? 'from-[var(--home-sur
 const authorProfiles = ref<Record<string, any>>({})
 let authorProfileGeneration = 0
 const authorProfileFlights = new Map<string, Promise<void>>()
+const authorProfileControllers = new Set<AbortController>()
+const resetAuthorProfiles = () => {
+  authorProfileGeneration++
+  authorProfileControllers.forEach((controller) => controller.abort())
+  authorProfileControllers.clear()
+  authorProfileFlights.clear()
+  authorProfiles.value = {}
+}
 const fetchAuthorProfile = (uname: string): Promise<void> => {
   const key = String(uname || '').trim()
   if (!key || authorProfiles.value[key]) return Promise.resolve()
   const pending = authorProfileFlights.get(key)
   if (pending) return pending
   const generation = authorProfileGeneration
+  const controller = new AbortController()
+  authorProfileControllers.add(controller)
   const request = (async () => {
     try {
-      const resp = await fetch(`${BASE_API}/users/profile?username=${encodeURIComponent(key)}`, { credentials: 'include', headers: { 'Accept': 'application/json' } })
+      const resp = await fetch(`${BASE_API}/users/profile?username=${encodeURIComponent(key)}`, { credentials: 'include', headers: { 'Accept': 'application/json' }, signal: controller.signal })
       if (!resp.ok) return
       const js = await resp.json()
       const d = js?.data || {}
       if (generation === authorProfileGeneration && d?.username) authorProfiles.value[key] = d
     } catch {} finally {
+      authorProfileControllers.delete(controller)
       if (generation === authorProfileGeneration) authorProfileFlights.delete(key)
     }
   })()
@@ -578,15 +573,6 @@ const authorProfileCount = (msg: any) => {
   const d = authorProfiles.value[uname]
   return Number((d && d.total_messages) || 0)
 }
-const apiReachable = ref(true)
-const checkApi = async () => {
-  try {
-    const res = await fetch(`${BASE_API}/status`, { credentials: 'include' })
-    apiReachable.value = !!res && res.ok
-  } catch {
-    apiReachable.value = false
-  }
-}
 const { deleteMessage } = useMessage();
 const message = useMessageStore();
 watch(() => message.page, syncTargetPageToCurrent, { immediate: true });
@@ -598,13 +584,8 @@ const prefetchAuthorProfilesForList = () => {
 }
 watch(() => message.messages, () => { prefetchAuthorProfilesForList() }, { deep: false, immediate: true })
 const authorProfileViewer = useUserStore()
-watch(() => [authorProfileViewer.isLogin, authorProfileViewer.user?.userid, authorProfileViewer.token] as const, () => {
-  authorProfileGeneration++
-  authorProfiles.value = {}
-  authorProfileFlights.clear()
-  prefetchAuthorProfilesForList()
-}, { flush: 'sync' })
-onBeforeUnmount(() => { authorProfileGeneration++; authorProfileFlights.clear() })
+watch(() => [authorProfileViewer.isLogin, authorProfileViewer.user?.userid, authorProfileViewer.token] as const, resetAuthorProfiles, { flush: 'sync' })
+onBeforeUnmount(resetAuthorProfiles)
 
 const isCommentEnabled = computed(() => {
   const v: any = (props.siteConfig as any)?.commentEnabled
@@ -618,11 +599,11 @@ const isGuestbookMessage = (m: any) => {
 }
 const fetchGuestbookId = async () => {
   try {
-    const resp = await fetch(`${BASE_API}/guestbook/message`, { credentials: 'include', headers: { 'Accept': 'application/json' } })
+    const resp = await fetch(`${BASE_API}/guestbook/message`, { credentials: 'include', headers: { 'Accept': 'application/json' }, signal: lifetimeController.signal })
     if (resp.ok) {
       const js = await resp.json()
       const id = js?.data?.id
-      if (id) guestbookId.value = Number(id)
+      if (id && !lifetimeController.signal.aborted) guestbookId.value = Number(id)
     }
   } catch {}
 }
@@ -642,9 +623,16 @@ const applyPageResult = (result: any, targetPage: number) => {
 const loadTargetMessagePage = async (id: number) => {
   if (!id || !targetListReady.value) return false
   if (getMessageById(id)) return true
+  const requestId = listRefreshSeq
+  const queryKey = currentDisplayQueryKey.value
+  detailController?.abort()
+  const controller = new AbortController()
+  detailController = controller
+  const isCurrent = () => !disposed && !controller.signal.aborted && requestId === listRefreshSeq && queryKey === currentDisplayQueryKey.value
   const loadThreadTombstone = async () => {
-    const response = await getRequest<any>(`messages/${id}`, undefined, { credentials: 'include', silent: true })
-    if (response?.code !== 1 || response?.data?.is_tombstone !== true) return false
+    if (!isCurrent()) return false
+    const response = await getRequest<any>(`messages/${id}`, undefined, { credentials: 'include', silent: true, signal: controller.signal })
+    if (!isCurrent() || response?.code !== 1 || response?.data?.is_tombstone !== true) return false
     message.messages = [response.data]
     message.total = 1
     message.page = 1
@@ -654,20 +642,20 @@ const loadTargetMessagePage = async (id: number) => {
   }
   try {
     const location = await message.locateMessagePage({ ...pageQueryFor(1), messageId: id })
+    if (!isCurrent()) return false
     const targetPage = Number(location?.page || 0)
     if (targetPage < 1) return await loadThreadTombstone()
     if (props.masonry) {
-      const queryKey = currentDisplayQueryKey.value
       for (let page = 1; page <= targetPage; page++) {
         const result = await message.loadMessagePage(pageQueryFor(page), { append: page > 1 })
-        if (!result || queryKey !== currentDisplayQueryKey.value || !props.masonry) return false
+        if (!result || !isCurrent() || !props.masonry) return false
       }
     } else {
       const result = await message.loadMessagePage(pageQueryFor(targetPage))
-      if (!applyPageResult(result, targetPage)) return false
+      if (!isCurrent() || !applyPageResult(result, targetPage)) return false
     }
     await nextTick()
-    return !!getMessageById(id)
+    return isCurrent() && !!getMessageById(id)
   } catch {
     return await loadThreadTombstone()
   }
@@ -787,14 +775,17 @@ const handleTagClick = (tag: string) => {
 }
 
 let listRefreshSeq = 0
+let initialListLoaded = false
 
 const fetchListPage = async (query: any) => {
+  const requestId = listRefreshSeq
   const result = await message.loadMessagePage(query)
+  if (disposed || requestId !== listRefreshSeq) return null
   if (!props.masonry && result && query.page > 1) {
     const lastPage = Math.max(1, Math.ceil(Number(result.total || 0) / query.pageSize))
     if (query.page > lastPage) {
       const lastResult = await message.loadMessagePage({ ...query, page: lastPage })
-      return lastResult ? { ...lastResult, page: lastPage } : lastResult
+      return requestId === listRefreshSeq && !disposed && lastResult ? { ...lastResult, page: lastPage } : null
     }
   }
   return result
@@ -809,28 +800,35 @@ const clearCurrentList = () => {
 }
 
 const refreshList = async () => {
-  const requestId = ++listRefreshSeq
+  if (disposed || !listMounted.value || !props.pageReady || isPersonalGuest.value || personalUserPending.value) return
+  invalidateListRequests()
+  const requestId = listRefreshSeq
   continuousLoading.value = false
   continuousError.value = false
-  const targetPage = !targetListReady.value && !props.masonry && !hasActiveFilters.value ? props.initialPage : 1
+  const targetPage = !initialListLoaded && !props.masonry && !hasActiveFilters.value ? props.initialPage : 1
+  initialListLoaded = true
   const query = pageQueryFor(targetPage)
   const requestQueryKey = message.listQueryKey(query)
-  message.currentListQueryKey = requestQueryKey
   setPageLoading(true)
   try {
     const result = await fetchListPage(query)
-    if (requestId !== listRefreshSeq || requestQueryKey !== currentDisplayQueryKey.value) return
-    applyPageResult(result, targetPage)
+    if (disposed || requestId !== listRefreshSeq || requestQueryKey !== currentDisplayQueryKey.value) return
+    if (!applyPageResult(result, targetPage)) throw new Error('加载笔记失败')
     message.currentListQueryKey = requestQueryKey
     await nextTick();
+    if (disposed || requestId !== listRefreshSeq) return
     deferMeasure();
     deferInitFancybox();
   } catch (error: any) {
-    if (error?.name === 'AbortError') return
+    if (disposed || requestId !== listRefreshSeq || error?.name === 'AbortError') return
     console.error('刷新消息列表失败:', error)
     useToast().add({ title: '加载失败', color: 'red', timeout: 2000 })
   } finally {
-    if (requestId === listRefreshSeq) setPageLoading(false)
+    if (requestId === listRefreshSeq && !disposed) {
+      setPageLoading(false)
+      targetListReady.value = true
+      if (props.targetMessageId) void focusTargetMessageAndComment()
+    }
   }
 }
 
@@ -974,190 +972,104 @@ watch(() => message.messages, () => {
 }, { deep: true });
 // 添加路由相关
 const route = useRoute();
+const listMounted = ref(false)
+let disposed = false
+const lifetimeController = new AbortController()
+let detailController: AbortController | null = null
+
+const invalidateListRequests = () => {
+  listRefreshSeq += 1
+  detailController?.abort()
+  detailController = null
+  message.cancelRequests()
+  targetListReady.value = false
+  targetNavigation.dispose()
+  if (listMounted.value && !disposed) targetNavigation.mount()
+  continuousLoading.value = false
+  continuousError.value = false
+  clearPageTopScrollSchedule()
+}
+
+// The guestbook id affects pagination. Resolve it once before starting the
+// single route/filter watcher; capability refresh runs independently.
 onMounted(async () => {
-  try {
-    setPageLoading(true)
-    await checkApi()
-    await fetchGuestbookId()
-    // 获取路由中的消息ID
-    const messageId = getMessageIdFromRouteHash(route.hash);
-    
-    // 根据是否有消息ID来决定加载方式
-    if (messageId) {
-    const data = await getRequest<any>(`messages/${messageId}`, undefined, { credentials: 'include' });
-    if (data.code === 1 && data.data) {
-      const item = data.data
-      if (!isGuestbookMessage(item)) {
-        message.messages = [item];
-      } else {
-        message.messages = []
-      }
-      message.hasMore = false;
-      message.page = 1;
-        
-        await nextTick();
-        const targetElement = document.querySelector(`.content-container[data-msg-id="${messageId}"]`);
-        if (targetElement) {
-          targetElement.scrollIntoView({ behavior: 'instant', block: 'start' });
-        }
-      } else {
-        throw new Error('消息不存在');
-      }
-    } else {
-      // 只有在非消息详情页时才加载列表
-      if (!getMessageIdFromRouteHash(route.hash)) {
-        const startPage = !props.masonry && !hasActiveFilters.value ? props.initialPage : 1
-        const result = await fetchListPage(pageQueryFor(startPage))
-        if (result) applyPageResult(result, startPage)
-      }
-    }
+  if (props.pageReady) setPageLoading(true)
+  void refreshCapabilities()
+  await fetchGuestbookId()
+  if (!disposed) listMounted.value = true
+})
+onBeforeUnmount(() => {
+  disposed = true
+  lifetimeController.abort()
+  invalidateListRequests()
+})
 
-    // 初始化视图
-    await nextTick();
-    deferMeasure();
-    deferInitFancybox();
-
-    // 默认仅展开已有评论的消息
-    try {
-      const tasks = (message.messages || []).filter((m: any) => !isGuestbookMessage(m)).map(async (m: any) => {
-        try {
-          let js: any = null
-          const resp1 = await fetch(`${BASE_API}/messages/${m.id}/comments`, { credentials: 'include', headers: { 'Accept': 'application/json' } });
-          if (resp1 && resp1.ok) {
-            js = await resp1.json();
-          } else {
-            const resp2 = await fetch(`http://localhost:1315/api/messages/${m.id}/comments`, { credentials: 'include', headers: { 'Accept': 'application/json' } });
-            if (resp2 && resp2.ok) js = await resp2.json();
-          }
-          const count = js && Array.isArray(js.data) ? js.data.length : 0;
-          commentCountMap.value[m.id] = count;
-          if (count > 0) expandedCommentsMap.value[m.id] = true;
-      } catch {}
-    });
-    await Promise.allSettled(tasks);
-    await nextTick();
-    } catch {}
-    
-  } catch (error) {
-    console.error('初始化失败:', error);
-    if (error instanceof Error) {
-      useToast().add({
-        title: '加载失败',
-        description: error.message || '请刷新重试',
-        color: 'red',
-        timeout: 2000
-      });
-    }
-  } finally {
+const loadRoute = async () => {
+  invalidateListRequests()
+  const requestId = listRefreshSeq
+  if (!listMounted.value || !props.pageReady) {
     setPageLoading(false)
-    targetListReady.value = true
-    await nextTick()
-    if (props.targetMessageId) focusTargetMessageAndComment()
+    return
   }
-});
-
-// 修改路由监听
-watch(() => route.hash, async (newHash, oldHash) => {
-  const messageId = getMessageIdFromRouteHash(newHash);
-  
-  // 如果没有消息ID且不是从消息详情页返回，则保持当前状态，不重新加载
+  if (isPersonalGuest.value || personalUserPending.value) {
+    clearCurrentList()
+    setPageLoading(personalUserPending.value)
+    return
+  }
+  const messageId = getMessageIdFromRouteHash(route.hash)
   if (!messageId) {
-    if (getMessageIdFromRouteHash(oldHash)) {
-      await refreshList()
-      expandedCommentsMap.value = {}
-      return
-    }
-    // 如果当前已有消息，不做任何操作，保持滚动位置
-    if (message.messages && message.messages.length > 0) {
-      return;
-    }
-    
-    // 只有在首次加载且没有消息时才加载第一页
     await refreshList()
-    expandedCommentsMap.value = {}
-    return;
+    return
   }
-  
+  const controller = new AbortController()
+  detailController = controller
+  setPageLoading(true)
   try {
-    const data = await getRequest<any>(`messages/${messageId}`, undefined, { credentials: 'include' });
-    if (data.code === 1 && data.data) {
-          message.messages = isGuestbookMessage(data.data) ? [] : [data.data];
-          message.hasMore = false;
-          message.page = 1;
-      
-      await nextTick();
-      const targetElement = document.querySelector(`.content-container[data-msg-id="${messageId}"]`);
-      if (targetElement) {
-        targetElement.scrollIntoView({ 
-          behavior: 'instant',
-          block: 'start'
-        });
-      }
-    }
-  } catch (error) {
-    console.error('加载消息失败:', error);
-    useToast().add({
-      title: '加载失败',
-      color: 'red',
-      timeout: 2000
-    });
-  }
-}, { immediate: true });
-
-// 修改 loadMore 为 loadNextPage
-watch(
-  [
-    () => props.activeTab,
-    () => props.masonry,
-    () => props.calendarDate,
-    () => props.searchKeyword,
-    () => props.selectedTag,
-    () => userStore.isLogin,
-    () => currentUserId.value,
-    () => currentUsername.value
-  ],
-  async () => {
-    if (getMessageIdFromRouteHash(route.hash)) return
-    if (Number(props.targetMessageId || 0) > 0) {
-      await focusTargetMessageAndComment()
-      return
-    }
-    if (isPersonalGuest.value) {
-      listRefreshSeq += 1
-      clearCurrentList()
-      expandedCommentsMap.value = {}
-      setPageLoading(false)
-      return
-    }
-    if (personalUserPending.value) {
-      listRefreshSeq += 1
-      message.currentListQueryKey = currentDisplayQueryKey.value
-      setPageLoading(true)
-      return
-    }
-    await refreshList()
-    expandedCommentsMap.value = {}
-  }
-)
-
-const loadPreviousPage = async () => {
-  if (isPageLoading.value || message.page <= 1) return;
-  setPageLoading(true);
-  try {
-    const targetPage = message.page - 1;
-    const result = await fetchListPage(pageQueryFor(targetPage));
-    if (!applyPageResult(result, targetPage)) throw new Error('加载上一页失败');
-    await scheduleCurrentPageFirstBlockTopScroll();
-  } catch (error) {
-    useToast().add({
-      title: '加载失败',
-      color: 'red',
-      timeout: 2000
-    });
+    const data = await getRequest<any>(`messages/${messageId}`, undefined, {
+      credentials: 'include', silent: true, signal: controller.signal,
+    })
+    if (disposed || controller.signal.aborted || requestId !== listRefreshSeq) return
+    if (data?.code !== 1 || !data.data) throw new Error('消息不存在')
+    message.messages = isGuestbookMessage(data.data) ? [] : [data.data]
+    message.total = message.messages.length
+    message.page = 1
+    message.hasMore = false
+    message.currentListQueryKey = currentDisplayQueryKey.value
+    await nextTick()
+    if (requestId !== listRefreshSeq || disposed) return
+    messageListRoot.value?.querySelector<HTMLElement>(`.content-container[data-msg-id="${messageId}"]`)?.scrollIntoView({ behavior: 'instant', block: 'start' })
+  } catch (error: any) {
+    if (controller.signal.aborted || requestId !== listRefreshSeq || disposed) return
+    useToast().add({ title: '加载失败', description: error?.message || '请刷新重试', color: 'red', timeout: 2000 })
   } finally {
-    setPageLoading(false);
+    if (requestId === listRefreshSeq && !disposed) {
+      setPageLoading(false)
+      targetListReady.value = true
+      if (props.targetMessageId) void focusTargetMessageAndComment()
+    }
   }
-};
+}
+
+const navigateToPage = async (page: number) => {
+  if (disposed || isPageLoading.value || !targetListReady.value) return
+  const requestId = ++listRefreshSeq
+  setPageLoading(true)
+  try {
+    const result = await fetchListPage(pageQueryFor(page))
+    if (disposed || requestId !== listRefreshSeq) return
+    if (!applyPageResult(result, page)) throw new Error('加载页面失败')
+    syncTargetPageToCurrent()
+    await scheduleCurrentPageFirstBlockTopScroll()
+  } catch (error) {
+    if (disposed || requestId !== listRefreshSeq) return
+    useToast().add({ title: '加载失败', color: 'red', timeout: 2000 })
+  } finally {
+    if (!disposed && requestId === listRefreshSeq) setPageLoading(false)
+  }
+}
+const loadPreviousPage = async () => {
+  if (message.page > 1) await navigateToPage(message.page - 1)
+}
 
 const loadContinuousPage = async () => {
   if (!props.masonry || isPageLoading.value || continuousLoading.value || props.targetMessageId || !message.hasMore || !targetListReady.value || isPersonalGuest.value || isDisplayQueryPending.value) return
@@ -1178,23 +1090,8 @@ const loadContinuousPage = async () => {
 }
 
 const loadNextPage = async () => {
-  if (isPageLoading.value || !message.hasMore) return;
-  setPageLoading(true);
-  try {
-    const targetPage = message.page + 1;
-    const result = await fetchListPage(pageQueryFor(targetPage));
-    if (!applyPageResult(result, targetPage)) throw new Error('加载下一页失败');
-    await scheduleCurrentPageFirstBlockTopScroll();
-  } catch (error) {
-    useToast().add({
-      title: '加载失败',
-      color: 'red',
-      timeout: 2000
-    });
-  } finally {
-    setPageLoading(false);
-  }
-};
+  if (message.hasMore) await navigateToPage(message.page + 1)
+}
 // 监听消息变化
 watch(
   () => message.messages,
@@ -1255,13 +1152,18 @@ const stableDisplayQueryKey = ref('')
 const currentDisplayQueryKey = computed(() => message.listQueryKey(pageQueryFor(1)))
 const isDisplayQueryPending = computed(() => Boolean(message.currentListQueryKey && message.currentListQueryKey !== currentDisplayQueryKey.value))
 const searchResultsRefreshing = ref(false)
+let searchRefreshTimer: ReturnType<typeof setTimeout> | null = null
+onBeforeUnmount(() => {
+  if (searchRefreshTimer !== null) clearTimeout(searchRefreshTimer)
+})
 const refreshSearchResults = async () => {
   if (searchResultsRefreshing.value || isPageLoading.value || isDisplayQueryPending.value) return
   searchResultsRefreshing.value = true
   try {
     await refreshList()
   } finally {
-    window.setTimeout(() => {
+    if (!disposed) searchRefreshTimer = setTimeout(() => {
+      searchRefreshTimer = null
       searchResultsRefreshing.value = false
     }, 300)
   }
@@ -1302,6 +1204,32 @@ watch(
 watch(isPageLoading, (loading) => {
   if (!loading) syncStableDisplayMessages()
 })
+
+// Invalidate synchronously so a response queued before a viewer change cannot
+// restore private content, even before the batched route watcher runs.
+watch(() => [userStore.isLogin, currentUserId.value, currentUsername.value, currentUserIsAdmin.value, userStore.token], () => {
+  invalidateListRequests()
+  message.reset()
+  stableDisplayMessages.value = []
+  stableDisplayQueryKey.value = ''
+  engagement.resetViewer()
+}, { flush: 'sync' })
+
+watch([
+  () => listMounted.value,
+  () => props.pageReady,
+  () => getMessageIdFromRouteHash(route.hash),
+  () => props.activeTab,
+  () => props.masonry,
+  () => props.calendarDate,
+  () => props.searchKeyword,
+  () => props.selectedTag,
+  () => userStore.isLogin,
+  () => currentUserId.value,
+  () => currentUsername.value,
+  () => currentUserIsAdmin.value,
+  () => userStore.token,
+], loadRoute)
 
 const showPager = computed(() => {
   if (props.masonry || isPersonalGuest.value) return false
@@ -1356,28 +1284,6 @@ const preloadImage = (src: string): Promise<HTMLImageElement> => {
     img.src = src;
   });
 };
-// 下一页预取（靠近底部时触发）
-const prefetchSentinel = ref<HTMLElement | null>(null)
-let prefetchObservedPage = 0
-onMounted(() => {
-  void refreshCapabilities()
-  try {
-    const io2 = new IntersectionObserver((entries) => {
-      entries.forEach(async (entry) => {
-        if (!entry.isIntersecting) return
-        const nextPage = (message.page || 1) + 1
-        if (!message.hasMore) return
-        if (prefetchObservedPage === nextPage) return
-        prefetchObservedPage = nextPage
-        const anyMsg = message as any
-        if (anyMsg && typeof anyMsg.prefetchPage === 'function') {
-          await anyMsg.prefetchPage(pageQueryFor(nextPage))
-        }
-      })
-    }, { rootMargin: '512px 0px' })
-    if (prefetchSentinel.value) io2.observe(prefetchSentinel.value)
-  } catch {}
-})
 
 </script>
 

@@ -533,7 +533,8 @@ assert(
     messageList.includes('@click="refreshSearchResults"') &&
     messageList.includes('const searchResultsRefreshing = ref(false)') &&
     messageList.includes('const refreshSearchResults = async () => {') &&
-    messageList.includes('window.setTimeout(() => {\n      searchResultsRefreshing.value = false\n    }, 300)') &&
+    messageList.includes('if (!disposed) searchRefreshTimer = setTimeout(() => {\n      searchRefreshTimer = null\n      searchResultsRefreshing.value = false\n    }, 300)') &&
+    messageList.includes('if (searchRefreshTimer !== null) clearTimeout(searchRefreshTimer)') &&
     messageList.includes('class="search-results-back nw-content-panel-action nw-action-btn nw-action-btn--label"') &&
     messageList.includes('笔记 ({{ filteredResultCount }})') &&
     messageList.includes('v-if="!isPageLoading && !isDisplayQueryPending && displayMessages.length"') &&
@@ -554,7 +555,8 @@ assert(
     messageList.includes('const isDisplayQueryPending = computed(() => Boolean(message.currentListQueryKey && message.currentListQueryKey !== currentDisplayQueryKey.value))') &&
     messageList.includes('if (isDisplayQueryPending.value) return []') &&
     messageList.includes('if (isPageLoading.value && stableDisplayQueryKey.value === currentDisplayQueryKey.value && stableDisplayMessages.value.length) return stableDisplayMessages.value') &&
-    messageList.includes('v-if="showPager" ref="prefetchSentinel"') &&
+    messageList.includes('v-if="showPager" class="pager-shell"') &&
+    !messageList.includes('ref="prefetchSentinel"') &&
     messageList.includes('const showPager = computed(() => {') &&
     messageList.includes('class="search-results-empty-icon"') &&
     messageList.includes(":is=\"props.pageReady && hasActiveFilters ? resolveComponent('UCard') : 'div'\"") &&
@@ -1520,7 +1522,7 @@ assert(
 )
 
 assert(
-  messageList.includes('const result = await fetchListPage(pageQueryFor(targetPage));') &&
+  messageList.includes('const result = await fetchListPage(pageQueryFor(page))') &&
     !messageList.includes('listRefreshController') &&
     !messageList.includes('message.getMessages(pageQueryFor('),
   'message pagination must reuse the unified page loader and must not keep stale local AbortController references'

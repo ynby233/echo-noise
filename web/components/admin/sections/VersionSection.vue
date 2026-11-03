@@ -60,7 +60,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, inject, onMounted, onUnmounted, reactive, ref, toRefs, watch } from 'vue'
+import { computed, inject, onActivated, onDeactivated, onMounted, onUnmounted, reactive, ref, toRefs, watch } from 'vue'
 import { useToast } from '#ui/composables/useToast'
 import { useAdminCapabilities } from '~/composables/useAdminCapabilities'
 import { useUserStore } from '~/store/user'
@@ -98,9 +98,11 @@ const capabilityText = computed(() => installation.value.available ? '近期部�
 const phases: Record<string, string> = { pending: '等待执行器', claimed: '已领取', downloading: '下载镜像', stopping: '停止旧服务', backing_up: '一致备份', replacing: '替换容器', verifying: '核验运行身份', succeeded: '已完成', failed: '失败', needs_attention: '需要人工处理' }
 const phaseText = computed(() => phases[task.value?.status] || '等待状态')
 const retryablePreparation = () => installation.value.available || ['deployment_unchecked', 'executor_offline', 'deployment_check_failed'].includes(installation.value.reason)
-const canPrepare = computed(() => isPrimaryAdmin.value && !busy.value && !error.value && !checking.value && !configuring.value && !syncing.value && !!executor.value?.id && !executor.value?.revoked_at && (!executor.value?.expires_at || new Date(executor.value.expires_at).getTime() > Date.now()) && retryablePreparation())
+const active = ref(true)
+const canPrepare = computed(() => active.value && isPrimaryAdmin.value && !busy.value && !error.value && !checking.value && !configuring.value && !syncing.value && !!executor.value?.id && !executor.value?.revoked_at && (!executor.value?.expires_at || new Date(executor.value.expires_at).getTime() > Date.now()) && retryablePreparation())
 const canInstall = (name: string) => canPrepare.value && !!channel(name).installable && channel(name).status === 'update_available'
 let disposed = false, timer: ReturnType<typeof setTimeout> | undefined, loading = false, refreshQueued = false, generation = 0
+let polling = false, pollGeneration = 0
 let previousTaskID = ''
 let preparationTimer: ReturnType<typeof setTimeout> | undefined, preparationDeadline = 0
 const validOwner = (owner: { account: string; generation: number }) => !disposed && owner.account === account.value && owner.generation === generation
@@ -172,15 +174,27 @@ const applyState = (data: any) => {
   settlePreparation(data)
 }
 const refresh = async () => {
-  if (disposed || posting.value) return
+  if (disposed || !active.value || posting.value) return
   if (loading) { refreshQueued = true; return }
   loading = true
   const owner = account.value, request = generation
   try { const body: any = await getRequest('updates/state', undefined, { credentials: 'include', silent: true }); if (disposed || owner !== account.value || request !== generation) return; if (body?.code !== 1) throw new Error(); applyState(body.data) }
   catch { if (!disposed && owner === account.value && request === generation) error.value = uncertain.value ? '任务创建结果尚未确认，服务暂不可用，请勿再次安装' : '暂时无法读取服务状态' }
-  finally { loading = false; if (refreshQueued && !disposed) { refreshQueued = false; await refresh() } }
+  finally { loading = false; if (refreshQueued) { refreshQueued = false; if (!disposed && active.value) await refresh() } }
 }
-const poll = async () => { await refresh(); if (!disposed) timer = setTimeout(poll, 3000) }
+const stopPolling = () => { ++pollGeneration; polling = false; clearTimeout(timer); timer = undefined; refreshQueued = false }
+const poll = async () => {
+  if (disposed || !active.value || polling || timer !== undefined) return
+  polling = true
+  const cycle = pollGeneration
+  try { await refresh() }
+  finally {
+    if (cycle === pollGeneration) {
+      polling = false
+      if (!disposed && active.value) timer = setTimeout(() => { timer = undefined; return poll() }, 3000)
+    }
+  }
+}
 const checkChannels = async () => {
   if (checking.value || disposed) return
   checking.value = true
@@ -216,7 +230,7 @@ const install = async () => {
   await prepareInstallation(intent)
 }
 const createTask = async (intent: PendingInstall) => {
-  if (!validOwner(intent) || posting.value || uncertain.value || activeTask.value) return
+  if (!active.value || !validOwner(intent) || posting.value || uncertain.value || activeTask.value) return
   posting.value = true
   previousTaskID = task.value?.id || ''
   try {
@@ -237,5 +251,11 @@ const createTask = async (intent: PendingInstall) => {
 const syncStatic = async () => { syncing.value = true; try { const body: any = await postRequest('version/static-sync', {}, { credentials: 'include', silent: true }); if (body?.code !== 1) throw new Error(); toast.add({ title: body.msg || '静态资源已同步', color: 'green' }) } catch { toast.add({ title: '静态资源同步失败', color: 'red' }) } finally { syncing.value = false } }
 watch(account, () => { ++generation; clearPreparation(); preparationError.value = ''; token.value = ''; guide.value = ''; selected.value = ''; task.value = null; channels.value = []; executor.value = null; installation.value.available = false; uncertain.value = false; previousTaskID = ''; rejection.value = ''; error.value = ''; Object.assign(installed, { version: '', revision: '', build_identity: '' }); instanceID.value = ''; void checkChannels(); void refresh() })
 onMounted(() => { void checkChannels(); void poll(); void getRequest<any>('version/runtime', undefined, { credentials: 'include', silent: true }).then(body => { if (!disposed && body?.code === 1) staticSync.value = !body.data?.isContainer }) })
-onUnmounted(() => { disposed = true; ++generation; clearPreparation(); clearTimeout(timer); token.value = '' })
+onActivated(() => { active.value = true; void poll() })
+onDeactivated(() => {
+  active.value = false; stopPolling()
+  if (preparing.value || selected.value) failPreparation('已离开版本面板，取消本次安装准备；返回后请重新确认，检查结果不会自动创建安装任务')
+  selected.value = ''; target.value = {}; draftConfirmed.value = false
+})
+onUnmounted(() => { disposed = true; active.value = false; ++generation; clearPreparation(); stopPolling(); token.value = '' })
 </script>

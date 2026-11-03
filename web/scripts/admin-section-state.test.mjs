@@ -411,6 +411,82 @@ function versionPanel(options = {}) {
   })
 }
 
+test('version KeepAlive pauses polling and resumes a single loop across repeated activation', async () => {
+  const panel = versionPanel()
+  await panel.mount()
+  await panel.activate()
+  assert.deepEqual([...panel.timerDelays.values()], [3000])
+  const reads = panel.gets.length
+  await panel.activate()
+  assert.equal(panel.gets.length, reads)
+  await panel.deactivate()
+  assert.equal(panel.timers.size, 0)
+  await panel.refresh()
+  assert.equal(panel.gets.length, reads)
+  await panel.activate()
+  await panel.activate()
+  assert.equal(panel.gets.length, reads + 1)
+  assert.deepEqual([...panel.timerDelays.values()], [3000])
+  await panel.fireTimer([...panel.timers.keys()][0])
+  assert.equal(panel.gets.length, reads + 2)
+  assert.deepEqual([...panel.timerDelays.values()], [3000])
+  panel.dispose()
+  assert.equal(panel.timers.size, 0)
+})
+
+test('version late poll cannot restart a hidden loop or duplicate a resumed loop', async () => {
+  for (const resumeBeforeReply of [false, true]) {
+    const reply = deferred()
+    const panel = versionPanel({ get: () => reply.promise })
+    const polling = panel.poll()
+    await panel.deactivate()
+    if (resumeBeforeReply) { await panel.activate(); await panel.activate() }
+    reply.resolve({ code: 1, data: { installation: versionExpired } })
+    await polling
+    await flush()
+    assert.equal(panel.timers.size, resumeBeforeReply ? 1 : 0)
+    if (!resumeBeforeReply) await panel.activate()
+    assert.deepEqual([...panel.timerDelays.values()], [3000])
+    const reads = panel.gets.length
+    await panel.fireTimer([...panel.timers.keys()][0])
+    assert.equal(panel.gets.length, reads + 1)
+    assert.equal(panel.timers.size, 1)
+    panel.dispose()
+  }
+})
+
+test('version leaving an installation dialog requires fresh confirmation and retains feedback', async () => {
+  const panel = versionPanel()
+  panel.confirm()
+  await panel.deactivate()
+  assert.equal(panel.selected.value, '')
+  assert.equal(panel.draftConfirmed.value, false)
+  assert.equal(panel.canPrepare.value, false)
+  await panel.activate()
+  await panel.install()
+  assert.equal(panel.posts.length, 0)
+  assert.match(panel.preparationError.value, /已离开版本面板.*重新确认/)
+  panel.dispose()
+})
+
+test('version a successful in-flight preparation check cannot install after deactivation', async () => {
+  const reply = deferred()
+  const panel = versionPanel({ get: () => reply.promise })
+  panel.confirm()
+  await panel.install()
+  const polling = panel.poll()
+  await panel.deactivate()
+  reply.resolve({ code: 1, data: { installation: versionAvailable, executor: { id: 7, checked_at: versionRequestedAt, check_ok: true }, preparation: { credential_id: 7 } } })
+  await polling
+  assert.equal(panel.timers.size, 0)
+  assert.equal(panel.taskPosts().length, 0)
+  await panel.activate()
+  assert.equal(panel.taskPosts().length, 0)
+  assert.equal(panel.pendingInstall.value, null)
+  assert.match(panel.preparationError.value, /已离开版本面板/)
+  panel.dispose()
+})
+
 test('version permits expired checks but requires draft confirmation before any prepare or task request', async () => {
   const panel = versionPanel()
   assert.equal(panel.canInstall('edge'), true)
@@ -526,9 +602,9 @@ test('version completed failure, hard conditions, credential changes and competi
   }
 })
 
-test('version cancellation, deadline, disposal and account switch discard both late POST and late state success', async () => {
+test('version cancellation, deadline, deactivation, disposal and account switch discard both late POST and late state success', async () => {
   for (const phase of ['awaiting-post', 'awaiting-check']) {
-    for (const action of ['cancel', 'deadline', 'dispose', 'account']) {
+    for (const action of ['cancel', 'deadline', 'deactivate', 'dispose', 'account']) {
       const request = deferred()
       const panel = versionPanel({ post: path => path === 'updates/prepare' ? request.promise : { code: 1, data: { id: 'unexpected', status: 'pending' } } })
       panel.confirm()
@@ -542,10 +618,18 @@ test('version cancellation, deadline, disposal and account switch discard both l
         await panel.fireTimer(timer)
         assert.match(panel.preparationError.value, /90 秒/)
       }
+      if (action === 'deactivate') {
+        await panel.deactivate()
+        assert.match(panel.preparationError.value, /已离开版本面板.*不会自动创建安装任务/)
+      }
       if (action === 'dispose') panel.dispose()
       if (action === 'account') { panel.account.value = '2'; await flush() }
       if (phase === 'awaiting-post') { request.resolve({ code: 1, data: { credential_id: 7, requested_at: versionRequestedAt, installation: versionAvailable, wake_status: 'not_needed' } }); await installing }
       await panel.report({ installation: versionAvailable, executor: { id: 7, checked_at: versionRequestedAt, check_ok: true } })
+      if (action === 'deactivate') {
+        await panel.activate()
+        assert.match(panel.preparationError.value, /已离开版本面板/)
+      }
       assert.equal(panel.taskPosts().length, 0, `${phase}/${action} must never create a task`)
       assert.equal(panel.preparing.value, false)
       assert.equal(panel.preparationAttempt.value, null)

@@ -35,14 +35,14 @@ assert.doesNotMatch(
 
 assert.match(
   messageList,
-  /const\s+messageId\s*=\s*getMessageIdFromRouteHash\(route\.hash\)[\s\S]*?if\s*\(messageId\)\s*\{[\s\S]*?(?:fetch\(`\$\{BASE_API\}\/messages\/\$\{messageId\}`|getRequest<any>\(`messages\/\$\{messageId\}`)/,
+  /const loadRoute = async \(\) => \{[\s\S]*?const messageId = getMessageIdFromRouteHash\(route\.hash\)[\s\S]*?if \(!messageId\) \{\s*await refreshList\(\)\s*return\s*\}[\s\S]*?getRequest<any>\(`messages\/\$\{messageId\}`/,
   'initial load must fetch a single message only when the hash is a strict message hash'
 )
 
 assert.match(
   messageList,
-  /watch\(\(\) => route\.hash,\s*async\s*\(newHash, oldHash\) => \{[\s\S]*?const\s+messageId\s*=\s*getMessageIdFromRouteHash\(newHash\)[\s\S]*?if\s*\(!messageId\)\s*\{/,
-  'hash watcher must refresh the list for stale media hashes instead of fetching them as message ids'
+  /watch\(\[[\s\S]*?\(\) => getMessageIdFromRouteHash\(route\.hash\),[\s\S]*?\], loadRoute\)/,
+  'watch the parsed message id so leaving detail restores the list and unrelated media hashes do not reload it'
 )
 
 assert.match(

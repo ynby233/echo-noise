@@ -70,8 +70,13 @@ for (const handler of ['switchActiveTab', 'handleCalendarDateSelect', 'handleSea
 }
 assert.match(
   messageList,
-  /watch\(\(\) => route\.hash,\s*async\s*\(newHash, oldHash\)[\s\S]*?getMessageIdFromRouteHash\(oldHash\)[\s\S]*?await refreshList\(\)/,
+  /const loadRoute = async \(\) => \{[\s\S]*?const messageId = getMessageIdFromRouteHash\(route\.hash\)[\s\S]*?if \(!messageId\) \{\s*await refreshList\(\)\s*return/,
   'leaving a message deep link must restore the normal list rather than keeping the single-message snapshot',
+)
+assert.match(
+  messageList,
+  /watch\(\[[\s\S]*?\(\) => getMessageIdFromRouteHash\(route\.hash\),[\s\S]*?\], loadRoute\)/,
+  'changes to the parsed message id must invoke the shared route loader',
 )
 
 console.log('information feed refresh/link/routing contract passed')

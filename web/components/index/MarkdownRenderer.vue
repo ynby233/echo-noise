@@ -2,7 +2,7 @@
 media, attachment, table and task enhancers. Every mounted enhancer is disposed
 before the root or content identity is replaced. -->
 <template>
-  <div ref="previewElement" :class="['markdown-preview', { 'markdown-preview--inherit-font': props.inheritFont }]" :data-task-list-editable="props.taskListEditable ? 'true' : 'false'"></div>
+  <div ref="previewElement" :class="['markdown-preview', { 'markdown-preview--inherit-font': props.inheritFont, 'markdown-preview--bounded': props.boundedRendering }]" :data-task-list-editable="props.taskListEditable ? 'true' : 'false'"></div>
   <div v-if="previewLoadFailed" role="alert" class="markdown-load-error">
     正文排版加载失败，已显示文本。
     <button type="button" class="nw-action-btn" @click="renderMarkdown(props.content)">重试</button>
@@ -45,6 +45,7 @@ import { createRenderedTaskListEnhancer } from '~/utils/rendered-task-list'
 import { createRenderedTableDialog } from '~/utils/rendered-table-dialog'
 import { applyImageLoadingPlaceholders, applyRenderedMediaLayout } from '~/utils/rendered-media-layout'
 import { applyAttachmentRenders, applyDeletedAttachmentPlaceholders, escapeRenderedHtml, isAudioAttachmentUrl, isVideoAttachmentUrl, replaceNodeWithHtml } from '~/utils/rendered-attachment'
+import { createWindowedMarkdownBody, isMarkdownBodyNearViewport } from '~/utils/windowed-markdown-body'
 
 // 定义正则表达式
 const BILIBILI_REG = /https:\/\/www\.bilibili\.com\/video\/(BV[\w]+)\/?(?:\?[^\s<)]*)?/g;
@@ -70,6 +71,12 @@ const previewLoadFailed = ref(false)
 let renderSequence = 0
 let zoom: any = null;
 let themeClassObserver: MutationObserver | null = null
+let bodyWindow: ReturnType<typeof createWindowedMarkdownBody> | null = null
+let bodyNearViewport = true
+let bodyNeedsRender = false
+let bodyRendering = false
+let bodyEnhancersMounted = false
+let mediaLayoutTimer: ReturnType<typeof setTimeout> | null = null
 // 添加 window 类型声明
 declare global {
   interface Window {
@@ -104,6 +111,10 @@ const props = defineProps({
     default: false,
   },
   inheritFont: {
+    type: Boolean,
+    default: false,
+  },
+  boundedRendering: {
     type: Boolean,
     default: false,
   },
@@ -533,6 +544,20 @@ const renderMarkdown = async (markdown: string) => {
   if (!previewElement.value) return;
   const sequence = ++renderSequence
   const renderRoot = previewElement.value
+  bodyWindow?.restore()
+  if (props.boundedRendering && !bodyNearViewport && !bodyRendering) {
+    releaseBodyEnhancers()
+    bodyNeedsRender = true
+    previewElement.value.textContent = markdown
+    previewElement.value.dataset.markdownPending = 'true'
+    applyThemeClass()
+    emit('rendered')
+    return
+  }
+  bodyNeedsRender = false
+  bodyRendering = true
+  delete previewElement.value.dataset.markdownPending
+  mountBodyEnhancers()
   previewLoadFailed.value = false
   destroyAttachmentAudioPlayers(previewElement.value)
 
@@ -601,7 +626,9 @@ const renderMarkdown = async (markdown: string) => {
             }
           });
           if (props.enableGithubCard && previewElement.value) {
-            void enhanceGitHubCards(previewElement.value).then(() => emit('rendered'))
+            void enhanceGitHubCards(previewElement.value).then(() => {
+              if (sequence === renderSequence && previewElement.value === renderRoot) emit('rendered')
+            })
           }
           markMarkdownPreservedBlankLineElements(previewElement.value)
           applyAttachmentRenders(previewElement.value, String(BASE_API || '/api'))
@@ -629,11 +656,13 @@ const renderMarkdown = async (markdown: string) => {
             }
           });
           await enhanceDouyinShortLinks()
+          if (sequence !== renderSequence || previewElement.value !== renderRoot) return
           applyDouyinVideoLayout()
           applyClickableTags()
           taskLists.update()
           renderedTables.update()
           await nextTick()
+          if (sequence !== renderSequence || previewElement.value !== renderRoot) return
           taskLists.update()
           
           // Explicitly handle existing video tags (e.g. from raw HTML or markdown)
@@ -678,11 +707,14 @@ const renderMarkdown = async (markdown: string) => {
           applyDeletedAttachmentPlaceholders(previewElement.value, String(BASE_API || '/api'));
           applyRenderedMediaLayout(previewElement.value, keepImagesFullSize);
           applyDouyinVideoLayout()
-          setTimeout(() => {
-            applyDouyinVideoLayout()
+          if (mediaLayoutTimer) clearTimeout(mediaLayoutTimer)
+          mediaLayoutTimer = setTimeout(() => {
+            mediaLayoutTimer = null
+            if (sequence === renderSequence && previewElement.value === renderRoot) applyDouyinVideoLayout()
           }, 80)
           initializeMediaViewer();
-          if (previewElement.value) void enhanceMetingPlayers(previewElement.value)
+          if (previewElement.value) void enhanceMetingPlayers(previewElement.value,
+            () => sequence === renderSequence && previewElement.value === renderRoot)
           applyImageLoadingPlaceholders(previewElement.value);
           emit('rendered');
           const proc = (window as any).processNMPv2Shortcodes
@@ -692,6 +724,11 @@ const renderMarkdown = async (markdown: string) => {
 
         } catch (err) {
           console.error('Markdown post-processing failed:', err)
+        } finally {
+          if (sequence === renderSequence && previewElement.value === renderRoot) {
+            bodyRendering = false
+            bodyWindow?.refresh()
+          }
         }
       }
     });
@@ -700,6 +737,7 @@ const renderMarkdown = async (markdown: string) => {
     console.error("Error rendering markdown:", error);
     previewLoadFailed.value = true
     renderPlainFallback(markdown ?? '')
+    bodyRendering = false
   }
 };
 watch(
@@ -715,9 +753,10 @@ watch(
   () => taskLists.update()
 );
 
-onMounted(() => {
-  renderMarkdown(props.content);
-  applyThemeClass();
+const mountBodyEnhancers = () => {
+  if (bodyEnhancersMounted) return
+  bodyEnhancersMounted = true
+  applyThemeClass()
   try {
     themeClassObserver = new MutationObserver(() => applyThemeClass())
     themeClassObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
@@ -725,31 +764,66 @@ onMounted(() => {
   previewElement.value?.addEventListener('click', onPreviewClick)
   taskLists.mount()
   renderedTables.mount()
-  try {
-    window.addEventListener('resize', applyDouyinVideoLayout, { passive: true })
-  } catch {}
-});
+  window.addEventListener('resize', applyDouyinVideoLayout, { passive: true })
+}
 
-
-onBeforeUnmount(() => {
-  renderSequence++
+const releaseBodyEnhancers = () => {
+  bodyEnhancersMounted = false
+  if (mediaLayoutTimer) clearTimeout(mediaLayoutTimer)
+  mediaLayoutTimer = null
   if (previewElement.value) unbindMediaFancybox(previewElement.value)
   if (previewElement.value) destroyAttachmentAudioPlayers(previewElement.value)
   if (zoom) {
-    zoom.detach();
-    zoom = null;
+    zoom.detach()
+    zoom = null
   }
   previewElement.value?.removeEventListener('click', onPreviewClick)
   taskLists.dispose()
   renderedTables.dispose()
-  try {
-    window.removeEventListener('resize', applyDouyinVideoLayout)
-  } catch {}
-  if (themeClassObserver) {
-    themeClassObserver.disconnect()
-    themeClassObserver = null
-  }
-});
+  window.removeEventListener('resize', applyDouyinVideoLayout)
+  themeClassObserver?.disconnect()
+  themeClassObserver = null
+}
+
+const configureBodyWindow = () => {
+  bodyWindow?.dispose()
+  bodyWindow = null
+  bodyNearViewport = true
+  if (!previewElement.value || !props.boundedRendering) return
+  bodyNearViewport = isMarkdownBodyNearViewport(previewElement.value)
+  bodyWindow = createWindowedMarkdownBody(previewElement.value, {
+    canRelease: () => !bodyRendering && !bodyNeedsRender && !previewLoadFailed.value
+      && !showRenderedTableExpandDialog.value && !renderedTableExpandClosing.value,
+    onRelease: releaseBodyEnhancers,
+    onRestore: () => {
+      mountBodyEnhancers()
+      applyThemeClass()
+      emit('rendered')
+    },
+    onNearChange: (visible) => {
+      bodyNearViewport = visible
+      if (visible && bodyNeedsRender) void renderMarkdown(props.content)
+    },
+  })
+  if (!bodyWindow.supported) bodyNearViewport = true
+}
+
+onMounted(() => {
+  configureBodyWindow()
+  void renderMarkdown(props.content)
+})
+
+watch(() => props.boundedRendering, () => {
+  configureBodyWindow()
+  if (bodyNeedsRender && bodyNearViewport) void renderMarkdown(props.content)
+})
+
+onBeforeUnmount(() => {
+  renderSequence++
+  bodyWindow?.dispose(false)
+  bodyWindow = null
+  releaseBodyEnhancers()
+})
 
 watch(() => contentTheme && contentTheme.value, () => {
   // 只应用主题类，不重新渲染内容，避免重新加载
@@ -834,6 +908,16 @@ watch(() => props.enableGithubCard, () => {
 </script>
 
 <style>
+.markdown-preview--bounded {
+  display: flow-root;
+}
+
+.markdown-preview[data-markdown-pending="true"] {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  min-height: 1.6em;
+}
+
 /*
  * Vditor.preview() 会给容器打上 .vditor-reset，而 vditor/dist/index.css 里 .vditor-reset 带
  * overflow:auto。滚动容器一律在 padding box 处裁剪，附件卡片与失败占位块的外阴影因此被贴边切掉；

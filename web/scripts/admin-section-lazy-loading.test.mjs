@@ -18,7 +18,10 @@ for (const [key, file] of [
   )
 }
 
-assert.match(panel, /adminSectionLoaders\[activeSection\.value\]/, 'the shell must resolve only the active section loader')
+assert.match(panel, /adminSectionLoaders\[activeSection\.value\]/, 'the selected section must still resolve through a dynamic loader')
+assert.match(panel, /accessibleSectionKeys\.value\.filter/, 'entry prewarming must use permission-filtered section keys')
+assert.match(panel, /sectionModuleCache\.load\(loader\)/, 'prewarming must load code through the session cache')
+assert.match(panel, /:module-cache="sectionModuleCache"/, 'the host must share successful warm imports')
 assert.doesNotMatch(panel, /import\s+StorageSection\s+from/, 'the shell must not eagerly import storage')
 assert.doesNotMatch(panel, /import\s+DatabaseSection\s+from/, 'the shell must not eagerly import database')
 

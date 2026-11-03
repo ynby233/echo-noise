@@ -2,10 +2,10 @@
 retry UI. The loaded section owns its form state and cleanup. -->
 <template>
   <div class="admin-section-host">
-    <div v-if="state === 'loading'" class="admin-section-loading" aria-live="polite">
-      <UIcon name="i-heroicons-arrow-path" class="h-5 w-5 animate-spin" />
-      <span>正在加载面板…</span>
-    </div>
+    <section v-if="state === 'loading'" class="admin-section-pending" :class="$attrs['admin-panel-card-class']" aria-busy="true">
+      <h2 class="px-4 pt-4 text-lg font-semibold">{{ sectionTitle }}</h2>
+      <p class="px-4 py-3 text-sm" role="status">正在准备配置界面…</p>
+    </section>
     <div v-else-if="state === 'error'" class="admin-section-load-error" role="alert">
       <UIcon name="i-heroicons-exclamation-triangle" class="h-5 w-5" />
       <span>{{ errorMessage }}</span>
@@ -21,11 +21,12 @@ retry UI. The loaded section owns its form state and cleanup. -->
 </template>
 
 <script setup lang="ts">
-import { markRaw, ref, watch, type Component } from 'vue'
+import { markRaw, onUnmounted, ref, watch, type Component } from 'vue'
 import type { AdminSectionLoader } from './registry'
+import type { AdminSectionModuleCache } from './module-cache'
 
 defineOptions({ inheritAttrs: false })
-const props = defineProps<{ loader: AdminSectionLoader }>()
+const props = defineProps<{ loader: AdminSectionLoader, moduleCache: AdminSectionModuleCache, sectionTitle: string }>()
 defineEmits<{ 'restore-success': [] }>()
 
 const resolvedComponent = ref<Component | null>(null)
@@ -35,10 +36,16 @@ let loadSequence = 0
 
 const load = async () => {
   const sequence = ++loadSequence
+  const cached = props.moduleCache.get(props.loader)
+  if (cached) {
+    resolvedComponent.value = markRaw(cached.default)
+    state.value = 'ready'
+    return
+  }
   state.value = 'loading'
   errorMessage.value = '面板加载失败，请重试。'
   try {
-    const sectionModule = await props.loader()
+    const sectionModule = await props.moduleCache.load(props.loader)
     if (sequence !== loadSequence) return
     resolvedComponent.value = markRaw(sectionModule.default)
     state.value = 'ready'
@@ -51,10 +58,10 @@ const load = async () => {
 }
 
 watch(() => props.loader, load, { immediate: true })
+onUnmounted(() => { ++loadSequence })
 </script>
 
 <style scoped>
-.admin-section-loading,
 .admin-section-load-error {
   min-height: 14rem;
   display: flex;
