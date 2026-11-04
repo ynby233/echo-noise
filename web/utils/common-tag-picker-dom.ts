@@ -169,6 +169,8 @@ export const commonTagCaretRect = (selection: CommonTagSelection): DOMRect => {
   const marker = doc.createElement('span')
   const rect = editor.getBoundingClientRect()
   const computed = doc.defaultView!.getComputedStyle(editor)
+  const bodyZoom = Number.parseFloat(doc.defaultView!.getComputedStyle(doc.body).zoom || '1')
+  const scale = Number.isFinite(bodyZoom) && bodyZoom > 0 ? bodyZoom : 1
   for (const property of [
     'box-sizing', 'font-family', 'font-size', 'font-weight', 'font-style', 'line-height',
     'letter-spacing', 'text-transform', 'text-indent', 'text-align', 'word-spacing', 'tab-size',
@@ -176,8 +178,8 @@ export const commonTagCaretRect = (selection: CommonTagSelection): DOMRect => {
     'border-top-width', 'border-right-width', 'border-bottom-width', 'border-left-width', 'border-style'
   ]) mirror.style.setProperty(property, computed.getPropertyValue(property))
   Object.assign(mirror.style, {
-    position: 'fixed', left: `${rect.left}px`, top: `${rect.top}px`,
-    width: `${rect.width}px`, height: `${rect.height}px`, visibility: 'hidden',
+    position: 'fixed', left: `${rect.left / scale}px`, top: `${rect.top / scale}px`,
+    width: `${rect.width / scale}px`, height: `${rect.height / scale}px`, visibility: 'hidden',
     overflow: 'hidden', whiteSpace: 'pre-wrap', overflowWrap: 'break-word', pointerEvents: 'none'
   })
   mirror.setAttribute('aria-hidden', 'true')

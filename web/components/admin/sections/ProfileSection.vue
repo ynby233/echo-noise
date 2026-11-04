@@ -2,64 +2,57 @@
   <section id="user-section" :class="adminShellCardClass">
     <AdminModuleHeader title="用户信息配置" icon="i-heroicons-user-circle" description="管理账号资料、登录密码与个人访问凭据。" :theme="theme" />
     <div class="admin-profile-grid">
-      <div class="admin-profile-column">
-        <h3 class="admin-column-title">个人资料</h3>
-        <div class="admin-setting-block admin-profile-card admin-profile-card--username">
-          <div class="admin-setting-heading">
-            <div><div class="admin-setting-title" :class="theme.text">用户名</div><p class="admin-setting-desc" :class="theme.mutedText">登录名与后台展示名保持一致，修改后立即生效。</p></div>
-            <div class="flex flex-wrap items-center justify-end gap-2"><UBadge color="primary" variant="soft" class="admin-badge">{{ userStore.user?.username || '未设置' }}</UBadge><UButton size="sm" color="primary" class="admin-action" @click="updateUsername">保存用户名</UButton></div>
-          </div>
-          <UInput v-model="form.username" :placeholder="userStore.user?.username || '输入用户名'" class="admin-input w-full" />
+      <div class="admin-setting-block admin-profile-card admin-profile-card--username">
+        <div class="admin-setting-heading">
+          <div><div class="admin-setting-title" :class="theme.text">用户名</div><p class="admin-setting-desc" :class="theme.mutedText">登录名与后台展示名保持一致，修改后立即生效。</p></div>
+          <div class="flex flex-wrap items-center justify-end gap-2"><UBadge color="primary" variant="soft" class="admin-badge">{{ userStore.user?.username || '未设置' }}</UBadge><UButton size="sm" color="primary" class="admin-action" @click="updateUsername">保存用户名</UButton></div>
         </div>
+        <UInput v-model="form.username" :placeholder="userStore.user?.username || '输入用户名'" class="admin-input w-full" />
+      </div>
 
-        <div class="admin-setting-block admin-profile-card admin-profile-card--avatar">
-          <div class="admin-setting-heading">
-            <div><div class="admin-setting-title" :class="theme.text">头像</div><p class="admin-setting-desc" :class="theme.mutedText">上传图片会进入裁剪流程，也可以直接填写远程链接。</p></div>
-            <img :src="avatarSrc" class="w-12 h-12 rounded-full object-cover ring-2 ring-indigo-400/20" alt="avatar" @error="onAvatarImgError" />
-          </div>
-          <div class="flex flex-wrap items-center gap-2">
-            <UButton size="sm" color="primary" variant="soft" class="admin-action" @click.stop="chooseAvatar">上传头像</UButton>
-            <UButton size="sm" color="orange" variant="soft" class="admin-action" :loading="avatarApplyingDefault" @click.stop="useSiteDefaultAvatar">使用站点默认头像</UButton>
-          </div>
-          <input ref="avatarInput" type="file" accept="image/*" class="hidden" @change="onAvatarFileChange" />
-          <div class="flex flex-col md:flex-row items-stretch gap-2 w-full"><UInput v-model="avatarLink" placeholder="头像链接（http 或 /api 开头）" class="admin-input flex-1" /><UButton size="sm" color="primary" class="admin-action" :loading="avatarUploadingLink" @click.stop="saveAvatarLink">保存链接</UButton></div>
-          <ImageCropperModal v-model="cropperOpen" :src="cropImageUrl" title="裁剪头像" :aspect-ratio="1" :output-width="400" @confirm="uploadCroppedAvatar" />
+      <div class="admin-setting-block admin-profile-card admin-profile-card--avatar">
+        <div class="admin-setting-heading">
+          <div><div class="admin-setting-title" :class="theme.text">头像</div><p class="admin-setting-desc" :class="theme.mutedText">上传图片会进入裁剪流程，也可以直接填写远程链接。</p></div>
+          <img :src="avatarSrc" class="w-12 h-12 rounded-full object-cover ring-2 ring-indigo-400/20" alt="avatar" @error="onAvatarImgError" />
         </div>
-
-        <div class="admin-setting-block admin-profile-card admin-profile-card--description">
-          <div class="admin-setting-heading"><div><div class="admin-setting-title" :class="theme.text">个性签名</div><p class="admin-setting-desc" :class="theme.mutedText">展示在个人信息区域，支持多行文本。</p></div><UButton size="sm" color="primary" class="admin-action" @click="updateDescription">保存签名</UButton></div>
-          <UTextarea v-model="form.description" :placeholder="userStore.user?.description || '欢迎访问'" :rows="3" class="admin-textarea w-full admin-description-textarea" />
+        <div class="flex flex-wrap items-center gap-2">
+          <UButton size="sm" color="primary" variant="soft" class="admin-action" @click.stop="chooseAvatar">上传头像</UButton>
+          <UButton size="sm" color="orange" variant="soft" class="admin-action" :loading="avatarApplyingDefault" @click.stop="useSiteDefaultAvatar">使用站点默认头像</UButton>
         </div>
+        <input ref="avatarInput" type="file" accept="image/*" class="hidden" @change="onAvatarFileChange" />
+        <div class="flex flex-col md:flex-row items-stretch gap-2 w-full"><UInput v-model="avatarLink" placeholder="头像链接（http 或 /api 开头）" class="admin-input flex-1" /><UButton size="sm" color="primary" class="admin-action" :loading="avatarUploadingLink" @click.stop="saveAvatarLink">保存链接</UButton></div>
+        <ImageCropperModal v-model="cropperOpen" :src="cropImageUrl" title="裁剪头像" :aspect-ratio="1" :output-width="400" @confirm="uploadCroppedAvatar" />
+      </div>
 
-        <div class="admin-setting-block admin-profile-card admin-profile-card--common-tags">
-          <div class="admin-setting-heading"><div><div class="admin-setting-title" :class="theme.text">常用标签</div><p class="admin-setting-desc" :class="theme.mutedText">仅当前账号可见，用于发布和编辑笔记。每行一个标签，也可用逗号分隔；最多 50 个，每个最多 64 字。不支持标签内的空格、标点或符号，留空保存可清空。</p></div><UButton size="sm" color="primary" class="admin-action" :loading="commonTagsSaving" @click="updateCommonTags">保存常用标签</UButton></div>
-          <UTextarea v-model="commonTagsText" placeholder="生活&#10;工作&#10;阅读" :rows="4" class="admin-textarea w-full" aria-label="常用标签，每行一个" />
+      <div class="admin-setting-block admin-profile-card admin-profile-card--description">
+        <div class="admin-setting-heading"><div><div class="admin-setting-title" :class="theme.text">个性签名</div><p class="admin-setting-desc" :class="theme.mutedText">展示在个人信息区域，支持多行文本。</p></div><UButton size="sm" color="primary" class="admin-action" @click="updateDescription">保存签名</UButton></div>
+        <UTextarea v-model="form.description" :placeholder="userStore.user?.description || '欢迎访问'" :rows="3" class="admin-textarea w-full admin-description-textarea" />
+      </div>
+
+      <div class="admin-setting-block admin-profile-card admin-profile-card--common-tags">
+        <div class="admin-setting-heading"><div><div class="admin-setting-title" :class="theme.text">常用标签</div><p class="admin-setting-desc" :class="theme.mutedText">仅当前账号可见，用于发布和编辑笔记。支持英文逗号（,）、中文逗号（，）或换行分隔；最多 50 个，每个最多 64 字。不支持标签内的空格、标点或符号，留空保存可清空。</p></div><UButton size="sm" color="primary" class="admin-action" :loading="commonTagsSaving" @click="updateCommonTags">保存常用标签</UButton></div>
+        <UTextarea v-model="commonTagsText" placeholder="生活，工作&#10;阅读" :rows="4" class="admin-textarea w-full" aria-label="常用标签，支持英文逗号、中文逗号或换行分隔" />
+      </div>
+      <div class="admin-setting-block admin-profile-card admin-profile-card--password">
+        <div class="admin-setting-heading">
+          <div><div class="admin-setting-title" :class="theme.text">密码设置</div><p class="admin-setting-desc" :class="theme.mutedText">输入当前密码后即可修改新密码，强度需达到中及以上。</p></div>
+          <div class="flex flex-wrap items-center justify-end gap-2"><UBadge class="admin-badge" :color="passwordStrengthColor" variant="soft">{{ passwordStrengthLabel }}</UBadge><UButton size="sm" color="primary" class="admin-action" :disabled="!canSavePassword" @click="updatePassword">保存密码</UButton></div>
+        </div>
+        <div class="admin-password-grid">
+          <div v-for="field in passwordFields" :key="field.key" class="w-full flex items-center gap-2">
+            <UInput v-model="form[field.key]" :type="field.visible.value ? 'text' : 'password'" :placeholder="field.placeholder" class="admin-input flex-1" />
+            <UButton size="sm" class="admin-action" :icon="field.visible.value ? 'i-heroicons-eye' : 'i-heroicons-eye-slash'" color="gray" variant="soft" @click="field.visible.value = !field.visible.value">{{ field.visible.value ? '隐藏' : '显示' }}</UButton>
+          </div>
         </div>
       </div>
 
-      <div class="admin-profile-column">
-        <h3 class="admin-column-title">账号安全与访问</h3>
-        <div class="admin-setting-block admin-profile-card admin-profile-card--password">
-          <div class="admin-setting-heading">
-            <div><div class="admin-setting-title" :class="theme.text">密码设置</div><p class="admin-setting-desc" :class="theme.mutedText">输入当前密码后即可修改新密码，强度需达到中及以上。</p></div>
-            <div class="flex flex-wrap items-center justify-end gap-2"><UBadge class="admin-badge" :color="passwordStrengthColor" variant="soft">{{ passwordStrengthLabel }}</UBadge><UButton size="sm" color="primary" class="admin-action" :disabled="!canSavePassword" @click="updatePassword">保存密码</UButton></div>
-          </div>
-          <div class="admin-password-grid">
-            <div v-for="field in passwordFields" :key="field.key" class="w-full flex items-center gap-2">
-              <UInput v-model="form[field.key]" :type="field.visible.value ? 'text' : 'password'" :placeholder="field.placeholder" class="admin-input flex-1" />
-              <UButton size="sm" class="admin-action" :icon="field.visible.value ? 'i-heroicons-eye' : 'i-heroicons-eye-slash'" color="gray" variant="soft" @click="field.visible.value = !field.visible.value">{{ field.visible.value ? '隐藏' : '显示' }}</UButton>
-            </div>
-          </div>
+      <div class="admin-setting-block admin-profile-card admin-profile-card--token">
+        <div class="admin-setting-heading">
+          <div><div class="admin-setting-title" :class="theme.text">API Token</div><p class="admin-setting-desc" :class="theme.mutedText">供脚本、MCP 等外部工具调用专用接口，权限与当前账号一致；重新生成后旧 Token 立即失效。</p></div>
+          <div class="flex flex-wrap items-center justify-end gap-2"><UBadge color="primary" variant="soft" class="admin-badge">{{ userToken ? '已生成' : '未生成' }}</UBadge><UButton size="sm" color="primary" variant="soft" class="admin-action" :loading="regeneratingToken" @click="regenerateToken">重新生成</UButton></div>
         </div>
-
-        <div class="admin-setting-block admin-profile-card admin-profile-card--token">
-          <div class="admin-setting-heading">
-            <div><div class="admin-setting-title" :class="theme.text">API Token</div><p class="admin-setting-desc" :class="theme.mutedText">供脚本、MCP 等外部工具调用专用接口，权限与当前账号一致；重新生成后旧 Token 立即失效。</p></div>
-            <div class="flex flex-wrap items-center justify-end gap-2"><UBadge color="primary" variant="soft" class="admin-badge">{{ userToken ? '已生成' : '未生成' }}</UBadge><UButton size="sm" color="primary" variant="soft" class="admin-action" :loading="regeneratingToken" @click="regenerateToken">重新生成</UButton></div>
-          </div>
-          <div v-if="userToken" class="flex items-center gap-2 w-full flex-nowrap"><UInput v-model="userToken" :type="showToken ? 'text' : 'password'" readonly class="admin-input font-mono text-sm flex-1 min-w-0" /><UButton size="sm" class="admin-action" color="gray" variant="soft" @click="showToken = !showToken">{{ showToken ? '隐藏' : '显示' }}</UButton><UButton size="sm" class="admin-action" icon="i-heroicons-clipboard" color="gray" variant="soft" @click="copyToken">复制</UButton></div>
-          <p v-else class="admin-setting-desc" :class="theme.mutedText">暂无 Token</p>
-        </div>
+        <div v-if="userToken" class="flex items-center gap-2 w-full flex-nowrap"><UInput v-model="userToken" :type="showToken ? 'text' : 'password'" readonly class="admin-input font-mono text-sm flex-1 min-w-0" /><UButton size="sm" class="admin-action" color="gray" variant="soft" @click="showToken = !showToken">{{ showToken ? '隐藏' : '显示' }}</UButton><UButton size="sm" class="admin-action" icon="i-heroicons-clipboard" color="gray" variant="soft" @click="copyToken">复制</UButton></div>
+        <p v-else class="admin-setting-desc" :class="theme.mutedText">暂无 Token</p>
       </div>
     </div>
   </section>
@@ -95,9 +88,14 @@ const showToken = ref(false)
 const regeneratingToken = ref(false)
 const commonTagsText = ref('')
 const commonTagsSaving = ref(false)
-watch(() => [userStore.user?.userid, userStore.user?.commonTags] as const, () => {
+let commonTagsAccountVersion = 0
+let commonTagsDraftVersion = 0
+watch(commonTagsText, () => { commonTagsDraftVersion++ }, { flush: 'sync' })
+// 同账号资料刷新只更新 store；草稿仅在初始化、账号切换或显式保存成功时回填。
+watch(() => userStore.user?.userid, () => {
+  commonTagsAccountVersion++
   commonTagsText.value = (userStore.user?.commonTags || []).join('\n')
-}, { immediate: true })
+}, { immediate: true, flush: 'sync' })
 const showOldPassword = ref(false)
 const showNewPassword = ref(false)
 const showConfirmPassword = ref(false)
@@ -145,13 +143,18 @@ const updateCommonTags = async () => {
   if (commonTagsSaving.value) return
   const accountID = userStore.user?.userid
   if (!accountID) return
+  const accountVersion = commonTagsAccountVersion
+  const draftVersion = commonTagsDraftVersion
+  const submittedText = commonTagsText.value
   commonTagsSaving.value = true
   try {
-    const commonTags = commonTagsText.value.split(/[\n\r,，]+/).map(tag => tag.trim()).filter(Boolean)
+    const commonTags = submittedText.split(/[\n\r,，]+/).map(tag => tag.trim()).filter(Boolean)
     const response = await putRequest<any>('user/update', { commonTags }, { credentials: 'include' })
+    if (userStore.user?.userid !== accountID || commonTagsAccountVersion !== accountVersion) return
     if (response?.code !== 1) throw new Error(response?.msg || '保存失败')
-    if (userStore.user?.userid === accountID) {
-      userStore.user.commonTags = Array.isArray(response.data?.commonTags) ? response.data.commonTags : []
+    userStore.user.commonTags = Array.isArray(response.data?.commonTags) ? response.data.commonTags : []
+    // 保存期间仍可编辑；旧响应只能规范化本次提交的草稿。
+    if (commonTagsDraftVersion === draftVersion) {
       commonTagsText.value = userStore.user.commonTags.join('\n')
     }
     toast.add({ title: '成功', description: '常用标签已保存', color: 'green' })

@@ -18,11 +18,14 @@
     >
       <UIcon name="i-heroicons-hashtag" class="w-5 h-5" />
     </button>
-    <!-- Stay inside the owning dialog's focus trap; do not Teleport to body. -->
+    <!-- A manual popover escapes transformed/backdrop-filter containing blocks
+         while staying in the dialog's DOM and focus scope. -->
+    <Teleport to="body" :disabled="supportsPopover">
     <div
       v-if="open"
       ref="menuRef"
       :id="menuId"
+      :popover="supportsPopover ? 'manual' : undefined"
       class="floating-control-menu nw-floating-menu common-tag-menu"
       :class="{ 'is-dark': dark }"
       :style="menuStyle"
@@ -50,6 +53,7 @@
       <p v-if="!normalizedTags.length" class="common-tag-empty" role="status">暂未设置常用标签，请前往后台概览设置。</p>
       <p v-else-if="!candidates.length" class="common-tag-empty" role="status">没有匹配的常用标签</p>
     </div>
+    </Teleport>
   </span>
 </template>
 
@@ -85,6 +89,7 @@ const query = ref('')
 const activeIndex = ref(0)
 const menuStyle = ref<Record<string, string>>({})
 const menuId = `common-tag-menu-${getCurrentInstance()!.uid}`
+const supportsPopover = ref(false)
 const normalizedTags = computed(() => normalizeCommonTags(props.tags))
 const candidates = computed(() => filterCommonTags(normalizedTags.value, query.value))
 let savedSelection: CommonTagSelection | null = null
@@ -140,6 +145,9 @@ const revealMenu = () => {
   open.value = true
   void nextTick(() => {
     if (!disposed && open.value) {
+      if (supportsPopover.value && menuRef.value && !menuRef.value.matches(':popover-open')) {
+        menuRef.value.showPopover()
+      }
       positionMenu()
       schedulePosition()
     }
@@ -302,6 +310,7 @@ watch(() => props.getEditor(), (editor, previous) => {
 })
 
 onMounted(() => {
+  supportsPopover.value = typeof HTMLElement.prototype.showPopover === 'function'
   const listen = (target: EventTarget, name: string, handler: EventListener, capture = true) => {
     target.addEventListener(name, handler, capture)
     disposers.push(() => target.removeEventListener(name, handler, capture))
@@ -338,6 +347,8 @@ defineExpose({ close })
 .common-tag-trigger { display: inline-flex; align-items: center; justify-content: center; }
 .common-tag-trigger:disabled { opacity: .45; cursor: not-allowed; }
 .common-tag-menu {
+  margin: 0;
+  inset: auto;
   z-index: 10050;
   width: 220px;
   max-width: calc(100vw - 16px);
