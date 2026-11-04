@@ -299,18 +299,23 @@ func ensureRegistrationVoceChatUser(application *models.RegistrationApplication,
 		exists, err := registrationVoceChatVerify(*application)
 		if err != nil {
 			message := fmt.Sprintf("校验 VoceChat 预创建用户失败: %v", err)
-			application.VoceChatSyncStatus = models.VoceChatSyncStatusPending
 			application.VoceChatSyncError = message
 			_ = repository.UpdateRegistrationApplicationFields(application.ID, map[string]interface{}{
-				"voce_chat_sync_status": models.VoceChatSyncStatusPending,
+				"voce_chat_sync_status": application.VoceChatSyncStatus,
 				"voce_chat_sync_error":  message,
 			})
 			return false, newRegistrationApprovalDeferredError(message)
 		}
 		if exists {
+			application.VoceChatSyncStatus = models.VoceChatSyncStatusCreated
+			application.VoceChatSyncError = ""
+			if strings.TrimSpace(application.VoceChatEmail) == "" {
+				application.VoceChatEmail = strings.TrimSpace(application.VoceChatCandidateEmail)
+			}
 			return true, nil
 		}
 		application.VoceChatUserID = ""
+		application.VoceChatEmail = ""
 		application.VoceChatSyncStatus = models.VoceChatSyncStatusPending
 		application.VoceChatSyncError = "VoceChat 预创建用户不存在，已重新尝试创建"
 	}
@@ -385,7 +390,17 @@ func verifyRegistrationUserWithVoceChat(application models.RegistrationApplicati
 		}
 		return false, err
 	}
-	return user != nil && user.UID > 0, nil
+	expectedEmail := strings.TrimSpace(application.VoceChatEmail)
+	if expectedEmail == "" {
+		expectedEmail = strings.TrimSpace(application.VoceChatCandidateEmail)
+	}
+	if user == nil || user.UID <= 0 {
+		return false, nil
+	}
+	if user.UID != uid || expectedEmail == "" || !strings.EqualFold(strings.TrimSpace(user.Email), expectedEmail) {
+		return false, errors.New("VoceChat 预创建账号与申请绑定信息不一致，暂不能通过审核")
+	}
+	return true, nil
 }
 
 func deleteRegistrationUserWithVoceChat(application models.RegistrationApplication) error {

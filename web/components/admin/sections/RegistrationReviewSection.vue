@@ -5,7 +5,7 @@
     </AdminModuleHeader>
     <div class="px-4 pb-4 admin-page-body">
       <div class="admin-review-controls">
-        <div class="admin-policy-toolbar" :class="theme.subtleBg">
+        <div v-if="can('site_settings.manage')" class="admin-policy-toolbar" :class="theme.subtleBg">
           <div class="flex items-center gap-2" :class="theme.text"><UIcon name="i-heroicons-check-badge" class="w-4 h-4" /><span>自动通过审核</span></div>
           <div class="flex items-center gap-4"><UToggle v-model="autoApprove" /><UButton size="sm" color="primary" class="admin-action" @click="savePolicy">保存</UButton></div>
         </div>
@@ -19,11 +19,11 @@
           <div v-for="app in applications" :key="app.id || app.application_id" class="rounded border p-3 space-y-3" :class="theme.border">
             <div class="grid grid-cols-1 lg:grid-cols-[1.2fr_1fr_1fr_auto] gap-3 lg:items-center">
               <div class="min-w-0"><div class="flex items-center gap-2 flex-wrap"><span class="font-medium truncate" :class="theme.text">{{ app.username }}</span><UBadge class="admin-badge" :color="statusColor(app.status)" variant="soft">{{ statusLabel(app.status) }}</UBadge></div><div class="text-xs mt-1 break-all" :class="theme.mutedText">申请 ID：{{ app.application_id }}</div></div>
-              <div class="text-sm min-w-0"><div :class="theme.mutedText">VoceChat</div><div class="flex items-center gap-2 flex-wrap mt-1"><UBadge class="admin-badge" :color="syncColor(app.voce_chat_sync_status)" variant="soft">{{ syncLabel(app.voce_chat_sync_status) }}</UBadge><span v-if="can('users.view')" class="truncate" :class="theme.text">{{ app.voce_chat_email || '未绑定邮箱' }}</span><span v-else :class="theme.mutedText">需“查看用户”权限</span></div></div>
+              <div class="text-sm min-w-0"><div :class="theme.mutedText">VoceChat</div><div class="flex items-center gap-2 flex-wrap mt-1"><UBadge class="admin-badge" :color="syncColor(app.voce_chat_sync_status)" variant="soft">{{ syncLabel(app.voce_chat_sync_status) }}</UBadge><span v-if="can('users.view')" class="truncate" :class="theme.text">{{ app.voce_chat_email || (app.status === 'pending' ? '待创建并绑定，审核时自动重试' : '未绑定邮箱') }}</span><span v-else :class="theme.mutedText">需“查看用户”权限</span></div></div>
               <div class="text-sm"><div :class="theme.mutedText">提交时间</div><div class="mt-1" :class="theme.text">{{ formatShanghai(app.created_at) || '-' }}</div></div>
-              <div class="flex items-center justify-end gap-2"><UButton class="admin-action" size="sm" color="primary" :disabled="app.status !== 'pending'" :loading="busy[String(app.id)] === 'approve'" @click="review(app, 'approve')">通过</UButton><UButton class="admin-action" size="sm" color="red" variant="soft" :disabled="app.status !== 'pending'" :loading="busy[String(app.id)] === 'reject'" @click="review(app, 'reject')">拒绝</UButton></div>
+              <div v-if="can('registration.review')" class="flex items-center justify-end gap-2"><UButton class="admin-action" size="sm" color="primary" :disabled="app.status !== 'pending'" :loading="busy[String(app.id)] === 'approve'" @click="review(app, 'approve')">通过</UButton><UButton class="admin-action" size="sm" color="red" variant="soft" :disabled="app.status !== 'pending'" :loading="busy[String(app.id)] === 'reject'" @click="review(app, 'reject')">拒绝</UButton></div>
             </div>
-            <UInput class="admin-input" v-model="notes[String(app.id)]" placeholder="审核备注" />
+            <UInput v-if="can('registration.review')" class="admin-input" v-model="notes[String(app.id)]" placeholder="审核备注" />
             <div v-if="app.voce_chat_sync_error" class="text-xs break-all" :class="theme.mutedText">{{ app.voce_chat_sync_error }}</div>
           </div>
         </div>
@@ -94,7 +94,10 @@ const review = async (app: any, action: 'approve' | 'reject') => {
     if (response?.code !== 1) throw new Error(response?.msg || '审核失败')
     useToast().add({ title: `已${verb}注册申请`, color: 'green' })
     await Promise.all([loadApplications(), action === 'approve' ? userStore.getStatus() : Promise.resolve()])
-  } catch (error: any) { useToast().add({ title: '审核失败', description: error?.message, color: 'red' }) }
+  } catch (error: any) {
+    useToast().add({ title: '审核失败', description: error?.message, color: 'red' })
+    await loadApplications()
+  }
   finally { delete busy[key] }
 }
 watch(statusFilter, loadApplications)

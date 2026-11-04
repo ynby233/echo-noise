@@ -52,33 +52,15 @@ func provisionRegistrationUserWithVoceChat(applicationID, username, password str
 		return result
 	}
 
-	client, err := vocechat.NewClient(cfg)
-	if err != nil {
-		result.SyncStatus = models.VoceChatSyncStatusPending
-		result.SyncError = err.Error()
-		return result
-	}
-	tokenManager := vocechat.NewAdminTokenManager(client, cfg)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	apiKey, err := tokenManager.GetToken(ctx)
+	// Share the provisioning recovery path: an earlier attempt may have created
+	// the remote account before its binding could be saved locally. Existing
+	// accounts must pass password verification before they can be reused.
+	provisioned, err := defaultVoceChatProvisioningCreate(ctx, cfg, result.Email, username, password)
 	if err != nil {
-		result.SyncStatus = models.VoceChatSyncStatusPending
-		result.SyncError = err.Error()
-		return result
-	}
-
-	created, err := client.CreateUser(ctx, apiKey, vocechat.CreateUserRequest{
-		Email:    result.Email,
-		Password: password,
-		Name:     strings.TrimSpace(username),
-		Gender:   0,
-		IsAdmin:  false,
-		Language: "zh-CN",
-	})
-	if err != nil {
-		if isVoceChatUserConflict(err) {
+		if isVoceChatUserConflict(err) || errors.Is(err, errVoceChatProvisioningConflict) {
 			result.SyncStatus = models.VoceChatSyncStatusConflicted
 			result.SyncError = "VoceChat 用户名或邮箱已被占用"
 			return result
@@ -87,6 +69,7 @@ func provisionRegistrationUserWithVoceChat(applicationID, username, password str
 		result.SyncError = err.Error()
 		return result
 	}
+	created := provisioned.User
 	if created == nil || created.UID == 0 {
 		result.SyncStatus = models.VoceChatSyncStatusPending
 		result.SyncError = "VoceChat 创建用户未返回有效 UID"
