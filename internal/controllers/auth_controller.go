@@ -293,7 +293,7 @@ func Login(c *gin.Context) {
 	}
 	_ = recordUserLoginAudit(c, user, loginAuditActionLogin)
 
-	c.JSON(http.StatusOK, dto.OK(&safeUser, "登录成功"))
+	c.JSON(http.StatusOK, dto.OK(selfUserResponse(safeUser), "登录成功"))
 }
 
 // 添加登出功能

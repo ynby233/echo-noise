@@ -82,7 +82,7 @@ func UpdateUser(c *gin.Context) {
 
 	safeUser := *user
 	safeUser.Password = ""
-	c.JSON(http.StatusOK, dto.OK(safeUser, models.UpdateUserSuccessMessage))
+	c.JSON(http.StatusOK, dto.OK(selfUserResponse(safeUser), models.UpdateUserSuccessMessage))
 }
 
 func ChangePassword(c *gin.Context) {
@@ -212,7 +212,7 @@ func GetUserInfo(c *gin.Context) {
 	// 返回副本，避免污染缓存中的用户对象。
 	safeUser := *user
 	safeUser.Password = ""
-	c.JSON(http.StatusOK, dto.OK(safeUser, models.QuerySuccessMessage))
+	c.JSON(http.StatusOK, dto.OK(selfUserResponse(safeUser), models.QuerySuccessMessage))
 }
 
 func BindPrimaryAdminVoceChatEmail(c *gin.Context) {

@@ -47,7 +47,7 @@ assert.match(
 
 assert.match(
   loginController,
-  /safeUser\s*:=\s*\*user[\s\S]*?safeUser\.Password\s*=\s*""[\s\S]*?establishLoginSession\(c,\s*user\)[\s\S]*?_\s*=\s*recordUserLoginAudit\(c,\s*user,\s*loginAuditActionLogin\)[\s\S]*?c\.JSON\(http\.StatusOK,\s*dto\.OK\(&safeUser,\s*"登录成功"\)\)/,
+  /safeUser\s*:=\s*\*user[\s\S]*?safeUser\.Password\s*=\s*""[\s\S]*?establishLoginSession\(c,\s*user\)[\s\S]*?_\s*=\s*recordUserLoginAudit\(c,\s*user,\s*loginAuditActionLogin\)[\s\S]*?c\.JSON\(http\.StatusOK,\s*dto\.OK\(selfUserResponse\(safeUser\),\s*"登录成功"\)\)/,
   'successful password login should redact a response copy, save the session, record the login audit, and only then respond'
 )
 

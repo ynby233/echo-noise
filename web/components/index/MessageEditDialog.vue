@@ -47,6 +47,14 @@ MessageList opens/closes it but does not mutate its internal draft. -->
             >
               <UIcon :name="editUploadKind === 'attachment' ? 'i-mdi-loading' : 'i-heroicons-paper-clip'" class="w-5 h-5" :class="{ 'edit-spin': editUploadKind === 'attachment' }" />
             </button>
+            <CommonTagPicker
+              v-if="showEditModal && userStore.isLogin"
+              :tags="userStore.user?.commonTags || []"
+              :get-editor="getEditTextareaElement"
+              :dark="props.isContentDark"
+              :disabled="isSaving"
+              button-class="tb-btn edit-media-button nw-action-btn nw-tooltip-anchor"
+            />
             <div v-if="canChangeVisibility" ref="editVisibilityControlRef" class="visibility-control nw-action-btn nw-action-btn--label nw-tooltip-anchor" :data-tooltip="`可见范围：${editVisibilityLabel}`">
               <UIcon :name="editVisibilityIcon" class="w-5 h-5" />
               <button
@@ -249,6 +257,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRuntimeConfig } from '#imports'
 import { useToast } from '#ui/composables/useToast'
 import AudioRecorder from './AudioRecorderButton.vue'
+import CommonTagPicker from './CommonTagPicker.vue'
 import MarkdownRenderer from './MarkdownRenderer.vue'
 import type { MessageVisibility } from '~/types/models'
 import { createAudioMarkdown, resolveUploadedMediaUrl, uploadMediaFiles } from '~/utils/media-upload'

@@ -5575,6 +5575,7 @@ const insertNormalizedEditorValue = (nextValue: string) => {
 }
 
 const api = {
+  getEditableElement: () => inlineEditorTableAtomicEditor || inlineEditorTableTextarea || getEditorEditableElement(),
   clear: () => {
     preReadyEditorInsertBuffer.clear()
     closeInlineEditorTableTextarea()
@@ -5606,6 +5607,22 @@ const api = {
   },
   insertValue: (val: string) => {
     insertNormalizedEditorValue(normalizeAttachmentInsertValue(val))
+  },
+  replaceSelectionWithText: (value: string) => {
+    const editable = inlineEditorTableAtomicEditor || getEditorEditableElement()
+    const selection = window.getSelection()
+    if (!vditorInstance || !isReady.value || !editable || !selection?.rangeCount) return
+    const range = selection.getRangeAt(0)
+    if (!editable.contains(range.startContainer) || !editable.contains(range.endContainer)) return
+    // Vditor.insertValue collapses selections; native text editing replaces the
+    // trigger and preserves the editor's input handling and undo transaction.
+    if (document.execCommand('insertText', false, value)) {
+      emitEditorValue()
+      return
+    }
+    range.deleteContents()
+    range.collapse(true)
+    insertNormalizedEditorValue(value)
   },
   getValue: (): string => {
     return vditorInstance ? getSafeOutgoingEditorValue() : ''

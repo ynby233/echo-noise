@@ -93,6 +93,7 @@ export interface User {
     VoceChatEmail?: string;
     email_verified?: boolean;
     EmailVerified?: boolean;
+    commonTags?: string[];
     github_id?: string | number;
 }
 

@@ -26,6 +26,7 @@ export const useUserStore = defineStore("userStore", () => {
                 email: u.email ?? u.Email ?? previous.email,
                 voce_chat_email: u.voce_chat_email ?? u.VoceChatEmail ?? previous.voce_chat_email,
                 voce_chat_notification_enabled: u.voce_chat_notification_enabled ?? u.VoceChatNotificationEnabled ?? previous.voce_chat_notification_enabled ?? false,
+                commonTags: previous.commonTags ?? [],
                 total_messages: (newStatus as any).personal_messages ?? previous.total_messages ?? 0
             } as any
             isLogin.value = true
@@ -89,6 +90,7 @@ export const useUserStore = defineStore("userStore", () => {
                 email: u.email ?? u.Email,
                 email_verified: u.email_verified ?? u.EmailVerified,
                 voce_chat_email: u.voce_chat_email ?? u.VoceChatEmail,
+                commonTags: Array.isArray(u.commonTags) ? u.commonTags : [],
                 voce_chat_notification_enabled: u.voce_chat_notification_enabled ?? u.VoceChatNotificationEnabled ?? false
             } as any
             token.value = u.token ?? u.Token ?? token.value
@@ -159,6 +161,7 @@ export const useUserStore = defineStore("userStore", () => {
                 email: u.email ?? u.Email,
                 email_verified: u.email_verified ?? u.EmailVerified,
                 voce_chat_email: u.voce_chat_email ?? u.VoceChatEmail,
+                commonTags: Array.isArray(u.commonTags) ? u.commonTags : [],
                 voce_chat_notification_enabled: u.voce_chat_notification_enabled ?? u.VoceChatNotificationEnabled ?? false
             } as any
             isLogin.value = true;

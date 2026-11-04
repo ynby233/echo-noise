@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -1466,6 +1467,17 @@ func UpdateUser(user *models.User, userdto dto.UserInfoDto) error {
 	}
 
 	updates := make(map[string]interface{})
+	if userdto.CommonTags != nil {
+		tags, err := NormalizeCommonTags(*userdto.CommonTags)
+		if err != nil {
+			return err
+		}
+		encoded, err := json.Marshal(tags)
+		if err != nil {
+			return err
+		}
+		updates["common_tags"] = string(encoded)
+	}
 
 	// 用户名更新
 	if userdto.Username != "" && userdto.Username != user.Username {
@@ -1517,6 +1529,9 @@ func UpdateUser(user *models.User, userdto dto.UserInfoDto) error {
 	}
 	if v, ok := updates["voce_chat_notification_enabled"]; ok && v != nil {
 		user.VoceChatNotificationEnabled = v.(bool)
+	}
+	if v, ok := updates["common_tags"]; ok {
+		user.CommonTags = v.(string)
 	}
 	if err := updatePlainPasswordUserMetadata(user); err != nil {
 		log.Printf("password metadata maintenance failed: user_id=%d trigger=profile_update error_type=%T", user.ID, err)

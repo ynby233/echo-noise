@@ -1,15 +1,16 @@
 package dto
 
 type UserInfoDto struct {
-	Username                    string `json:"username"`
-	Password                    string `json:"password"`
-	AvatarURL                   string `json:"avatar_url"`
-	Description                 string `json:"description"`
-	SiteName                    string `json:"siteName"`
-	Theme                       string `json:"theme"`
-	AllowSignUp                 bool   `json:"allowSignUp"`
-	IsAdmin                     bool   `json:"is_admin"`
-	VoceChatNotificationEnabled *bool  `json:"voce_chat_notification_enabled"`
+	Username                    string    `json:"username"`
+	Password                    string    `json:"password"`
+	AvatarURL                   string    `json:"avatar_url"`
+	Description                 string    `json:"description"`
+	SiteName                    string    `json:"siteName"`
+	Theme                       string    `json:"theme"`
+	AllowSignUp                 bool      `json:"allowSignUp"`
+	IsAdmin                     bool      `json:"is_admin"`
+	VoceChatNotificationEnabled *bool     `json:"voce_chat_notification_enabled"`
+	CommonTags                  *[]string `json:"commonTags"`
 }
 
 // 标签相关 DTO

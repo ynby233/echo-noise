@@ -186,14 +186,16 @@ type PasswordAlertCleanupTask struct {
 }
 
 type User struct {
-	ID                          uint       `gorm:"primaryKey" json:"id"`
-	Username                    string     `gorm:"type:varchar(191);not null;uniqueIndex" json:"username"`
-	Password                    string     `gorm:"type:varchar(191);not null" json:"password"`
-	IsAdmin                     bool       `json:"is_admin"`
-	Token                       string     `gorm:"type:varchar(191)" json:"token"`
-	LoginIssuedAt               *time.Time `gorm:"index" json:"-"`
-	AvatarURL                   string     `gorm:"type:varchar(191)" json:"avatar_url"`
-	Description                 string     `gorm:"type:varchar(191)" json:"description"`
+	ID            uint       `gorm:"primaryKey" json:"id"`
+	Username      string     `gorm:"type:varchar(191);not null;uniqueIndex" json:"username"`
+	Password      string     `gorm:"type:varchar(191);not null" json:"password"`
+	IsAdmin       bool       `json:"is_admin"`
+	Token         string     `gorm:"type:varchar(191)" json:"token"`
+	LoginIssuedAt *time.Time `gorm:"index" json:"-"`
+	AvatarURL     string     `gorm:"type:varchar(191)" json:"avatar_url"`
+	Description   string     `gorm:"type:varchar(191)" json:"description"`
+	// CommonTags is private account configuration; only self-profile responses expose it.
+	CommonTags                  string     `gorm:"type:text" json:"-"`
 	Email                       string     `gorm:"type:varchar(191)" json:"email"`
 	EmailVerified               bool       `json:"email_verified"`
 	EmailPending                string     `gorm:"type:varchar(191)" json:"-"`

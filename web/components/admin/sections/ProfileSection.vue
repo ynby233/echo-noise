@@ -30,6 +30,11 @@
           <div class="admin-setting-heading"><div><div class="admin-setting-title" :class="theme.text">个性签名</div><p class="admin-setting-desc" :class="theme.mutedText">展示在个人信息区域，支持多行文本。</p></div><UButton size="sm" color="primary" class="admin-action" @click="updateDescription">保存签名</UButton></div>
           <UTextarea v-model="form.description" :placeholder="userStore.user?.description || '欢迎访问'" :rows="3" class="admin-textarea w-full admin-description-textarea" />
         </div>
+
+        <div class="admin-setting-block admin-profile-card admin-profile-card--common-tags">
+          <div class="admin-setting-heading"><div><div class="admin-setting-title" :class="theme.text">常用标签</div><p class="admin-setting-desc" :class="theme.mutedText">仅当前账号可见，用于发布和编辑笔记。每行一个标签，也可用逗号分隔；最多 50 个，每个最多 64 字。不支持标签内的空格、标点或符号，留空保存可清空。</p></div><UButton size="sm" color="primary" class="admin-action" :loading="commonTagsSaving" @click="updateCommonTags">保存常用标签</UButton></div>
+          <UTextarea v-model="commonTagsText" placeholder="生活&#10;工作&#10;阅读" :rows="4" class="admin-textarea w-full" aria-label="常用标签，每行一个" />
+        </div>
       </div>
 
       <div class="admin-profile-column">
@@ -88,6 +93,11 @@ const siteDefaultAvatar = ref('/avatar.png')
 const userToken = ref('')
 const showToken = ref(false)
 const regeneratingToken = ref(false)
+const commonTagsText = ref('')
+const commonTagsSaving = ref(false)
+watch(() => [userStore.user?.userid, userStore.user?.commonTags] as const, () => {
+  commonTagsText.value = (userStore.user?.commonTags || []).join('\n')
+}, { immediate: true })
 const showOldPassword = ref(false)
 const showNewPassword = ref(false)
 const showConfirmPassword = ref(false)
@@ -130,6 +140,23 @@ const updateDescription = async () => {
     await userStore.getUser()
     toast.add({ title: '成功', description: '个性签名已更新', color: 'green' })
   } catch (error: any) { toast.add({ title: '错误', description: error.message || '更新失败', color: 'red' }) }
+}
+const updateCommonTags = async () => {
+  if (commonTagsSaving.value) return
+  const accountID = userStore.user?.userid
+  if (!accountID) return
+  commonTagsSaving.value = true
+  try {
+    const commonTags = commonTagsText.value.split(/[\n\r,，]+/).map(tag => tag.trim()).filter(Boolean)
+    const response = await putRequest<any>('user/update', { commonTags }, { credentials: 'include' })
+    if (response?.code !== 1) throw new Error(response?.msg || '保存失败')
+    if (userStore.user?.userid === accountID) {
+      userStore.user.commonTags = Array.isArray(response.data?.commonTags) ? response.data.commonTags : []
+      commonTagsText.value = userStore.user.commonTags.join('\n')
+    }
+    toast.add({ title: '成功', description: '常用标签已保存', color: 'green' })
+  } catch (error: any) { toast.add({ title: '错误', description: error.message || '保存失败', color: 'red' }) }
+  finally { commonTagsSaving.value = false }
 }
 const updatePassword = async () => {
   try {

@@ -29,6 +29,15 @@ the composer is visible; its component owns editor teardown. -->
           <button type="button" class="tb-btn nw-action-btn state-toggle-btn full-image-btn nw-tooltip-anchor" :class="{ 'is-enabled': fullImageAttachments }" :data-tooltip="`全图显示：${fullImageAttachments ? '已开启' : '已关闭'}`" :aria-label="`全图显示：${fullImageAttachments ? '已开启' : '已关闭'}`" :aria-pressed="fullImageAttachments" @click="toggleFullImageAttachments">
             <UIcon :name="fullImageAttachments ? 'i-mdi-image-size-select-actual' : 'i-mdi-image-size-select-large'" class="w-5 h-5" />
           </button>
+          <CommonTagPicker
+            v-if="userStore.isLogin"
+            :tags="userStore.user?.commonTags || []"
+            :get-editor="getCommonTagEditor"
+            :insert-text="insertCommonTagText"
+            :dark="contentTheme === 'dark'"
+            :disabled="isEditorLoading"
+            button-class="tb-btn nw-action-btn nw-tooltip-anchor"
+          />
           <button v-if="canNotify" type="button" class="tb-btn nw-action-btn state-toggle-btn notify-btn nw-tooltip-anchor" :class="{ 'is-enabled': enableNotify }" :data-tooltip="`推送：${enableNotify ? '已开启' : '已关闭'}`" :aria-label="`推送：${enableNotify ? '已开启' : '已关闭'}`" :aria-pressed="enableNotify" @click="toggleNotify">
             <UIcon :name="enableNotify ? 'i-mdi-bell-ring-outline' : 'i-mdi-bell-outline'" class="w-5 h-5" />
           </button>
@@ -254,6 +263,7 @@ const SearchMode = asyncFeature(() => import('./Searchmode.vue'), '搜索')
 import { useMessageStore } from '~/store/message'
 import { useNotifyStore } from '~/store/notify'
 import AudioRecorder from './AudioRecorderButton.vue'
+import CommonTagPicker from './CommonTagPicker.vue'
 const ImageHostingUploader = asyncFeature(() => import('~/components/widgets/ImageHostingUploader.vue'), '图床')
 import { createAudioMarkdown, resolveUploadedMediaUrl, uploadMediaFiles } from '~/utils/media-upload'
 import { encodeMarkdownExtraBlankLines } from '~/utils/markdown-blank-lines'
@@ -407,6 +417,8 @@ const toggleTheme = () => {
 }
 const fileInput = ref<HTMLInputElement | null>(null);
 const vditorEditor = ref<any>(null); // 需要支持 insertValue
+const getCommonTagEditor = (): HTMLElement | null => vditorEditor.value?.getEditableElement?.() || null
+const insertCommonTagText = (text: string) => vditorEditor.value?.replaceSelectionWithText?.(text)
 // 预览跟随内容自动显示，无需手动开关
 
 const DRAFT_KEY = 'addform_draft_v1'
