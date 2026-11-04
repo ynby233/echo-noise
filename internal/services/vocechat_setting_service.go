@@ -68,7 +68,9 @@ func applyVoceChatConfigUpdate(config *models.SiteConfig, raw map[string]interfa
 	if v, ok := raw["baseURL"].(string); ok {
 		config.VoceChatBaseURL = vocechat.NormalizeBaseURL(v)
 	}
-	if v, ok := raw["adminUsername"].(string); ok {
+	if clear, exists := raw["clearAdminUsername"]; exists && parseBoolLike(clear, false) {
+		config.VoceChatAdminUsername = ""
+	} else if v, ok := raw["adminUsername"].(string); ok {
 		config.VoceChatAdminUsername = strings.TrimSpace(v)
 	}
 	applySensitiveStringSetting(raw, "adminPassword", "clearAdminPassword", &config.VoceChatAdminPassword)
@@ -110,7 +112,7 @@ func applyVoceChatConfigUpdate(config *models.SiteConfig, raw map[string]interfa
 		config.VoceChatContactsEnabled = false
 		config.VoceChatNotificationEnabled = false
 	}
-	if strings.TrimSpace(config.VoceChatAdminToken) == "" && strings.TrimSpace(config.VoceChatAdminPassword) != "" && strings.TrimSpace(config.VoceChatAdminUsername) != "" {
+	if strings.TrimSpace(config.VoceChatAdminPassword) != "" && strings.TrimSpace(config.VoceChatAdminUsername) != "" {
 		if !isValidVoceChatAdminEmail(config.VoceChatAdminUsername) {
 			return fmt.Errorf("管理员邮箱格式无效，请填写 VoceChat 管理员邮箱，不要填写显示名")
 		}
@@ -127,6 +129,7 @@ func voceChatHealthAffectingConfigChanged(raw map[string]interface{}, includeLeg
 	for _, key := range []string{
 		"baseURL",
 		"adminUsername",
+		"clearAdminUsername",
 		"adminPassword",
 		"clearAdminPassword",
 		"adminToken",
@@ -179,29 +182,13 @@ func CheckVoceChatHealth(ctx context.Context) (map[string]interface{}, error) {
 		return fail(err)
 	}
 
-	token := strings.TrimSpace(vcConfig.AdminToken)
-	var adminLogin *vocechat.LoginResponse
-	if strings.TrimSpace(vcConfig.AdminUsername) != "" || strings.TrimSpace(vcConfig.AdminPassword) != "" {
-		if strings.TrimSpace(vcConfig.AdminUsername) == "" || strings.TrimSpace(vcConfig.AdminPassword) == "" {
-			return fail(fmt.Errorf("VoceChat 管理员邮箱或密码未配置完整"))
-		}
-		if !isValidVoceChatAdminEmail(vcConfig.AdminUsername) {
-			return fail(fmt.Errorf("管理员邮箱格式无效，请填写 VoceChat 管理员邮箱，不要填写显示名"))
-		}
-		adminLogin, err = client.LoginWithPassword(ctx, vcConfig.AdminUsername, vcConfig.AdminPassword, "echo-noise-health-check")
-		if err != nil {
-			return fail(err)
-		}
-		if adminLogin == nil || strings.TrimSpace(adminLogin.Token) == "" {
-			return fail(fmt.Errorf("VoceChat 管理员登录未返回 token"))
-		}
-		if !adminLogin.User.IsAdmin {
-			return fail(fmt.Errorf("VoceChat 管理员邮箱对应账号不是管理员"))
-		}
-		token = strings.TrimSpace(adminLogin.Token)
+	if strings.TrimSpace(vcConfig.AdminUsername) != "" && strings.TrimSpace(vcConfig.AdminPassword) != "" && !isValidVoceChatAdminEmail(vcConfig.AdminUsername) {
+		return fail(fmt.Errorf("管理员邮箱格式无效，请填写 VoceChat 管理员邮箱，不要填写显示名"))
 	}
-	if token == "" {
-		return fail(fmt.Errorf("VoceChat 管理员凭据未配置"))
+	tokenManager := vocechat.NewAdminTokenManager(client, vcConfig)
+	token, err := tokenManager.GetToken(ctx)
+	if err != nil {
+		return fail(err)
 	}
 	if err := client.CheckHealth(ctx, token); err != nil {
 		return fail(err)

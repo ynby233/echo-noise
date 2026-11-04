@@ -74,7 +74,10 @@ func FromSiteConfig(config models.SiteConfig) Config {
 }
 
 func (c Config) HasAdminCredential() bool {
-	return c.AdminToken != "" || (c.AdminUsername != "" && c.AdminPassword != "")
+	if strings.TrimSpace(c.AdminUsername) != "" || strings.TrimSpace(c.AdminPassword) != "" {
+		return strings.TrimSpace(c.AdminUsername) != "" && strings.TrimSpace(c.AdminPassword) != ""
+	}
+	return strings.TrimSpace(c.AdminToken) != ""
 }
 
 func (c Config) IsReady() bool {

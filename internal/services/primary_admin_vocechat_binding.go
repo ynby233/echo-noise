@@ -39,8 +39,10 @@ func BindPrimaryAdminVoceChatEmail(ctx context.Context, actorUserID uint, email 
 		return nil, errors.New("VoceChat 配置不可用")
 	}
 	vcConfig := vocechat.FromSiteConfig(config)
-	if !vcConfig.IsReady() {
-		return nil, errors.New("VoceChat 当前未启用或管理凭据未配置完整")
+	// Personal binding authenticates the supplied account directly and does not
+	// use the independently configured management credential.
+	if !vcConfig.Enabled || strings.TrimSpace(vcConfig.BaseURL) == "" {
+		return nil, errors.New("VoceChat 当前未启用或服务地址未配置")
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)

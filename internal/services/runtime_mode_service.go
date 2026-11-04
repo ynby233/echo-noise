@@ -136,7 +136,7 @@ func GetRuntimePolicyDiagnostics(actorID uint) (RuntimePolicyDiagnostics, error)
 	if policy.ConfiguredMode == runtimepolicy.ModeLocal {
 		healthSummary = "本地模式不调用 VoceChat"
 	} else if healthStatus == "ok" {
-		healthSummary = "VoceChat 健康检查正常"
+		healthSummary = "最近一次 VoceChat 通信正常；管理权限请通过“检查当前状态”验证"
 	} else if healthStatus == "failed" {
 		healthSummary = "VoceChat 暂时不可用，请检查服务与管理员配置"
 	}

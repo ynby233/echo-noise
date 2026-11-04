@@ -217,6 +217,31 @@ test('registration late running response never restarts polling after deactivati
   assert.equal(panel.runtime.runStatus, 'running')
 })
 
+test('registration explicitly clears stored admin email and password for token-only auth while blank inputs preserve credentials', async () => {
+  const writes = []
+  const panel = component('RegistrationSection', 'load, saveVoceChat, voce, clear', { io: {
+    getRequest: async endpoint => endpoint === 'frontend/config'
+      ? { code: 1, data: { voceChatConfig: { configured: true, adminCredentialConfigured: true, adminUsernameConfiguredValue: 'stored@vc.example' } } }
+      : { code: 1, data: { configured_mode: 'vocechat', runtime_state: 'vocechat_normal' } },
+    putRequest: async (_endpoint, payload) => { writes.push(plain(payload)); return { code: 1 } },
+  } })
+  await panel.load()
+  assert.equal(panel.voce.adminUsername, '', 'stored credentials must not be echoed into the form')
+  await panel.saveVoceChat()
+  assert.equal(writes[0].voceChatConfig.adminUsername, undefined)
+  assert.equal(writes[0].voceChatConfig.clearAdminUsername, undefined)
+  panel.clear.adminUsername = true
+  panel.clear.adminPassword = true
+  panel.voce.adminToken = 'replacement-test-token'
+  await panel.saveVoceChat()
+  assert.equal(writes[1].voceChatConfig.clearAdminUsername, true)
+  assert.equal(writes[1].voceChatConfig.clearAdminPassword, true)
+  assert.equal(writes[1].voceChatConfig.adminToken, 'replacement-test-token')
+  assert.equal(panel.voce.adminToken, '', 'successful save must clear entered credentials')
+  assert.equal(panel.clear.adminUsername, false)
+  panel.dispose()
+})
+
 test('storage initialization and poll response cannot restart a hidden or disposed panel', async () => {
   let request = deferred()
   const panel = component('StorageSection', 'load, refreshLastSyncOnly, lastCloudSyncText, storageEnabled', { io: { fetch: () => request.promise } })

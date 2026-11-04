@@ -35,11 +35,16 @@ func (m *AdminTokenManager) GetToken(ctx context.Context) (string, error) {
 	if m == nil || m.client == nil {
 		return "", errors.New("VoceChat 客户端未初始化")
 	}
-	if token := strings.TrimSpace(m.config.AdminToken); token != "" {
-		return token, nil
+	email := strings.TrimSpace(m.config.AdminUsername)
+	password := strings.TrimSpace(m.config.AdminPassword)
+	if email == "" && password == "" {
+		if token := strings.TrimSpace(m.config.AdminToken); token != "" {
+			return token, nil
+		}
+		return "", errors.New("VoceChat 管理员凭据未配置")
 	}
-	if strings.TrimSpace(m.config.AdminUsername) == "" || strings.TrimSpace(m.config.AdminPassword) == "" {
-		return "", errors.New("VoceChat 管理员账号或密码未配置")
+	if email == "" || password == "" {
+		return "", errors.New("VoceChat 管理员邮箱或密码未配置完整")
 	}
 
 	m.mu.Lock()
@@ -64,6 +69,9 @@ func (m *AdminTokenManager) GetToken(ctx context.Context) (string, error) {
 			return "", fmt.Errorf("VoceChat 管理员邮箱不存在，请填写管理员邮箱而不是显示名: %w", err)
 		}
 		return "", err
+	}
+	if login == nil || !login.User.IsAdmin {
+		return "", errors.New("VoceChat 管理员邮箱对应账号不是管理员")
 	}
 	m.applyLoginToken(login, now)
 	if strings.TrimSpace(m.token) == "" {

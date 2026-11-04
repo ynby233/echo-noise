@@ -27,6 +27,9 @@ func classifyVoceChatFailure(err error) voceChatFailureKind {
 		return voceChatFailureUnexpected
 	}
 	var apiErr *vocechat.APIError
+	if isVoceChatAdminAuthorizationFailure(err) {
+		return voceChatFailureUnexpected
+	}
 	if errors.As(err, &apiErr) {
 		switch apiErr.StatusCode {
 		case http.StatusBadRequest, http.StatusUnauthorized, http.StatusForbidden:
@@ -56,6 +59,15 @@ func classifyVoceChatFailure(err error) voceChatFailureKind {
 		return voceChatFailureTransientSite
 	}
 	return voceChatFailureUnexpected
+}
+
+func isVoceChatAdminAuthorizationFailure(err error) bool {
+	var apiErr *vocechat.APIError
+	if !errors.As(err, &apiErr) || (apiErr.StatusCode != http.StatusUnauthorized && apiErr.StatusCode != http.StatusForbidden) {
+		return false
+	}
+	path := strings.TrimPrefix(apiErr.Path, "/api")
+	return path == "/admin" || strings.HasPrefix(path, "/admin/")
 }
 
 func isVoceChatCredentialRejected(err error) bool {

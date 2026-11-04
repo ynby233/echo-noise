@@ -593,6 +593,8 @@ func currentLocalPasswordMaterial(user *models.User, record vocechat.PlainPasswo
 
 func voceChatProvisioningFailure(err error) voceChatProvisioningOutcome {
 	switch {
+	case isVoceChatAdminAuthorizationFailure(err):
+		return voceChatProvisioningOutcome{Status: models.VoceChatSyncStatusFailed, UserStatus: models.VoceChatSyncStatusFailed, Code: "admin_credential_invalid", Summary: "VoceChat 管理接口鉴权失败，请站长检查管理邮箱、密码或 Token 后重试"}
 	case errors.Is(err, errVoceChatProvisioningPasswordMissing):
 		return voceChatProvisioningOutcome{Status: models.VoceChatSyncStatusPasswordSyncRequired, UserStatus: models.VoceChatSyncStatusPasswordSyncRequired, Code: "password_material_missing", Summary: "缺少可用的当前密码，请由用户或站长重置密码后重试"}
 	case errors.Is(err, errVoceChatProvisioningConflict):

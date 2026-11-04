@@ -67,6 +67,9 @@ func provisionRegistrationUserWithVoceChat(applicationID, username, password str
 		}
 		result.SyncStatus = models.VoceChatSyncStatusPending
 		result.SyncError = err.Error()
+		if isVoceChatAdminAuthorizationFailure(err) {
+			result.SyncError = "VoceChat 管理接口鉴权失败，请检查管理邮箱、密码或 Token 后重试: " + err.Error()
+		}
 		return result
 	}
 	created := provisioned.User

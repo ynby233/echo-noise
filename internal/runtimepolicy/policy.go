@@ -64,7 +64,10 @@ func ConnectionConfigured(config models.SiteConfig) bool {
 	token := strings.TrimSpace(config.VoceChatAdminToken)
 	username := strings.TrimSpace(config.VoceChatAdminUsername)
 	password := strings.TrimSpace(config.VoceChatAdminPassword)
-	return baseURL != "" && (token != "" || (username != "" && password != ""))
+	if username != "" || password != "" {
+		return baseURL != "" && username != "" && password != ""
+	}
+	return baseURL != "" && token != ""
 }
 
 func Resolve(config models.SiteConfig) Policy {
