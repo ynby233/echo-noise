@@ -32,6 +32,7 @@ func registerMusicManagementRoutes(group *gin.RouterGroup, controller *controlle
 
 func registerPublicMusicRoutes(group *gin.RouterGroup, controller *controllers.MusicController) {
 	group.GET("/music/public", controller.Public)
+	group.GET("/music/notes/:id", controller.ResolveNote)
 	group.GET("/music/stream/:trackID", controller.Stream)
 	group.HEAD("/music/stream/:trackID", controller.Stream)
 	group.GET("/music/cover/:trackID", controller.Cover)

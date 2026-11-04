@@ -101,6 +101,9 @@ func UpdateMessage(c *gin.Context) {
 			return
 		}
 	}
+	if req.Content != nil && !validateMessageMusic(c, actorID, message.Content, *req.Content) {
+		return
+	}
 
 	updated, err := services.UpdateMessage(uint(messageID), req.Content, req.Private, req.Visibility, createdAt)
 	if err != nil {
@@ -335,6 +338,9 @@ func PostMessage(c *gin.Context) {
 	user, err := services.GetUserByID(userID.(uint))
 	if err != nil {
 		c.JSON(http.StatusOK, dto.Fail[string]("获取用户信息失败"))
+		return
+	}
+	if !validateMessageMusic(c, user.ID, "", request.Content) {
 		return
 	}
 	var siteCfg models.SiteConfig

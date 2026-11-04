@@ -3,7 +3,7 @@ the composer is visible; its component owns editor teardown. -->
 <template>
   <div :class="containerClass">
 
-    <div class="editor-box">
+    <div ref="editorBoxRef" class="editor-box">
       <VditorEditor ref="vditorEditor" v-model="MessageContent" :theme="contentTheme" @ready="onEditorReady" />
       <div class="editor-toolbar">
         <div class="toolbar-left">
@@ -24,8 +24,9 @@ the composer is visible; its component owns editor teardown. -->
             @insert-cancelled="clearEditorAttachmentInsertTarget"
           />
           <button type="button" class="tb-btn nw-action-btn nw-tooltip-anchor" data-tooltip="上传附件" aria-label="上传附件" @pointerdown="prepareEditorAttachmentInsert" @click="triggerFileInput"><UIcon name="i-heroicons-paper-clip" class="w-5 h-5" /></button>
+          <button v-if="canUploadMusic" type="button" class="tb-btn nw-action-btn nw-tooltip-anchor" data-tooltip="上传音乐" aria-label="上传音乐" :disabled="isEditorLoading || isPublishing" @pointerdown="prepareMusicInsert" @mousedown.prevent @click="openMusicPicker"><UIcon name="i-mdi-music-note-plus" class="w-5 h-5" /></button>
           <!-- 新增图床上传按钮 -->
-          <button type="button" class="tb-btn nw-action-btn nw-tooltip-anchor" data-tooltip="图床上传" aria-label="图床上传" @pointerdown="prepareEditorAttachmentInsert" @click="openImageUploader"><UIcon name="i-mdi-cloud-upload-outline" class="w-5 h-5" /></button>
+          <button type="button" class="tb-btn nw-action-btn nw-tooltip-anchor" data-tooltip="上传图床" aria-label="上传图床" @pointerdown="prepareEditorAttachmentInsert" @click="openImageUploader"><UIcon name="i-mdi-cloud-upload-outline" class="w-5 h-5" /></button>
           <button type="button" class="tb-btn nw-action-btn state-toggle-btn full-image-btn nw-tooltip-anchor" :class="{ 'is-enabled': fullImageAttachments }" :data-tooltip="`全图显示：${fullImageAttachments ? '已开启' : '已关闭'}`" :aria-label="`全图显示：${fullImageAttachments ? '已开启' : '已关闭'}`" :aria-pressed="fullImageAttachments" @click="toggleFullImageAttachments">
             <UIcon :name="fullImageAttachments ? 'i-mdi-image-size-select-actual' : 'i-mdi-image-size-select-large'" class="w-5 h-5" />
           </button>
@@ -102,6 +103,7 @@ the composer is visible; its component owns editor teardown. -->
   @upload-success="handleImageHostingSuccess"
   @update:position="handlePositionUpdate"
 />
+  <MusicTrackPicker v-if="showMusicPicker && canUploadMusic" :key="musicPickerGeneration" @select="handleMusicSelected" @close="closeMusicPicker" />
 
   <Teleport to="body">
     <div
@@ -267,6 +269,10 @@ import CommonTagPicker from './CommonTagPicker.vue'
 const ImageHostingUploader = asyncFeature(() => import('~/components/widgets/ImageHostingUploader.vue'), '图床')
 import { createAudioMarkdown, resolveUploadedMediaUrl, uploadMediaFiles } from '~/utils/media-upload'
 import { encodeMarkdownExtraBlankLines } from '~/utils/markdown-blank-lines'
+import MusicTrackPicker from './MusicTrackPicker.vue'
+import type { MusicPickerTrack } from '~/utils/music-track-picker'
+import { createNoteMusicMarkdown } from '~/utils/note-music'
+import { captureMusicInsertSelection, restoreMusicInsertSelection, type MusicInsertSelection } from '~/utils/music-insert-selection'
 const props = defineProps<{ wide?: boolean }>()
 const containerClass = computed(() => (props.wide ? 'w-full max-w-none' : 'mx-auto w-full sm:max-w-4xl'))
 const isEditorLoading = ref(true)
@@ -419,6 +425,43 @@ const fileInput = ref<HTMLInputElement | null>(null);
 const vditorEditor = ref<any>(null); // 需要支持 insertValue
 const getCommonTagEditor = (): HTMLElement | null => vditorEditor.value?.getEditableElement?.() || null
 const insertCommonTagText = (text: string) => vditorEditor.value?.replaceSelectionWithText?.(text)
+const editorBoxRef = ref<HTMLElement | null>(null)
+const showMusicPicker = ref(false)
+const musicPickerGeneration = ref(0)
+type MusicEditorApi = { getValue: () => string; insertValue: (markdown: string) => void }
+let musicInsertTarget: { editor: MusicEditorApi; selection: MusicInsertSelection; content: string } | null = null
+
+const prepareMusicInsert = () => {
+  if (!canUploadMusic.value || isEditorLoading.value || isPublishing.value) return
+  const editor = vditorEditor.value
+  const selection = captureMusicInsertSelection(editorBoxRef.value)
+  musicInsertTarget = editor && selection ? { editor, selection, content: editor.getValue() } : null
+}
+
+const closeMusicPicker = () => {
+  showMusicPicker.value = false
+  musicInsertTarget = null
+  musicPickerGeneration.value += 1
+}
+
+const openMusicPicker = () => {
+  if (!canUploadMusic.value || isEditorLoading.value || isPublishing.value) return
+  if (!musicInsertTarget) prepareMusicInsert()
+  if (!musicInsertTarget) return
+  musicPickerGeneration.value += 1
+  showMusicPicker.value = true
+}
+
+const handleMusicSelected = (track: MusicPickerTrack) => {
+  const target = musicInsertTarget
+  const allowed = showMusicPicker.value && canUploadMusic.value && !isPublishing.value
+  closeMusicPicker()
+  if (!allowed || !target || target.editor !== vditorEditor.value || target.editor.getValue() !== target.content) return
+  if (!restoreMusicInsertSelection(target.selection)) return
+  target.editor.insertValue(createNoteMusicMarkdown(track))
+  clearEditorAttachmentInsertTarget()
+  void focusEditor()
+}
 // 预览跟随内容自动显示，无需手动开关
 
 const DRAFT_KEY = 'addform_draft_v1'
@@ -626,6 +669,7 @@ const notifyStore = useNotifyStore()
 const enableNotify = ref(false)
 
 const clearForm = () => {
+  closeMusicPicker()
   Username.value = "";
   MessageContent.value = "";
   MessageContentHtml.value = "";
@@ -644,6 +688,10 @@ const userStore = useUserStore();
 const { can, refreshCapabilities } = useAdminCapabilities()
 const canNotify = computed(() => can('notifications.manage'))
 const canSetPublishTime = computed(() => can('notes.change_publish_time'))
+const canUploadMusic = computed(() => userStore.isLogin && can('music.manage') && can('music.view'))
+watch([canUploadMusic, () => userStore.token, () => userStore.user?.userid], () => {
+  closeMusicPicker()
+}, { flush: 'sync' })
 
 const datetimeLocalToISO = (value: string) => {
   const raw = String(value || '').trim()
@@ -1252,6 +1300,7 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+  closeMusicPicker()
   window.removeEventListener('save-draft-before-recovery', saveDraftBeforeRecovery)
   document.removeEventListener('mousedown', handleFloatingMenuPointerDown)
   window.removeEventListener('resize', handleFloatingMenuViewportChange)
@@ -1296,6 +1345,7 @@ const addMessage = async () => {
     message.created_at = publishTime
   }
 
+  closeMusicPicker()
   isPublishing.value = true;
   try {
     const response = await save(message);

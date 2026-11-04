@@ -43,11 +43,15 @@ const ICONS = {
 };
 class NeteaseMiniPlayer {
     static supportsLocalPlaylist = true;
+    static supportsTemporaryTrack = true;
     constructor(element) {
         this.element = element;
         this.element.neteasePlayer = this;
         this.config = this.parseConfig();
         this.currentSong = null;
+        this.temporary = null;
+        this.restorePosition = null;
+        this.playAttempt = 0;
         this.playlist = [];
         this.currentIndex = 0;
         this.audio = new Audio();
@@ -121,6 +125,8 @@ class NeteaseMiniPlayer {
         this.isPlaying = false;
         this.playlist = [];
         this.currentSong = null;
+        this.temporary = null;
+        this.restorePosition = null;
         this.lyrics = [];
         this.cache.clear();
         if (GlobalAudioManager.currentPlayer === this) GlobalAudioManager.currentPlayer = null;
@@ -135,15 +141,12 @@ class NeteaseMiniPlayer {
         }
         return url.href;
     }
-    async setLocalPlaylist(items, sourceKey) {
-        await this.ready;
-        if (this.destroyed || this.config.source !== 'local') return;
-        const previous = this.currentSong;
-        const wasPlaying = this.isPlaying || this.pendingPlay;
-        const tracks = items.map(item => ({
-            id: String(item.trackID), name: String(item.title || '未知歌曲'),
+    normalizeLocalSong(item) {
+        if (!item || typeof item !== 'object') throw new Error('歌曲信息无效');
+        const song = {
+            id: String(item.trackID ?? ''), name: String(item.title || '未知歌曲'),
             artists: String(item.artist || ''), album: String(item.album || ''),
-            duration: Number(item.durationMS) || 0,
+            duration: Math.max(0, Number(item.durationMS) || 0),
             picUrl: this.localURL(item.coverURL, 'cover'),
             src: this.localURL(item.streamURL, 'stream'),
             fallbackSrc: this.localURL(item.fallbackStreamURL, 'stream'),
@@ -151,9 +154,92 @@ class NeteaseMiniPlayer {
             lyricsURL: this.localURL(item.lyricsURL, 'lyrics'),
             lyricsAvailable: !!item.lyricsAvailable,
             mediaVersion: String(item.mediaVersion || '')
-        }));
+        };
+        if (!song.src) throw new Error('缺少音源地址');
+        return song;
+    }
+    get temporaryTrack() {
+        return this.temporary?.song || null;
+    }
+    usesLocalMedia() {
+        return !!this.temporary || this.config.source === 'local';
+    }
+    isCurrentSourceLoad(generation) {
+        return !this.destroyed && !this.usesLocalMedia() && generation === this.loadGeneration;
+    }
+    // Call on an initialized instance; item uses setLocalPlaylist fields and same-origin
+    // /music/{stream,cover,lyrics}/ URLs, including signed query parameters.
+    // Await the result: false means superseded/destroyed; active validation/load/play errors reject.
+    // autoplay defaults to true; catch NotAllowedError and let the user click the play button.
+    // temporaryTrack exposes the active track. Ended restores the original playlist when available.
+    async playTemporaryTrack(item, { autoplay = true } = {}) {
+        if (this.destroyed) return false;
+        let song;
+        try {
+            song = this.normalizeLocalSong(item);
+        } catch (error) {
+            this.showError(error.message);
+            throw error;
+        }
+        const resume = this.temporary?.resume || {
+            song: this.currentSong || this.playlist[this.currentIndex],
+            index: this.currentIndex,
+            time: this.audio.currentTime || 0,
+            autoplay: !!(this.isPlaying || this.pendingPlay)
+        };
+        const temporary = { song, resume };
+        this.temporary = temporary;
+        this.restorePosition = null;
+        this.pause();
+        this.audio.muted = false;
+        this.audio.volume = this.volume;
+        this.pendingPlay = !!autoplay;
+        this.updatePlaylistDisplay();
+        const loaded = await this.loadLocalSong(song);
+        return !this.destroyed && this.temporary === temporary && loaded === true;
+    }
+    // Restores the original source and selection, retaining volume/theme/lyric preferences.
+    async restorePlaylist({ autoplay } = {}) {
+        if (this.destroyed || !this.temporary) return false;
+        const { resume } = this.temporary;
+        const preserved = resume.song ? this.playlist.findIndex(song =>
+            String(song.id) === String(resume.song.id) && song.mediaVersion === resume.song.mediaVersion) : -1;
+        this.currentIndex = preserved >= 0 ? preserved : Math.min(resume.index, Math.max(0, this.playlist.length - 1));
+        this.pause();
+        const loading = this.loadCurrentSong();
+        const generation = this.loadGeneration;
+        try {
+            const loaded = await loading;
+            if (this.destroyed || this.temporary || generation !== this.loadGeneration || !this.currentSong) return false;
+            if (loaded !== true) throw new Error('音源暂不可用');
+            if (preserved >= 0 && resume.time > 0) {
+                this.restorePosition = { generation, time: resume.time };
+                if (this.audio.readyState >= 1) {
+                    this.seek(resume.time);
+                    this.restorePosition = null;
+                }
+            }
+            this.updatePlaylistDisplay();
+            if (autoplay ?? resume.autoplay) return await this.play();
+            return true;
+        } catch (error) {
+            if (this.destroyed || generation !== this.loadGeneration) return false;
+            this.showError('恢复播放失败，请稍后重试');
+            throw error;
+        }
+    }
+    async setLocalPlaylist(items, sourceKey) {
+        await this.ready;
+        if (this.destroyed || this.config.source !== 'local') return;
+        const previous = this.currentSong;
+        const wasPlaying = this.isPlaying || this.pendingPlay;
+        const tracks = items.map(item => this.normalizeLocalSong(item));
         this.playlist = tracks;
         this.localSourceKey = sourceKey;
+        if (this.temporary) {
+            this.updatePlaylistDisplay();
+            return;
+        }
         const preserved = previous ? tracks.findIndex(track => track.id === previous.id && track.mediaVersion === previous.mediaVersion) : -1;
         if (preserved >= 0) {
             this.currentIndex = preserved;
@@ -177,8 +263,10 @@ class NeteaseMiniPlayer {
         this.duration = 0;
         this.updatePlaylistDisplay();
         if (tracks.length) {
-            await this.loadCurrentSong();
-            if (this.pendingPlay && this.currentSong && !this.destroyed) await this.play();
+            const loading = this.loadCurrentSong();
+            const generation = this.loadGeneration;
+            await loading;
+            if (generation === this.loadGeneration && !this.temporary && this.pendingPlay && this.currentSong && !this.destroyed) await this.play();
         } else {
             this.showError('音源暂不可用');
             this.updateProgress();
@@ -189,9 +277,12 @@ class NeteaseMiniPlayer {
         if (this.destroyed || !this.playlist[index]) return;
         this.currentIndex = index;
         this.localFailures.clear();
-        if (this.config.source === 'local') this.pendingPlay = true;
-        await this.loadCurrentSong();
-        if (this.config.source !== 'local' && this.currentSong && !this.destroyed) await this.play();
+        this.pendingPlay = this.config.source === 'local';
+        const loading = this.loadCurrentSong();
+        const generation = this.loadGeneration;
+        await loading;
+        if (generation !== this.loadGeneration || this.destroyed || this.temporary) return;
+        if (this.config.source !== 'local' && this.currentSong) await this.play();
         this.updatePlaylistDisplay();
     }
     seek(seconds) {
@@ -219,6 +310,7 @@ class NeteaseMiniPlayer {
                 this.timers.delete(timeout);
                 controller.signal.removeEventListener('abort', cancelRequest);
             }
+            if (this.destroyed || generation !== this.loadGeneration || controller.signal.aborted) throw new DOMException('已取消', 'AbortError');
             if (response.ok) return;
             if (response.status !== 503 || Date.now() >= deadline) throw new Error('音源暂不可用');
             const waitMS = Math.min(deadline - Date.now(), 5000, Math.max(1000, Number(response.headers.get('Retry-After')) * 1000 || 2000));
@@ -226,22 +318,29 @@ class NeteaseMiniPlayer {
                 const onAbort = () => { clearTimeout(timer); this.timers.delete(timer); reject(new DOMException('已取消', 'AbortError')); };
                 const timer = this.delay(() => { controller.signal.removeEventListener('abort', onAbort); resolve(); }, waitMS);
                 controller.signal.addEventListener('abort', onAbort, { once: true });
+                if (controller.signal.aborted) onAbort();
             });
         }
         throw new DOMException('已取消', 'AbortError');
     }
     async loadLocalSong(song, compatibility = false) {
+        if (this.destroyed) return false;
         const generation = ++this.loadGeneration;
         this.mediaRequest?.abort();
         const controller = new AbortController();
         this.mediaRequest = controller;
-        this.pendingPlay = this.pendingPlay || this.isPlaying;
-        this.audio.pause();
+        const shouldPlay = this.pendingPlay || this.isPlaying;
+        this.pause();
+        this.pendingPlay = shouldPlay;
+        this.restorePosition = null;
         this.audio.removeAttribute('src');
         this.audio.load();
         this.currentSong = null;
         this.lyrics = [];
         this.plainLyrics = '';
+        this.currentLyricIndex = -1;
+        this.elements.lyricTranslation.style.display = 'none';
+        this.elements.lyricLine.classList.remove('current', 'scrolling');
         this.currentTime = 0;
         this.duration = song.duration / 1000;
         this.updateSongInfo(song);
@@ -252,7 +351,7 @@ class NeteaseMiniPlayer {
         const url = useCompatibility && song.fallbackSrc ? song.fallbackSrc : song.src;
         try {
             await this.prepareLocalMedia(url, controller, generation);
-            if (this.destroyed || generation !== this.loadGeneration) return;
+            if (this.destroyed || generation !== this.loadGeneration) return false;
             this.currentSong = song;
             this.localCompatibility = useCompatibility;
             this.audio.src = url;
@@ -261,9 +360,15 @@ class NeteaseMiniPlayer {
             this.updateTimeDisplay();
             if (this.showLyrics) await this.loadLocalLyrics(song, controller, generation);
             if (this.pendingPlay && !this.destroyed && generation === this.loadGeneration) await this.play();
+            return !this.destroyed && generation === this.loadGeneration;
         } catch (error) {
-            if (error.name === 'AbortError' || this.destroyed || generation !== this.loadGeneration) return;
+            if (error.name === 'AbortError' || this.destroyed || generation !== this.loadGeneration) return false;
             this.currentSong = song;
+            if (this.temporary) {
+                this.pause();
+                this.showError(error.name === 'NotAllowedError' ? '请点击播放按钮开始播放' : '临时歌曲播放失败，请稍后重试');
+                throw error;
+            }
             this.showError('播放失败，尝试下一首');
             this.handleLocalFailure(song, generation);
         }
@@ -286,6 +391,12 @@ class NeteaseMiniPlayer {
         }
     }
     handleLocalFailure(song, generation) {
+        if (this.destroyed || generation !== this.loadGeneration) return;
+        if (this.temporary) {
+            this.pause();
+            this.showError('临时歌曲播放失败，请稍后重试');
+            return;
+        }
         this.localFailures.add(song.id);
         if (this.localFailures.size >= this.playlist.length) { this.pause(); return; }
         this.delay(async () => {
@@ -338,6 +449,7 @@ class NeteaseMiniPlayer {
         this.setupEnvListeners?.();
         this.bindEvents();
         this.setupAudioEvents();
+        let generation = this.loadGeneration;
         try {
             if (this.config.source === 'local') {
                 this.showError('请选择歌曲播放');
@@ -346,7 +458,8 @@ class NeteaseMiniPlayer {
                     await this.loadSingleSong(this.config.songId);
                 } else if (this.config.playlistId) {
                     await this.loadPlaylist(this.config.playlistId);
-                    this.playlist = [this.playlist[0]];
+                    if (this.destroyed) return;
+                    this.playlist = this.playlist.slice(0, 1);
                 }
             } else {
                 if (this.config.playlistId) {
@@ -355,8 +468,13 @@ class NeteaseMiniPlayer {
                     await this.loadSingleSong(this.config.songId);
                 }
             }
+            if (this.destroyed || this.temporary || generation !== this.loadGeneration) return;
             if (this.playlist.length > 0) {
-                await this.loadCurrentSong();
+                const loading = this.loadCurrentSong();
+                const songGeneration = this.loadGeneration;
+                generation = songGeneration;
+                await loading;
+                if (this.destroyed || this.temporary || songGeneration !== this.loadGeneration) return;
                 if (this.config.autoplay && !this.config.embed) {
                     this.audio.muted = true;
                     const originalVolume = this.volume;
@@ -366,14 +484,17 @@ class NeteaseMiniPlayer {
                     } catch (e) {
                         console.log('静音自动播放被拦截，转为交互后播放');
                     }
+                    if (this.destroyed || this.temporary || songGeneration !== this.loadGeneration) return;
                     const interactionEvents = ['click', 'touchstart', 'keydown', 'wheel', 'scroll'];
                     const enableAudio = () => {
+                        if (this.destroyed || this.temporary || songGeneration !== this.loadGeneration) return;
                         interactionEvents.forEach(event => {
                             document.removeEventListener(event, enableAudio);
                         });
                         this.audio.muted = false;
                         if (!this.isPlaying) {
                             this.play().then(() => {
+                                if (this.destroyed || this.temporary || songGeneration !== this.loadGeneration) return;
                                 this.audio.volume = 0;
                                 fadeIn();
                             }).catch(e => console.error('交互后播放失败:', e));
@@ -387,6 +508,10 @@ class NeteaseMiniPlayer {
                             const step = targetVol / 10;
                             const interval = 50;
                             const fadeTimer = this.repeat(() => {
+                                if (this.temporary || songGeneration !== this.loadGeneration) {
+                                    clearInterval(fadeTimer);
+                                    return;
+                                }
                                 currentVol += step;
                                 if (currentVol >= targetVol) {
                                     currentVol = targetVol;
@@ -414,6 +539,7 @@ class NeteaseMiniPlayer {
                 this.setMinimized(true);
             }
         } catch (error) {
+            if (this.destroyed || this.temporary || generation !== this.loadGeneration) return;
             console.error('播放器初始化失败:', error);
             this.showError('加载失败，请稍后重试');
         }
@@ -519,7 +645,7 @@ class NeteaseMiniPlayer {
                 this.setMinimized(false, true);
                 return;
             }
-            if (this.config.source !== 'local' && this.currentSong && this.currentSong.id) {
+            if (!this.usesLocalMedia() && this.currentSong && this.currentSong.id) {
             const songUrl = `https://music.163.com/song?id=${this.currentSong.id}`;
             window.open(songUrl, '_blank', 'noopener,noreferrer');
             }
@@ -748,9 +874,15 @@ class NeteaseMiniPlayer {
     }
     setupAudioEvents() {
         this.listen(this.audio, 'loadedmetadata', () => {
+            if (!this.currentSong || this.audio.readyState < 1) return;
             this.duration = Number.isFinite(this.audio.duration) ? this.audio.duration : this.duration;
             this.endedGeneration = -1;
             this.updateTimeDisplay();
+            const position = this.restorePosition;
+            if (position?.generation === this.loadGeneration) {
+                this.restorePosition = null;
+                this.seek(position.time);
+            }
         });
         this.listen(this.audio, 'timeupdate', () => {
             this.currentTime = this.audio.currentTime;
@@ -759,16 +891,22 @@ class NeteaseMiniPlayer {
             this.updateTimeDisplay();
         });
         this.listen(this.audio, 'ended', async () => {
-            if (this.endedGeneration === this.loadGeneration) return;
+            if (!this.currentSong || !this.audio.ended || this.endedGeneration === this.loadGeneration) return;
             this.endedGeneration = this.loadGeneration;
+            if (this.temporary) {
+                if (!this.playlist.length) { this.pause(); return; }
+                try { await this.restorePlaylist({ autoplay: true }); } catch (_) { /* Error is shown by restorePlaylist. */ }
+                return;
+            }
             await this.nextSong();
         });
         this.listen(this.audio, 'error', async () => {
-            if (this.config.source === 'local') {
+            if (!this.currentSong || !this.audio.error) return;
+            if (this.usesLocalMedia()) {
                 const song = this.currentSong;
                 if (!song) return;
                 if (!this.localCompatibility && song.fallbackSrc) {
-                    await this.loadLocalSong(song, true);
+                    try { await this.loadLocalSong(song, true); } catch (_) { /* Error is shown by loadLocalSong. */ }
                 } else {
                     this.showError('播放失败，尝试下一首');
                     this.handleLocalFailure(song, this.loadGeneration);
@@ -776,7 +914,8 @@ class NeteaseMiniPlayer {
                 return;
             }
             this.showError('播放失败，尝试下一首');
-            this.delay(() => this.nextSong(), 1000);
+            const generation = this.loadGeneration;
+            this.delay(() => { if (this.isCurrentSourceLoad(generation)) void this.nextSong(); }, 1000);
         });
         this.listen(this.audio, 'canplay', () => {
             if (this.isPlaying && this.audio.paused) this.audio.play().catch(() => {});
@@ -786,6 +925,7 @@ class NeteaseMiniPlayer {
     }
     async apiRequest(endpoint, params = {}) {
         if (this.destroyed || this.config.source === 'local') throw new DOMException('已取消', 'AbortError');
+        if (this.temporary) throw new DOMException('已取消', 'AbortError');
         const baseUrl = 'https://api.hypcvgm.top/NeteaseMiniPlayer/nmp.php';
         const queryString = new URLSearchParams(params).toString();
         const url = `${baseUrl}${endpoint}${queryString ? '?' + queryString : ''}`;
@@ -794,7 +934,7 @@ class NeteaseMiniPlayer {
         try {
             const response = await fetch(url, { signal: controller.signal });
             const data = await response.json();
-            if (this.destroyed) throw new DOMException('已取消', 'AbortError');
+            if (this.destroyed || controller.signal.aborted) throw new DOMException('已取消', 'AbortError');
             if (data.code !== 200) {
                 throw new Error(`API错误: ${data.code}`);
             }
@@ -878,31 +1018,58 @@ class NeteaseMiniPlayer {
                 };
             }
         }
+        if (this.destroyed || this.config.source === 'local') return;
         this.playlist = [songData];
     }
     async loadCurrentSong() {
-        if (this.destroyed || this.playlist.length === 0) return;
+        if (this.destroyed) return false;
+        this.temporary = null;
+        this.restorePosition = null;
+        if (!this.playlist[this.currentIndex]) {
+            ++this.loadGeneration;
+            this.mediaRequest?.abort();
+            this.pause();
+            this.audio.removeAttribute('src');
+            this.audio.load();
+            this.currentSong = null;
+            this.lyrics = [];
+            this.plainLyrics = '';
+            this.currentTime = 0;
+            this.duration = 0;
+            this.showError('请选择歌曲播放');
+            this.updatePlaylistDisplay();
+            this.updateProgress();
+            this.updateTimeDisplay();
+            return false;
+        }
         if (this.config.source === 'local') return this.loadLocalSong(this.playlist[this.currentIndex]);
-        
+        const generation = ++this.loadGeneration;
+        ++this.playAttempt;
+        this.mediaRequest?.abort();
+        this.audio.pause();
+        this.audio.removeAttribute('src');
+        this.audio.load();
+        this.lyrics = [];
+        this.plainLyrics = '';
+        this.currentLyricIndex = -1;
+        this.currentTime = 0;
         if (this.showLyrics) {
             this.elements.lyricLine.textContent = '♪ 加载歌词中... ♪';
             this.elements.lyricTranslation.style.display = 'none';
             this.elements.lyricLine.classList.remove('current', 'scrolling');
             this.elements.lyricTranslation.classList.remove('current', 'scrolling');
-            this.lyrics = [];
-            this.currentLyricIndex = -1;
         }
-        
         const song = this.playlist[this.currentIndex];
         this.currentSong = song;
+        this.duration = song.duration / 1000;
         this.updateSongInfo(song);
-        if (song.picUrl) {
-            this.elements.albumCover.src = song.picUrl;
-        }
-        await this.loadSongUrl(song.id);
-        if (this.showLyrics) {
-            await this.loadLyrics(song.id);
-        }
+        this.elements.albumCover.removeAttribute('src');
+        if (song.picUrl) this.elements.albumCover.src = song.picUrl;
+        this.updatePlaylistDisplay();
+        await this.loadSongUrl(song.id, generation);
+        if (!this.isCurrentSourceLoad(generation)) return false;
+        if (this.showLyrics) await this.loadLyrics(song.id, generation);
+        return this.isCurrentSourceLoad(generation);
     }
     updateSongInfo(song) {
         if (!song) return;
@@ -963,7 +1130,8 @@ class NeteaseMiniPlayer {
         document.body.removeChild(tempElement);
         return result + (result !== artistText ? '...' : '');
     }
-    async loadSongUrl(songId) {
+    async loadSongUrl(songId, generation = this.loadGeneration) {
+        if (!this.isCurrentSourceLoad(generation)) return;
         const cacheKey = this.getCacheKey('song_url', songId);
         let urlData = this.getCache(cacheKey);
         if (!urlData) {
@@ -977,6 +1145,7 @@ class NeteaseMiniPlayer {
                     this.setCache(cacheKey, urlData, 30 * 60 * 1000);
                 }
             } catch (error) {
+                if (!this.isCurrentSourceLoad(generation)) return;
                 console.error('获取音频URL失败:', error);
                 try {
                     const fallbackResponse = await this.apiRequest('/song/url/v1', { 
@@ -992,6 +1161,7 @@ class NeteaseMiniPlayer {
             }
         }
         if (this.destroyed || this.config.source === 'local' || String(this.currentSong?.id) !== String(songId)) return;
+        if (!this.isCurrentSourceLoad(generation)) return;
         if (urlData && urlData.url) {
             const httpsUrl = this.ensureHttps(urlData.url);
             console.log('设置音频源:', httpsUrl);
@@ -1010,7 +1180,8 @@ class NeteaseMiniPlayer {
         }
         return url;
     }
-    async loadLyrics(songId) {
+    async loadLyrics(songId, generation = this.loadGeneration) {
+        if (!this.isCurrentSourceLoad(generation)) return;
         const cacheKey = this.getCacheKey('lyric', songId);
         let lyricData = this.getCache(cacheKey);
         if (!lyricData) {
@@ -1019,12 +1190,13 @@ class NeteaseMiniPlayer {
                 lyricData = response;
                 this.setCache(cacheKey, lyricData, 60 * 60 * 1000);
             } catch (error) {
+                if (!this.isCurrentSourceLoad(generation)) return;
                 console.error('获取歌词失败:', error);
                 this.lyrics = [];
                 return;
             }
         }
-        if (this.destroyed || this.config.source === 'local' || String(this.currentSong?.id) !== String(songId)) return;
+        if (!this.isCurrentSourceLoad(generation)) return;
         this.parseLyrics(lyricData);
     }
     parseLyrics(lyricData) {
@@ -1086,19 +1258,24 @@ class NeteaseMiniPlayer {
         }
     }
     async play() {
-        if (this.destroyed) return;
-        if (this.config.source === 'local' && !this.currentSong) { this.pendingPlay = true; return; }
+        if (this.destroyed) return false;
+        if (this.usesLocalMedia() && !this.currentSong) { this.pendingPlay = true; return false; }
+        const generation = this.loadGeneration;
+        const attempt = ++this.playAttempt;
         GlobalAudioManager.setCurrent(this);
         try {
             await this.audio.play();
-            if (this.destroyed) { this.audio.pause(); return; }
+            if (this.destroyed) { this.audio.pause(); return false; }
+            if (generation !== this.loadGeneration || attempt !== this.playAttempt) return false;
             this.pendingPlay = false;
             this.isPlaying = true;
             this.elements.playIcon.style.display = 'none';
             this.elements.pauseIcon.style.display = 'inline';
             this.elements.albumCover.classList.add('playing');
             this.element.classList.add('player-playing');
+            return true;
         } catch (error) {
+            if (this.destroyed || generation !== this.loadGeneration || attempt !== this.playAttempt) return false;
             if (error.name === 'NotAllowedError') {
                 console.warn('自动播放被拦截 (NotAllowedError)');
                 this.isPlaying = false;
@@ -1106,9 +1283,12 @@ class NeteaseMiniPlayer {
             }
             console.error('播放失败:', error);
             this.showError('播放失败');
+            if (this.temporary) throw error;
+            return false;
         }
     }
     pause() {
+        ++this.playAttempt;
         this.pendingPlay = false;
         this.audio.pause();
         this.isPlaying = false;
@@ -1118,13 +1298,19 @@ class NeteaseMiniPlayer {
         this.element.classList.remove('player-playing');
     }
     async previousSong() {
-        if (this.destroyed || this.playlist.length <= 1) return;
+        if (this.destroyed) return;
+        if (this.temporary) return this.restorePlaylist();
+        if (this.playlist.length <= 1) return;
         this.currentIndex = this.currentIndex > 0 ? this.currentIndex - 1 : this.playlist.length - 1;
-        await this.loadCurrentSong();
-        if (this.config.source !== 'local' && this.isPlaying && !this.destroyed) await this.play();
+        const loading = this.loadCurrentSong();
+        const generation = this.loadGeneration;
+        await loading;
+        if (this.isCurrentSourceLoad(generation) && this.isPlaying) await this.play();
     }
     async nextSong() {
-        if (this.destroyed || !this.playlist.length) return;
+        if (this.destroyed) return;
+        if (this.temporary) return this.restorePlaylist();
+        if (!this.playlist.length) return;
     const wasPlaying = this.isPlaying;
         if (this.playlist.length <= 1) {
             if (this.playMode === 'single') {
@@ -1159,12 +1345,16 @@ class NeteaseMiniPlayer {
         }
     
         this.currentIndex = newIndex;
-        await this.loadCurrentSong();
+        const loading = this.loadCurrentSong();
+        const generation = this.loadGeneration;
+        await loading;
+        if (this.destroyed || this.temporary || generation !== this.loadGeneration) return;
         
         this.updatePlaylistDisplay();
         
         if (wasPlaying && this.config.source !== 'local') {
             this.delay(async () => {
+                if (!this.isCurrentSourceLoad(generation)) return;
                 try {
                     await this.play();
                 } catch (error) {
@@ -1174,11 +1364,9 @@ class NeteaseMiniPlayer {
         }
     }
     updateProgress() {
-        if (this.duration > 0) {
-            const progress = (this.currentTime / this.duration) * 100;
-            this.elements.progressBar.style.width = `${progress}%`;
-            this.elements.progressContainer.setAttribute('aria-valuenow', String(Math.round(progress)));
-        }
+        const progress = this.duration > 0 ? (this.currentTime / this.duration) * 100 : 0;
+        this.elements.progressBar.style.width = `${progress}%`;
+        this.elements.progressContainer.setAttribute('aria-valuenow', String(Math.round(progress)));
     }
     updateTimeDisplay() {
         const formatTime = (time) => {
@@ -1207,11 +1395,12 @@ class NeteaseMiniPlayer {
             if (newIndex >= 0 && newIndex < this.lyrics.length) {
                 const lyric = this.lyrics[newIndex];
                 const lyricText = lyric.text || '♪';
+                const generation = this.loadGeneration;
             
                 this.elements.lyricLine.classList.remove('current');
             
                 requestAnimationFrame(() => {
-                    if (this.destroyed) return;
+                    if (this.destroyed || generation !== this.loadGeneration || this.lyrics[this.currentLyricIndex] !== lyric) return;
                     this.elements.lyricLine.textContent = lyricText;
                     this.checkLyricScrolling(this.elements.lyricLine, lyricText);
             
@@ -1222,6 +1411,7 @@ class NeteaseMiniPlayer {
                         this.elements.lyricTranslation.style.display = 'block';
                         this.elements.lyricTranslation.classList.remove('current'); 
                         requestAnimationFrame(() => {
+                            if (this.destroyed || generation !== this.loadGeneration || this.lyrics[this.currentLyricIndex] !== lyric) return;
                             this.elements.lyricTranslation.classList.add('current'); 
                         });
                     } else {
@@ -1232,6 +1422,7 @@ class NeteaseMiniPlayer {
             
                 this.elements.lyricsContainer.classList.add('switching');
                 this.delay(() => {
+                    if (generation !== this.loadGeneration) return;
                     this.elements.lyricsContainer.classList.remove('switching');
                 }, 500);
                 if (lyric.translation) {
@@ -1276,7 +1467,7 @@ class NeteaseMiniPlayer {
         content.replaceChildren();
         this.playlist.forEach((song, index) => {
             const item = document.createElement('div');
-            item.className = `playlist-item ${index === this.currentIndex ? 'active' : ''}`;
+            item.className = `playlist-item ${!this.temporary && index === this.currentIndex ? 'active' : ''}`;
             item.dataset.index = String(index);
             item.tabIndex = 0;
             item.setAttribute('role', 'button');
@@ -1303,13 +1494,7 @@ class NeteaseMiniPlayer {
             info.append(name, artist);
             item.append(number, cover, info);
             const activate = async () => {
-                if (this.config.source === 'local') await this.playIndex(index);
-                else if (index !== this.currentIndex) {
-                    this.currentIndex = index;
-                    await this.loadCurrentSong();
-                    if (this.isPlaying && !this.destroyed) await this.play();
-                    this.updatePlaylistDisplay();
-                }
+                if (this.config.source === 'local' || this.temporary || index !== this.currentIndex) await this.playIndex(index);
                 this.togglePlaylist(false);
             };
             item.onclick = activate;
@@ -1340,7 +1525,7 @@ class NeteaseMiniPlayer {
         this.showLyrics = !this.showLyrics;
         this.elements.lyricsContainer.classList.toggle('hidden', !this.showLyrics);
         this.elements.lyricsBtn.classList.toggle('active', this.showLyrics);
-        if (this.showLyrics && this.config.source === 'local' && this.currentSong && this.mediaRequest) {
+        if (this.showLyrics && this.usesLocalMedia() && this.currentSong && this.mediaRequest) {
             void this.loadLocalLyrics(this.currentSong, this.mediaRequest, this.loadGeneration);
         }
     }

@@ -618,6 +618,8 @@ import { useHomeNotifications } from '~/composables/useHomeNotifications'
 import { useHomePager } from '~/composables/useHomePager'
 import { normalizeLayoutMode, useHomeLayout } from '~/composables/useHomeLayout'
 import { usePublicMusic } from '~/composables/usePublicMusic'
+import { NOTE_MUSIC_PLAYER_KEY, type NoteMusicPlayer, type NoteMusicRequest } from '~/utils/note-music'
+import type { PublicMusicTrack } from '~/composables/usePublicMusic'
 const AddForm = asyncFeature(() => import('@/components/index/AddForm.vue'), '编辑器')
 import MessageList from '@/components/index/MessageList.vue'
 import HeatmapWidget from '~/components/widgets/heatmap.vue'
@@ -1634,6 +1636,9 @@ watch(isFeedEnabled, (enabled) => {
 })
 const musicConfigLoaded = ref(false)
 const publicMusic = usePublicMusic()
+const noteMusicRequested = ref(false)
+let noteMusicRequestSequence = 0
+let noteMusicController: AbortController | null = null
 const musicPlaybackConfig = computed(() => ({
   ...frontendConfig.value,
   ...(publicMusic.state.value?.frontendSettings || {}),
@@ -1672,7 +1677,7 @@ const applyNmpTheme = (el?: any, cfg: any = (frontendConfig as any).value || {},
 const shouldShowMusicPlayer = computed(() => {
   const cfg: any = musicPlaybackConfig.value
   const source = resolveMusicSource(cfg)
-  return musicConfigLoaded.value && !!cfg.musicEnabled && source.hasSource && !(!!cfg.musicHideOnMobile && isMobile.value)
+  return musicConfigLoaded.value && !!cfg.musicEnabled && (source.hasSource || noteMusicRequested.value) && (noteMusicRequested.value || !(!!cfg.musicHideOnMobile && isMobile.value))
 })
 
 const NMP_STATE_KEY = 'nmp_state_v1'
@@ -1839,7 +1844,7 @@ const refreshNmpConfig = (player: any) => {
       player.showLyrics = !!player.config?.lyric
       player.elements?.lyricsContainer?.classList.toggle('hidden', !player.showLyrics)
       player.elements?.lyricsBtn?.classList.toggle('active', player.showLyrics)
-      if (!previousLyrics && player.showLyrics && player.config?.source === 'local' && player.currentSong && player.mediaRequest) {
+      if (!previousLyrics && player.showLyrics && (player.config?.source === 'local' || player.temporaryTrack) && player.currentSong && player.mediaRequest) {
         void player.loadLocalLyrics?.(player.currentSong, player.mediaRequest, player.loadGeneration)
       }
     }
@@ -1881,6 +1886,7 @@ const syncNmpSource = async (el: any, player: any, source: ReturnType<typeof res
     el.setAttribute('data-source-key', sourceKey)
     if (typeof player.currentIndex === 'number') player.currentIndex = 0
   }
+  if (player.temporaryTrack) return !!player.currentSong
   const hasPlayableList = Array.isArray(player?.playlist) && player.playlist.length > 0
   if (hasPlayableList && (shouldReloadSource || !player.currentSong)) {
     await loadNmpCurrentSong(player)
@@ -1896,7 +1902,7 @@ const reconcileMusicPlayer = async (reason = 'state') => {
     if (musicDisposed || typeof window === 'undefined' || typeof document === 'undefined') return false
     const cfg = musicPlaybackConfig.value
     const source = resolveMusicSource(cfg)
-    if (nmpDisabled.value || !musicConfigLoaded.value || !cfg.musicEnabled || !source.hasSource || (!!cfg.musicHideOnMobile && isMobile.value)) {
+    if (nmpDisabled.value || !musicConfigLoaded.value || !cfg.musicEnabled || (!source.hasSource && !noteMusicRequested.value) || (!noteMusicRequested.value && !!cfg.musicHideOnMobile && isMobile.value)) {
       clearNmpRuntime()
       return false
     }
@@ -1904,6 +1910,7 @@ const reconcileMusicPlayer = async (reason = 'state') => {
     const el = document.querySelector('.netease-mini-player') as any
     if (!el) return false
     if (nmpInstance && (nmpRuntimeSource !== source.kind || !!nmpInstance.config?.embed !== !!cfg.musicEmbed)) clearNmpRuntime()
+    if (noteMusicRequested.value && nmpInstance && typeof nmpInstance.playTemporaryTrack !== 'function') clearNmpRuntime()
     const generation = nmpGeneration
     const sourceStillCurrent = () => !musicDisposed && generation === nmpGeneration && el.isConnected && shouldShowMusicPlayer.value && resolveMusicSource(musicPlaybackConfig.value).kind === source.kind
 
@@ -1926,7 +1933,15 @@ const reconcileMusicPlayer = async (reason = 'state') => {
       nmpFailureCount += 1
       return false
     }
-    const NMP = (window as any).NeteaseMiniPlayer
+    let NMP = (window as any).NeteaseMiniPlayer
+    if (noteMusicRequested.value && !NMP?.supportsTemporaryTrack) {
+      const legacy = el.neteasePlayer || el._neteasePlayer
+      try { legacy?.destroy?.() } catch {}
+      el.neteasePlayer = null
+      el._neteasePlayer = null
+      if (!await loadNMPAssets('local') || !sourceStillCurrent()) return false
+      NMP = (window as any).NeteaseMiniPlayer
+    }
     if (!NMP) {
       nmpFailureCount += 1
       return false
@@ -1955,7 +1970,7 @@ const reconcileMusicPlayer = async (reason = 'state') => {
     })
     nmpThemeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
 
-    if (cfg.musicAutoplay && !el.getAttribute('data-autoplay-tried')) {
+    if (!player.temporaryTrack && cfg.musicAutoplay && !el.getAttribute('data-autoplay-tried')) {
       el.setAttribute('data-autoplay-tried', 'true')
       try { await player.play?.() } catch {}
     }
@@ -2071,7 +2086,8 @@ const loadNmpScript = async (jsId: string, candidates: string[], useCache = true
 }
 
 let nmpAssetsKind = ''
-const loadNMPAssets = async (source: 'local' | 'netease' = 'netease'): Promise<boolean> => {
+const loadNMPAssets = async (requestedSource: 'local' | 'netease' = 'netease'): Promise<boolean> => {
+  const source = noteMusicRequested.value ? 'local' : requestedSource
   try {
     if (typeof window === 'undefined' || musicDisposed) return false
     const globalPlayer = (window as any).NeteaseMiniPlayer
@@ -2102,12 +2118,13 @@ const loadNMPAssets = async (source: 'local' | 'netease' = 'netease'): Promise<b
     return false
   }
 }
+let nmpReconcilePromise: Promise<void> | null = null
 const scheduleMusicPlayerReconcile = (reason = 'state') => {
   if (typeof window === 'undefined') return
   nmpReconcileRequested = true
-  if (nmpReconcileQueued) return
+  if (nmpReconcileQueued) return nmpReconcilePromise
   nmpReconcileQueued = true
-  Promise.resolve()
+  nmpReconcilePromise = Promise.resolve()
     .then(async () => {
       while (nmpReconcileRequested) {
         nmpReconcileRequested = false
@@ -2118,7 +2135,53 @@ const scheduleMusicPlayerReconcile = (reason = 'state') => {
       nmpReconcileQueued = false
       if (nmpReconcileRequested) scheduleMusicPlayerReconcile(reason)
     })
+  return nmpReconcilePromise
 }
+
+const playNoteMusic: NoteMusicPlayer = async (request: NoteMusicRequest) => {
+  const sequence = ++noteMusicRequestSequence
+  noteMusicController?.abort()
+  const controller = new AbortController()
+  noteMusicController = controller
+  const current = () => !musicDisposed && sequence === noteMusicRequestSequence && !controller.signal.aborted
+  try {
+    await publicMusic.refresh()
+    if (!current()) return
+    if (!musicPlaybackConfig.value.musicEnabled) throw new Error('站点音乐暂未启用')
+    musicConfigLoaded.value = true
+    const musicApi = String(baseApi).replace(/\/+$/, '')
+    const response = await $fetch<{ code: number; msg?: string; data?: PublicMusicTrack }>(`${musicApi}/music/notes/${encodeURIComponent(request.trackID)}`, {
+      query: { messageID: request.messageID }, credentials: 'include', signal: controller.signal, timeout: 10000, retry: 0, cache: 'no-store',
+    })
+    if (!current()) return
+    if (response.code !== 1 || !response.data?.streamURL) throw new Error(response.msg || '这首歌曲暂时无法播放')
+    noteMusicRequested.value = true
+    nmpDisabled.value = false
+    await scheduleMusicPlayerReconcile('note-music')
+    if (!current() || !musicPlaybackConfig.value.musicEnabled) return
+    const player = nmpInstance
+    if (!player || typeof player.playTemporaryTrack !== 'function') throw new Error('播放器暂时不可用，请稍后重试')
+    await player.playTemporaryTrack(response.data)
+  } catch (error: any) {
+    if (!current()) return
+    throw new Error(error?.data?.msg || error?.message || '音乐暂时无法播放，请稍后重试')
+  } finally {
+    if (sequence === noteMusicRequestSequence) noteMusicController = null
+  }
+}
+provide(NOTE_MUSIC_PLAYER_KEY, playNoteMusic)
+const playNoteMusicFromRoute = async () => {
+  const trackID = String(route.query.noteMusic || '')
+  const messageID = Number(route.query.noteMusicMessage)
+  if (!/^[A-Za-z0-9_-]+$/.test(trackID) || !Number.isSafeInteger(messageID) || messageID <= 0) return
+  const query = { ...route.query }
+  delete query.noteMusic
+  delete query.noteMusicMessage
+  await router.replace({ path: route.path, query, hash: route.hash })
+  try { await playNoteMusic({ trackID, messageID }) }
+  catch (error) { useToast().add({ title: error instanceof Error ? error.message : '音乐暂时无法播放', color: 'red' }) }
+}
+watch(() => [route.query.noteMusic, route.query.noteMusicMessage], () => { void playNoteMusicFromRoute() })
 
 watch(() => contentTheme.value, () => {
   applyNmpTheme()
@@ -2214,9 +2277,12 @@ const onMusicVisibilityChange = () => {
 }
 onMounted(() => {
   document.addEventListener('visibilitychange', onMusicVisibilityChange)
+  void playNoteMusicFromRoute()
 })
 onUnmounted(() => {
   musicDisposed = true
+  ++noteMusicRequestSequence
+  noteMusicController?.abort()
   document.removeEventListener('visibilitychange', onMusicVisibilityChange)
   clearNmpRuntime()
 })

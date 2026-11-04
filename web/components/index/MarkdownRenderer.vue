@@ -7,6 +7,7 @@ before the root or content identity is replaced. -->
     正文排版加载失败，已显示文本。
     <button type="button" class="nw-action-btn" @click="renderMarkdown(props.content)">重试</button>
   </div>
+  <p v-if="noteMusicError" role="alert" class="note-music-error">{{ noteMusicError }}</p>
   <Teleport to="body">
     <div
       v-if="showRenderedTableExpandDialog"
@@ -31,7 +32,7 @@ before the root or content identity is replaced. -->
 
 <script setup lang="ts">
 import { nextTick, onMounted, ref, watch, onBeforeUnmount, inject } from 'vue';
-import { useRuntimeConfig } from '#imports';
+import { useRuntimeConfig, useRouter } from '#imports';
 import { useMessageStore } from '~/store/message';
 import { ensureFancyboxVideoThumbnail, getVideoElementSource, normalizeMediaPreviewUrl } from '~/utils/fancybox-video-close'
 import { bindMediaFancybox, unbindMediaFancybox, createMediaFancyboxOptions } from '~/utils/media-fancybox'
@@ -46,6 +47,8 @@ import { createRenderedTableDialog } from '~/utils/rendered-table-dialog'
 import { applyImageLoadingPlaceholders, applyRenderedMediaLayout } from '~/utils/rendered-media-layout'
 import { applyAttachmentRenders, applyDeletedAttachmentPlaceholders, escapeRenderedHtml, isAudioAttachmentUrl, isVideoAttachmentUrl, replaceNodeWithHtml } from '~/utils/rendered-attachment'
 import { createWindowedMarkdownBody, isMarkdownBodyNearViewport } from '~/utils/windowed-markdown-body'
+import { NOTE_MUSIC_PLAYER_KEY, noteMusicPlaybackLocation, type NoteMusicPlayer } from '~/utils/note-music'
+import { enhanceNoteMusicLinks } from '~/utils/rendered-note-music'
 
 // 定义正则表达式
 const BILIBILI_REG = /https:\/\/www\.bilibili\.com\/video\/(BV[\w]+)\/?(?:\?[^\s<)]*)?/g;
@@ -68,6 +71,15 @@ const resolveAttachmentUrl = (path: string) => resolveManagedAttachmentURL(Strin
 
 const previewElement = ref<HTMLDivElement | null>(null);
 const previewLoadFailed = ref(false)
+const noteMusicError = ref('')
+const noteMusicRouter = useRouter()
+const playNoteMusic = inject<NoteMusicPlayer | null>(NOTE_MUSIC_PLAYER_KEY, null)
+const enhanceNoteMusic = (root: HTMLElement | null) => {
+  enhanceNoteMusicLinks(root, props.messageId, async (request) => {
+    if (playNoteMusic) await playNoteMusic(request)
+    else await noteMusicRouter.push(noteMusicPlaybackLocation(request))
+  }, (message) => { noteMusicError.value = message })
+}
 let renderSequence = 0
 let zoom: any = null;
 let themeClassObserver: MutationObserver | null = null
@@ -336,6 +348,7 @@ const renderedTables = createRenderedTableDialog({
     enhanceAttachmentAudioPlayers(root)
     applyDeletedAttachmentPlaceholders(root, String(BASE_API || '/api'))
     initializeMediaViewer(root)
+    enhanceNoteMusic(root)
   },
   cleanup: (root) => {
     unbindMediaFancybox(root)
@@ -633,6 +646,7 @@ const renderMarkdown = async (markdown: string) => {
           markMarkdownPreservedBlankLineElements(previewElement.value)
           applyAttachmentRenders(previewElement.value, String(BASE_API || '/api'))
           applyThemeClass();
+          enhanceNoteMusic(previewElement.value)
           const anchors = previewElement.value?.querySelectorAll<HTMLAnchorElement>('a[href]') || [];
           anchors.forEach((a: HTMLAnchorElement) => {
             if (a.classList.contains('site-attachment-tag')) return
@@ -938,6 +952,22 @@ watch(() => props.enableGithubCard, () => {
 .markdown-preview :where(h1, h2, h3, h4, h5, h6, p, li, blockquote, figcaption, caption, td, th, a, span, strong, em, del, mark, small, label, button, input, textarea, select, option) {
   font-family: inherit !important;
 }
+
+.markdown-preview :deep(.note-music-marker) {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 4px 10px;
+  border: 1px solid currentColor;
+  border-radius: 8px;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  white-space: normal;
+  cursor: pointer;
+}
+.markdown-preview :deep(.note-music-marker:disabled) { opacity: .6; cursor: wait; }
+.note-music-error { color: #dc2626; font-size: 13px; }
 
 .markdown-preview--inherit-font,
 .markdown-preview--inherit-font.vditor-reset,

@@ -183,12 +183,15 @@ func (s *Service) checkTrack(ctx context.Context, id string, admin bool) (models
 	}
 	if !admin {
 		cfg, site, err := s.readConfiguration(ctx)
-		if err != nil || !site.MusicEnabled || cfg.Source != "local" {
+		noteTrack, _ := ctx.Value(noteTrackAccessKey{}).(string)
+		if err != nil || !site.MusicEnabled || (noteTrack != id && cfg.Source != "local") {
 			return track, ErrNotFound
 		}
-		var count int64
-		if err = s.db.WithContext(ctx).Model(&models.MusicPlaylistItem{}).Where("track_id = ?", id).Count(&count).Error; err != nil || count != 1 {
-			return track, ErrNotFound
+		if noteTrack != id {
+			var count int64
+			if err = s.db.WithContext(ctx).Model(&models.MusicPlaylistItem{}).Where("track_id = ?", id).Count(&count).Error; err != nil || count != 1 {
+				return track, ErrNotFound
+			}
 		}
 	}
 	return track, nil

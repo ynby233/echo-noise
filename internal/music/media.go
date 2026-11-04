@@ -206,6 +206,7 @@ func (s *Service) OpenMedia(ctx context.Context, trackID string, kind string, co
 		}
 		rep := ResolveRepresentation(track, false)
 		result, err = s.cache.acquire(ctx, "cover-jpeg-512-v1:"+rep.Key, true, "image/jpeg", mediaName(track, true, true), func(buildCtx context.Context, output *os.File) error {
+			buildCtx = carryNoteTrackAccess(buildCtx, ctx)
 			if err := s.mediaStillEligible(buildCtx, track, admin); err != nil {
 				return err
 			}
@@ -215,6 +216,7 @@ func (s *Service) OpenMedia(ctx context.Context, trackID string, kind string, co
 		rep := ResolveRepresentation(track, compat)
 		if rep.Derived {
 			result, err = s.cache.acquire(ctx, "audio:"+rep.Key, false, rep.MIME, mediaName(track, false, true), func(buildCtx context.Context, output *os.File) error {
+				buildCtx = carryNoteTrackAccess(buildCtx, ctx)
 				if err := s.mediaStillEligible(buildCtx, track, false); err != nil {
 					return err
 				}

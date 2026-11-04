@@ -83,6 +83,10 @@ func SetupRouter(musicService *music.Service) *gin.Engine {
 	r := gin.New()
 	configureTrustedProxies(r)
 	r.Use(gin.Recovery())
+	r.Use(func(c *gin.Context) {
+		c.Set("note_music_service", musicService)
+		c.Next()
+	})
 	r.Use(middleware.SecurityHeadersMiddleware())
 	// Health probes must not depend on database-backed middleware. Register
 	// them before the rest of the global chain so liveness remains useful

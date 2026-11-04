@@ -47,6 +47,9 @@ MessageList opens/closes it but does not mutate its internal draft. -->
             >
               <UIcon :name="editUploadKind === 'attachment' ? 'i-mdi-loading' : 'i-heroicons-paper-clip'" class="w-5 h-5" :class="{ 'edit-spin': editUploadKind === 'attachment' }" />
             </button>
+            <button v-if="canUploadMusic" type="button" class="tb-btn edit-media-button nw-action-btn nw-tooltip-anchor" data-tooltip="上传音乐" aria-label="上传音乐" :disabled="isSaving || isEditUploading" @pointerdown="prepareEditMusicInsert" @mousedown.prevent @click="openEditMusicPicker">
+              <UIcon name="i-mdi-music-note-plus" class="w-5 h-5" />
+            </button>
             <CommonTagPicker
               v-if="showEditModal && userStore.isLogin"
               :tags="userStore.user?.commonTags || []"
@@ -103,6 +106,7 @@ MessageList opens/closes it but does not mutate its internal draft. -->
           <span>{{ isSaving ? '保存中' : '保存' }}</span>
         </button>
       </div>
+  <MusicTrackPicker v-if="showEditMusicPicker && showEditModal && canUploadMusic" :key="editMusicPickerGeneration" @select="handleEditMusicSelected" @close="closeEditMusicPicker" />
     </div>
   </UModal>
 
@@ -264,6 +268,10 @@ import { createAudioMarkdown, resolveUploadedMediaUrl, uploadMediaFiles } from '
 import { applyCurrentEditOperation, applyMessageEditSaveResult, createMessageEditSession, type MessageEditSessionToken } from '~/utils/message-edit-session'
 import { messageVisibility, messageVisibilityIcon, messageVisibilityLabel, messageVisibilityOptions, messageVisibilityRequiresPrivate, normalizeMessageVisibility } from '~/utils/message-visibility'
 import { useUserStore } from '~/store/user'
+import { useAdminCapabilities } from '~/composables/useAdminCapabilities'
+import MusicTrackPicker from './MusicTrackPicker.vue'
+import type { MusicPickerTrack } from '~/utils/music-track-picker'
+import { createNoteMusicMarkdown } from '~/utils/note-music'
 
 // Owns the complete edit-dialog lifecycle. MessageList only decides whether an
 // edit may start and applies the saved patch emitted through this interface.
@@ -289,6 +297,38 @@ const editAttachmentInputRef = ref<HTMLInputElement | null>(null);
 type EditInsertTarget = { start: number; end: number; session: MessageEditSessionToken };
 const editAudioInsertTarget = ref<EditInsertTarget | null>(null);
 const editSession = createMessageEditSession()
+const { can, refreshCapabilities } = useAdminCapabilities()
+const canUploadMusic = computed(() => userStore.isLogin && can('music.manage') && can('music.view'))
+const showEditMusicPicker = ref(false)
+const editMusicPickerGeneration = ref(0)
+let editMusicInsertTarget: (EditInsertTarget & { content: string }) | null = null
+const closeEditMusicPicker = () => {
+  showEditMusicPicker.value = false
+  editMusicInsertTarget = null
+  editMusicPickerGeneration.value += 1
+}
+const prepareEditMusicInsert = () => {
+  if (!canUploadMusic.value || isSaving.value || isEditUploading.value) return
+  const textarea = getEditTextareaElement()
+  const session = editSession.capture()
+  if (!session || !textarea) return
+  editMusicInsertTarget = { start: textarea.selectionStart, end: textarea.selectionEnd, session, content: editingContent.value }
+}
+const openEditMusicPicker = () => {
+  if (!canUploadMusic.value || !showEditModal.value || isSaving.value || isEditUploading.value) return
+  if (!editMusicInsertTarget) prepareEditMusicInsert()
+  if (!editMusicInsertTarget) return
+  editMusicPickerGeneration.value += 1
+  showEditMusicPicker.value = true
+}
+const handleEditMusicSelected = (track: MusicPickerTrack) => {
+  const target = editMusicInsertTarget
+  const allowed = showEditMusicPicker.value && canUploadMusic.value && showEditModal.value && !isSaving.value
+  closeEditMusicPicker()
+  if (!allowed || !target || !editSession.isCurrent(target.session) || target.content !== editingContent.value) return
+  void insertEditingMarkdown(createNoteMusicMarkdown(track), target)
+}
+watch([canUploadMusic, () => userStore.token, () => userStore.user?.userid], closeEditMusicPicker, { flush: 'sync' })
 let editDialogMounted = false
 const editUploadProgress = ref(0);
 const editUploadKind = ref<'audio' | 'attachment' | ''>('');
@@ -628,6 +668,7 @@ const handleEditFloatingMenuViewportChange = () => {
 
 onMounted(() => {
   editDialogMounted = true
+  void refreshCapabilities()
   try {
     document.addEventListener('pointerdown', handleEditFloatingMenuPointerDown, true);
     window.addEventListener('resize', handleEditFloatingMenuViewportChange);
@@ -638,6 +679,7 @@ onMounted(() => {
 });
 onBeforeUnmount(() => {
   editDialogMounted = false
+  closeEditMusicPicker()
   editSession.close()
   try {
     document.removeEventListener('pointerdown', handleEditFloatingMenuPointerDown, true);
@@ -650,10 +692,11 @@ onBeforeUnmount(() => {
 watch(showEditModal, (visible) => {
   if (!visible) {
     editSession.close()
+    closeEditMusicPicker()
     closeEditFloatingMenus();
     clearEditAudioInsertTarget();
   }
-});
+}, { flush: 'sync' });
 
 const getEditTextareaElement = (): HTMLTextAreaElement | null => {
   const target = editTextareaRef.value as any
@@ -695,6 +738,7 @@ const insertEditingMarkdown = async (markdown: string, preparedTarget: EditInser
   const after = editingContent.value.slice(end)
   editingContent.value = `${before}${markdown}${after}`
   await nextTick()
+  if (preparedTarget && (!editSession.isCurrent(preparedTarget.session) || !showEditModal.value)) return
   const nextTextarea = getEditTextareaElement()
   if (nextTextarea) {
     const nextCursor = start + markdown.length
@@ -811,6 +855,7 @@ type MessageEditOpenOptions = {
 const canChangeVisibility = ref(false)
 const canChangePublishTime = ref(false)
 const open = ({ message, canChangeVisibility: allowVisibility, canChangePublishTime: allowPublishTime }: MessageEditOpenOptions) => {
+  closeEditMusicPicker()
   editSession.open(Number(message.id))
   isSaving.value = false
   editingMessage.value = message
@@ -830,6 +875,7 @@ const saveEditedMessage = async () => {
   if (!session || isSaving.value) return;
 
   isSaving.value = true;
+  closeEditMusicPicker()
   try {
     // 获取当前编辑的消息
     const currentMsg = editingMessage.value;

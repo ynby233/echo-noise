@@ -159,7 +159,7 @@ const server = http.createServer(async (req, res) => {
       await page.getByRole('button', { name: '写笔记', exact: true }).click()
       assert.equal(await editor.getAttribute('data-test-instance'), 'original')
       assert((await editor.textContent()).includes('保留未发布草稿'))
-      await page.getByRole('button', { name: '图床上传', exact: true }).click()
+      await page.getByRole('button', { name: '上传图床', exact: true }).click()
       await page.waitForFunction(chunk => performance.getEntriesByType('resource').some(entry => entry.name.endsWith('/' + chunk)), featureChunks.ImageHostingUploader)
       await page.waitForSelector('.image-hosting-popup')
       await page.locator('.image-hosting-popup').getByRole('button', { name: '关闭', exact: true }).click()

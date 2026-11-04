@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"io"
@@ -18,10 +19,15 @@ import (
 
 type MusicController struct {
 	service *music.Service
+	noteKey [32]byte
 }
 
 func NewMusicController(service *music.Service) *MusicController {
-	return &MusicController{service: service}
+	controller := &MusicController{service: service}
+	if _, err := rand.Read(controller.noteKey[:]); err != nil {
+		panic("cannot initialize music URL signing key")
+	}
+	return controller
 }
 
 // Decode the complete body before doing any work, including trailing objects.
@@ -274,6 +280,9 @@ func (m *MusicController) Public(c *gin.Context) {
 func (m *MusicController) serveMedia(c *gin.Context, kind string, admin bool) {
 	c.Header("Cache-Control", "private, no-store")
 	c.Header("X-Content-Type-Options", "nosniff")
+	if !admin && !m.authorizeNoteMedia(c) {
+		return
+	}
 	compat := c.Query("compat") == "1"
 	file, err := m.service.OpenMedia(c.Request.Context(), c.Param("trackID"), kind, compat, admin)
 	if err != nil {
@@ -281,6 +290,9 @@ func (m *MusicController) serveMedia(c *gin.Context, kind string, admin bool) {
 		return
 	}
 	defer file.Close()
+	if !admin && !m.authorizeNoteMedia(c) {
+		return
+	}
 	c.Header("Content-Type", file.MIME)
 	c.Header("ETag", file.ETag)
 	c.Header("Content-Disposition", mime.FormatMediaType("inline", map[string]string{"filename": file.Name}))
@@ -293,9 +305,15 @@ func (m *MusicController) AdminCover(c *gin.Context) { m.serveMedia(c, "cover", 
 func (m *MusicController) Lyrics(c *gin.Context) {
 	c.Header("Cache-Control", "private, no-store")
 	c.Header("X-Content-Type-Options", "nosniff")
+	if !m.authorizeNoteMedia(c) {
+		return
+	}
 	result, err := m.service.GetLyrics(c.Request.Context(), c.Param("trackID"))
 	if err != nil {
 		musicFailure(c, err, true)
+		return
+	}
+	if !m.authorizeNoteMedia(c) {
 		return
 	}
 	c.JSON(http.StatusOK, dto.OK(result, "歌词"))

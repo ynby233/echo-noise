@@ -655,7 +655,8 @@ assert(
     !addForm.includes('data-tooltip="上传图片"') &&
     !addForm.includes('data-tooltip="上传视频"') &&
     !addForm.includes('<VideoUpload') &&
-    addForm.indexOf('data-tooltip="上传附件"') < addForm.indexOf('data-tooltip="图床上传"') &&
+    addForm.indexOf('data-tooltip="上传附件"') < addForm.indexOf('data-tooltip="上传音乐"') &&
+    addForm.indexOf('data-tooltip="上传音乐"') < addForm.indexOf('data-tooltip="上传图床"') &&
     addForm.includes(':data-tooltip="`全图显示：${fullImageAttachments ? \'已开启\' : \'已关闭\'}`"') &&
     addForm.includes(':data-tooltip="`推送：${enableNotify ? \'已开启\' : \'已关闭\'}`"') &&
     addForm.includes(":aria-pressed=\"fullImageAttachments\"") &&

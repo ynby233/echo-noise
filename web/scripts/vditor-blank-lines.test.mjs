@@ -366,7 +366,7 @@ assert.match(
 
 assert.match(
   addForm,
-  /data-tooltip="图床上传"[\s\S]+?@pointerdown="prepareEditorAttachmentInsert"[\s\S]+?@click="openImageUploader"/,
+  /data-tooltip="上传图床"[\s\S]+?@pointerdown="prepareEditorAttachmentInsert"[\s\S]+?@click="openImageUploader"/,
   'image-hosting insertion must use the same explicit attachment target lifecycle as file uploads'
 )
 
