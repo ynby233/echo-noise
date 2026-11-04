@@ -434,6 +434,33 @@ html.dark .vditor-container .editor-table-attachment-marker,
   display: none !important;
 }
 
+.vditor-container .editor-note-music-node,
+.vditor-container .editor-note-music-link {
+  display: inline-block;
+  max-width: 100%;
+  vertical-align: baseline;
+  color: var(--ir-bracket-color, #0000ff);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  cursor: pointer;
+  user-select: none;
+}
+
+.vditor-container .editor-note-music-node .vditor-ir__marker,
+.vditor-container .editor-note-music-node .vditor-ir__marker--link {
+  display: none !important;
+}
+
+
+html.dark .vditor-container .editor-note-music-node,
+html.dark .vditor-container .editor-note-music-link,
+.vditor--dark .editor-note-music-node,
+.vditor--dark .editor-note-music-link {
+  color: var(--ir-bracket-color, #93c5fd);
+}
+
 .editor-attachment-preview {
   margin: 6px 12px 10px;
   padding: 8px;

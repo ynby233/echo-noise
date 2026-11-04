@@ -22,11 +22,14 @@ class Element {
     this.textContent = '♫ 歌曲'
     this.isConnected = true
     this.attributes = new Map()
+    this.children = []
   }
   closest() { return this.inCode ? this : null }
   getAttribute(name) { return name === 'href' ? this.href : this.attributes.get(name) }
   setAttribute(name, value) { this.attributes.set(name, value) }
   removeAttribute(name) { this.attributes.delete(name) }
+  replaceChildren(...nodes) { this.children = nodes; this.textContent = '' }
+  append(...nodes) { this.children.push(...nodes) }
   replaceWith(node) { this.replacement = node }
 }
 const previousDocument = globalThis.document
@@ -43,7 +46,10 @@ try {
     request => { calls.push(request); return new Promise(resolve => { resolvePlay = resolve }) }, message => errors.push(message))
   const button = anchor.replacement
   assert.equal(button.tagName, 'BUTTON')
-  assert.equal(button.textContent, '♫ 歌曲')
+  assert.equal(button.dataset.musicLabel, '♫ 歌曲')
+  assert.equal(button.className, 'note-music-marker', 'music cards must not inherit the fixed 36px icon-button size')
+  assert.equal(button.children[1].children[0].textContent, '歌曲')
+  assert.equal(button.children[1].children[1].textContent, '点击临时播放')
   assert.equal(codeAnchor.replacement, undefined, 'code examples must not become player controls')
   assert.equal(external.replacement, undefined, 'external links must not become player controls')
   const event = { preventDefault() {}, stopPropagation() {} }
@@ -62,10 +68,13 @@ try {
   await clone.onclick(event)
   assert.equal(errors.at(-1), '音源已失效', 'a copied table marker must regain its playback handler and show failures')
   assert.equal(clone.disabled, false, 'a failed playback can be retried')
+  assert.equal(clone.children[1].children[1].textContent, '播放失败，点击重试')
 
   const preview = new Element('A', '/music/notes/abc')
   enhanceNoteMusicLinks({ querySelectorAll: () => [preview] }, 0, async () => {}, () => {})
   assert.equal(preview.replacement.disabled, true, 'unsaved previews cannot authorize public playback')
+  assert.equal(preview.replacement.children[1].children[1].textContent, '发布后可播放')
+  assert.equal(preview.replacement.getAttribute('aria-label'), '歌曲，发布后可播放')
 } finally {
   globalThis.document = previousDocument
 }

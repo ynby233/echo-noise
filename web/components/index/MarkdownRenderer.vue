@@ -953,20 +953,48 @@ watch(() => props.enableGithubCard, () => {
   font-family: inherit !important;
 }
 
-.markdown-preview :deep(.note-music-marker) {
+.note-music-marker {
+  box-sizing: border-box;
   display: inline-flex;
   align-items: center;
-  max-width: 100%;
-  padding: 4px 10px;
-  border: 1px solid currentColor;
-  border-radius: 8px;
+  justify-content: flex-start;
+  gap: 10px;
+  width: fit-content;
+  min-width: 0;
+  max-width: min(100%, 440px);
+  height: auto;
+  margin: 4px 0;
+  padding: 10px 14px;
+  border: 1px solid rgba(148, 163, 184, .3);
+  border-radius: 12px;
   color: inherit;
-  background: transparent;
+  background: rgba(148, 163, 184, .08);
+  font: inherit;
+  line-height: 1.5;
   text-align: left;
+  vertical-align: middle;
   white-space: normal;
   cursor: pointer;
 }
-.markdown-preview :deep(.note-music-marker:disabled) { opacity: .6; cursor: wait; }
+.note-music-marker-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 34px;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: rgba(59, 130, 246, .12);
+  font-size: 24px;
+  line-height: 1;
+}
+.note-music-marker-content { display: flex; flex-direction: column; min-width: 0; gap: 2px; }
+.note-music-marker-title { display: block; overflow-wrap: anywhere; }
+.note-music-marker-hint { display: block; font-size: 12px; opacity: .65 !important; }
+.note-music-marker:hover:not(:disabled),
+.note-music-marker:focus-visible { border-color: rgba(59, 130, 246, .65); background: rgba(59, 130, 246, .1); }
+.note-music-marker:focus-visible { outline: 2px solid rgba(59, 130, 246, .4); outline-offset: 2px; }
+.note-music-marker:disabled { cursor: default; opacity: .7; }
+.note-music-marker[aria-busy="true"] { cursor: wait; }
 .note-music-error { color: #dc2626; font-size: 13px; }
 
 .markdown-preview--inherit-font,

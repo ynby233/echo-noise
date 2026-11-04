@@ -41,6 +41,10 @@ const ICONS = {
     loopSingle: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640"><path d="M534.6 182.6C547.1 170.1 547.1 149.8 534.6 137.3L470.6 73.3C461.4 64.1 447.7 61.4 435.7 66.4C423.7 71.4 416 83.1 416 96L416 128L256 128C150 128 64 214 64 320C64 337.7 78.3 352 96 352C113.7 352 128 337.7 128 320C128 249.3 185.3 192 256 192L416 192L416 224C416 236.9 423.8 248.6 435.8 253.6C447.8 258.6 461.5 255.8 470.7 246.7L534.7 182.7zM105.4 457.4C92.9 469.9 92.9 490.2 105.4 502.7L169.4 566.7C178.6 575.9 192.3 578.6 204.3 573.6C216.3 568.6 224 556.9 224 544L224 512L384 512C490 512 576 426 576 320C576 302.3 561.7 288 544 288C526.3 288 512 302.3 512 320C512 390.7 454.7 448 384 448L224 448L224 416C224 403.1 216.2 391.4 204.2 386.4C192.2 381.4 178.5 384.2 169.3 393.3L105.3 457.3z"/><path d="M295 280L305 260L335 260L335 380L305 380L305 280Z"/></svg>`, 
     shuffle: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640"><path d="M467.8 98.4C479.8 93.4 493.5 96.2 502.7 105.3L566.7 169.3C572.7 175.3 576.1 183.4 576.1 191.9C576.1 200.4 572.7 208.5 566.7 214.5L502.7 278.5C493.5 287.7 479.8 290.4 467.8 285.4C455.8 280.4 448 268.9 448 256L448 224L416 224C405.9 224 396.4 228.7 390.4 236.8L358 280L318 226.7L339.2 198.4C357.3 174.2 385.8 160 416 160L448 160L448 128C448 115.1 455.8 103.4 467.8 98.4zM218 360L258 413.3L236.8 441.6C218.7 465.8 190.2 480 160 480L96 480C78.3 480 64 465.7 64 448C64 430.3 78.3 416 96 416L160 416C170.1 416 179.6 411.3 185.6 403.2L218 360zM502.6 534.6C493.4 543.8 479.7 546.5 467.7 541.5C455.7 536.5 448 524.9 448 512L448 480L416 480C385.8 480 357.3 465.8 339.2 441.6L185.6 236.8C179.6 228.7 170.1 224 160 224L96 224C78.3 224 64 209.7 64 192C64 174.3 78.3 160 96 160L160 160C190.2 160 218.7 174.2 236.8 198.4L390.4 403.2C396.4 411.3 405.9 416 416 416L448 416L448 384C448 371.1 455.8 359.4 467.8 354.4C479.8 349.4 493.5 352.2 502.7 361.3L566.7 425.3C572.7 431.3 576.1 439.4 576.1 447.9C576.1 456.4 572.7 464.5 566.7 470.5L502.7 534.5z"/></svg>`
 };
+// Inline SVG stays local and sharp at both playlist and minimized-player sizes.
+const COVER_PLACEHOLDER = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><g fill="none" stroke="#888888" stroke-width="2"><circle cx="32" cy="32" r="27"/><circle cx="32" cy="32" r="21"/></g><path fill="#ff8a50" d="M29 23v17a6 4 0 1 1-3-3.5V20l18-4v20a6 4 0 1 1-3-3.5V22z"/></svg>')}`;
+const coverRequests = new WeakMap();
+
 class NeteaseMiniPlayer {
     static supportsLocalPlaylist = true;
     static supportsTemporaryTrack = true;
@@ -344,8 +348,6 @@ class NeteaseMiniPlayer {
         this.currentTime = 0;
         this.duration = song.duration / 1000;
         this.updateSongInfo(song);
-        this.elements.albumCover.removeAttribute('src');
-        if (song.picUrl) this.elements.albumCover.src = song.picUrl;
         this.elements.lyricLine.textContent = this.showLyrics ? '加载歌词中…' : '';
         const useCompatibility = compatibility || (song.mimeType && !this.audio.canPlayType(song.mimeType));
         const url = useCompatibility && song.fallbackSrc ? song.fallbackSrc : song.src;
@@ -548,7 +550,7 @@ class NeteaseMiniPlayer {
         this.element.innerHTML = `
             <div class="player-main">
                 <div class="album-cover-container">
-                    <img class="album-cover" src="" alt="专辑封面">
+                    <img class="album-cover cover-placeholder" src="${COVER_PLACEHOLDER}" alt="专辑封面">
                     <div class="vinyl-overlay">
                         <div class="vinyl-center"></div>
                     </div>
@@ -1063,16 +1065,51 @@ class NeteaseMiniPlayer {
         this.currentSong = song;
         this.duration = song.duration / 1000;
         this.updateSongInfo(song);
-        this.elements.albumCover.removeAttribute('src');
-        if (song.picUrl) this.elements.albumCover.src = song.picUrl;
         this.updatePlaylistDisplay();
         await this.loadSongUrl(song.id, generation);
         if (!this.isCurrentSourceLoad(generation)) return false;
         if (this.showLyrics) await this.loadLyrics(song.id, generation);
         return this.isCurrentSourceLoad(generation);
     }
+    updateCover(cover, source) {
+        if (!cover) return;
+        const previous = coverRequests.get(cover);
+        if (previous) previous.onload = previous.onerror = null;
+        coverRequests.delete(cover);
+        cover.onerror = null;
+        cover.classList.add('cover-placeholder');
+        cover.src = COVER_PLACEHOLDER;
+        if (this.destroyed || typeof source !== 'string' || !source.trim()) return;
+        let url;
+        try {
+            url = new URL(source, window.location.href);
+            if (url.protocol !== 'http:' && url.protocol !== 'https:') return;
+        } catch { return; }
+        // Each request has its own event target: queued events from an old song
+        // cannot be mistaken for the current image's load/error events.
+        const request = document.createElement('img');
+        coverRequests.set(cover, request);
+        const settle = loaded => {
+            if (coverRequests.get(cover) !== request) return;
+            request.onload = request.onerror = null;
+            coverRequests.delete(cover);
+            if (this.destroyed || !loaded || !request.naturalWidth) return;
+            cover.onerror = () => {
+                if (this.destroyed || cover.src !== url.href || !cover.complete || cover.naturalWidth) return;
+                cover.onerror = null;
+                cover.classList.add('cover-placeholder');
+                cover.src = COVER_PLACEHOLDER;
+            };
+            cover.src = url.href;
+            cover.classList.remove('cover-placeholder');
+        };
+        request.onload = () => settle(true);
+        request.onerror = () => settle(false);
+        request.src = url.href;
+    }
     updateSongInfo(song) {
         if (!song) return;
+        this.updateCover(this.elements.albumCover, song.picUrl);
         this.elements.songTitle.textContent = song.name || '未知歌曲';
         this.elements.songArtist.textContent = song.artists || '未知艺术家';
         this.elements.songArtist.removeAttribute('title');
@@ -1477,12 +1514,7 @@ class NeteaseMiniPlayer {
             const cover = document.createElement('img');
             cover.className = 'playlist-item-cover';
             cover.alt = '专辑封面';
-            if (song.picUrl) {
-                try {
-                    const url = new URL(song.picUrl, window.location.href);
-                    if (url.protocol === 'http:' || url.protocol === 'https:') cover.src = url.href;
-                } catch {}
-            }
+            this.updateCover(cover, song.picUrl);
             const info = document.createElement('div');
             info.className = 'playlist-item-info';
             const name = document.createElement('div');

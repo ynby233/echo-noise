@@ -13,10 +13,27 @@ export function enhanceNoteMusicLinks(
     if (!trackID) return
     const button = anchor.tagName === 'BUTTON' ? anchor as HTMLButtonElement : document.createElement('button')
     button.type = 'button'
-    button.className = 'note-music-marker nw-action-btn'
+    const label = anchor.dataset.musicLabel || anchor.textContent || '本地音乐'
+    button.className = 'note-music-marker'
     button.dataset.trackId = trackID
-    button.textContent = anchor.textContent || '♫ 本地音乐'
-    button.title = '临时播放此歌曲'
+    button.dataset.musicLabel = label
+    button.replaceChildren()
+    const icon = document.createElement('span')
+    icon.className = 'note-music-marker-icon'
+    icon.textContent = '♫'
+    icon.setAttribute('aria-hidden', 'true')
+    const content = document.createElement('span')
+    content.className = 'note-music-marker-content'
+    const title = document.createElement('span')
+    title.className = 'note-music-marker-title'
+    title.textContent = label.replace(/^[♫♪♬]\s*/, '') || '本地音乐'
+    const hint = document.createElement('span')
+    hint.className = 'note-music-marker-hint'
+    hint.textContent = messageID ? '点击临时播放' : '发布后可播放'
+    content.append(title, hint)
+    button.append(icon, content)
+    button.title = messageID ? '使用音乐播放器临时播放，不改变原歌单' : '发布后可播放'
+    button.setAttribute('aria-label', `${title.textContent}，${hint.textContent}`)
     button.disabled = !messageID
     button.onclick = async (event) => {
       event.preventDefault()
@@ -24,13 +41,16 @@ export function enhanceNoteMusicLinks(
       if (button.disabled) return
       button.disabled = true
       button.setAttribute('aria-busy', 'true')
+      hint.textContent = '正在加载…'
       reportError('')
       try {
         await play({ trackID, messageID })
       } catch (error) {
+        hint.textContent = '播放失败，点击重试'
         if (button.isConnected) reportError(error instanceof Error ? error.message : '音乐暂时无法播放，请稍后重试')
       } finally {
         button.disabled = false
+        if (hint.textContent === '正在加载…') hint.textContent = '点击临时播放'
         button.removeAttribute('aria-busy')
       }
     }

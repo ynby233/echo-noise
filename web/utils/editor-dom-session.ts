@@ -13,6 +13,7 @@ import { getTableResizeZoomScale } from './table-resize-session'
 import { createEditorTableResize } from './editor-table-resize'
 import { isBrowserPreviewableAttachmentUrl } from './attachment-preview'
 import { createPreReadyEditorInsertBuffer } from './editor-insert-buffer.mjs'
+import { bindEditorNoteMusicInteractions, editorNoteMusicInfo, enhanceEditorNoteMusic, replaceEditorNoteMusicWithSource } from './editor-note-music'
 
 
 import type Vditor from 'vditor'
@@ -383,6 +384,7 @@ const transformAttachmentPreviewHtml = (html: string) => {
   const holder = document.createElement('div')
   holder.innerHTML = html
   markMarkdownPreservedBlankLineElements(holder)
+  enhanceEditorNoteMusic(holder, true)
   holder.querySelectorAll('a').forEach((node) => {
     const anchor = node as HTMLAnchorElement
     const info = attachmentInfoFromAnchor(anchor)
@@ -649,6 +651,7 @@ const materializeEditorPreservedBlankLineBlocks = (root: HTMLElement) => {
 }
 
 const replaceAttachmentNodesWithSourceText = (root: HTMLElement) => {
+  replaceEditorNoteMusicWithSource(root)
   root.querySelectorAll<HTMLElement>('.editor-table-attachment-marker').forEach((marker) => {
     const info = attachmentInfoFromTableMarker(marker)
     if (info) marker.replaceWith(document.createTextNode(attachmentInfoToMarkdownSource(info)))
@@ -721,6 +724,7 @@ const materializeAttachmentMarkersInTableCells = (root: HTMLElement) => {
 const setupAttachmentPreview = () => {
   const root = editorContainer.value
   if (!root || attachmentPreviewCleanup) return
+  const disposeNoteMusic = bindEditorNoteMusicInteractions(root)
 
   const getEventElement = (event: Event) => {
     const target = event.target as Node | null
@@ -960,6 +964,7 @@ const setupAttachmentPreview = () => {
       label.setAttribute('data-attachment-url', info.url)
       label.style.cursor = 'pointer'
     })
+    enhanceEditorNoteMusic(scope)
 
     scope.querySelectorAll<HTMLVideoElement>('.site-attachment-render--video video').forEach((video) => {
       ensureFancyboxVideoThumbnail(video)
@@ -1514,6 +1519,7 @@ const setupAttachmentPreview = () => {
   window.addEventListener('scroll', repositionInlineEditorTableEditors, { passive: true, capture: true })
   attachmentPreviewCleanup = () => {
     previewObserver.disconnect()
+    disposeNoteMusic()
     document.removeEventListener('beforeinput', onEditorBeforeInput, true)
     root.removeEventListener('beforeinput', onEditorBeforeInput, true)
     document.removeEventListener('paste', onEditorPaste, true)
@@ -3247,6 +3253,11 @@ const collectEditorTableSourceUnits = (root: Node, output: EditorTableSourceUnit
     }
     if (!(node instanceof HTMLElement)) return
     if (node.classList.contains('editor-attachment-preview')) return
+    const music = editorNoteMusicInfo(node)
+    if (music) {
+      output.push({ node, length: music.source.length, atomic: true })
+      return
+    }
     if (node.classList.contains('editor-table-attachment-marker')) {
       const source = node.getAttribute('data-attachment-source') || ''
       output.push({ node, length: Math.max(1, source.length), atomic: true })
@@ -3431,6 +3442,7 @@ const serializeEditorTableDomAsMarkdown = (table: HTMLTableElement) => {
 const serializePlainEditorBlockText = (block: Element) => {
   const clone = block.cloneNode(true) as HTMLElement
   clone.querySelectorAll('.editor-table-delete-button, .editor-table-expand-button, .editor-attachment-preview').forEach((node) => node.remove())
+  replaceEditorNoteMusicWithSource(clone)
   clone.querySelectorAll('br').forEach((br) => br.replaceWith(document.createTextNode('\n')))
   const rawText = String(clone.textContent || '').replace(/[\u200b\u200c\ufeff]/g, '')
   const isBlankLineDom = isMarkdownBlankLineSentinel(rawText)
@@ -3498,6 +3510,7 @@ const serializeEditorDomAsMarkdown = (editable: HTMLElement) => {
       flushPlainLines()
       const clone = node.cloneNode(true) as HTMLElement
       clone.querySelectorAll('.editor-table-delete-button, .editor-table-expand-button, .editor-attachment-preview').forEach((control) => control.remove())
+      replaceEditorNoteMusicWithSource(clone)
       clone.querySelectorAll('table').forEach((table) => {
         const markdown = serializeEditorTableDomAsMarkdown(table as HTMLTableElement)
         table.replaceWith(document.createTextNode(markdown ? `\n${markdown}\n\n` : ''))
@@ -5148,7 +5161,7 @@ const setupVditorPanelPositioning = () => {
   const handleToolbarClick = (event: Event) => {
     const target = event.target instanceof Element ? event.target : null
     const item = target?.closest('.vditor-toolbar__item, button[data-type], [role="button"][data-type]') as HTMLElement | null
-    if (!item || !editorContainer.value?.contains(item)) return
+    if (!item || !item.closest('.vditor-toolbar') || !editorContainer.value?.contains(item)) return
     if (isPreviewItem(item)) {
       syncEditorDomToVditorValueForPreview()
       return

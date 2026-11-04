@@ -409,6 +409,22 @@
     filter: brightness(0.9) contrast(1.1);
 }
 
+/* The inline SVG has a transparent canvas so the active theme supplies its disc. */
+.netease-mini-player .album-cover.cover-placeholder,
+.netease-mini-player .playlist-item-cover.cover-placeholder {
+    background-color: var(--secondary-bg);
+    object-fit: contain;
+    filter: none;
+}
+
+.album-cover.cover-placeholder + .vinyl-overlay {
+    opacity: 0;
+}
+
+.album-cover-container:has(> .cover-placeholder)::after {
+    opacity: 0;
+}
+
 .vinyl-overlay {
     position: absolute;
     top: 0;
