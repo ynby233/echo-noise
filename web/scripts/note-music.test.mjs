@@ -75,6 +75,14 @@ try {
   assert.equal(preview.replacement.disabled, true, 'unsaved previews cannot authorize public playback')
   assert.equal(preview.replacement.children[1].children[1].textContent, '发布后可播放')
   assert.equal(preview.replacement.getAttribute('aria-label'), '歌曲，发布后可播放')
+
+  const draft = new Element('A', '/music/notes/abc')
+  const draftCalls = []
+  enhanceNoteMusicLinks({ querySelectorAll: () => [draft] }, 0, async request => { draftCalls.push(request) }, () => {}, true)
+  assert.equal(draft.replacement.disabled, false, 'authorized draft previews can be auditioned')
+  assert.equal(draft.replacement.children[1].children[1].textContent, '点击试听')
+  await draft.replacement.onclick(event)
+  assert.deepEqual(draftCalls, [{ trackID: 'abc', messageID: 0, draft: true }])
 } finally {
   globalThis.document = previousDocument
 }

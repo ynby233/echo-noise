@@ -22,6 +22,7 @@ func registerMusicManagementRoutes(group *gin.RouterGroup, controller *controlle
 	group.GET("/music/config", view, controller.GetConfig)
 	group.PUT("/music/config", manage, controller.SaveConfig)
 	group.GET("/music/library", view, controller.ListLibrary)
+	group.GET("/music/preview/:id", manage, controller.Preview)
 	group.POST("/music/library/refresh", manage, controller.Refresh)
 	group.GET("/music/library/refresh-status", view, controller.ScanStatus)
 	group.GET("/music/playlist", view, controller.GetPlaylist)

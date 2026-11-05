@@ -110,6 +110,7 @@ const attachmentInfoFromRenderedAnchor = (anchor: HTMLAnchorElement) => {
 export const applyAttachmentRenders = (root: HTMLElement | null, baseApi: string) => {
   if (!root) return
   root.querySelectorAll<HTMLAnchorElement>('a[href]').forEach((anchor) => {
+    if (anchor.closest('pre, code')) return
     const info = attachmentInfoFromRenderedAnchor(anchor)
     if (!info) return
     const { kindLabel, name, url } = info
@@ -123,7 +124,10 @@ export const replaceNodeWithHtml = (node: HTMLElement, html: string) => {
   const next = holder.firstElementChild as HTMLElement | null
   if (!next) return
   const parent = node.parentElement
-  if (parent && parent.tagName.toLowerCase() === 'p' && parent.childNodes.length === 1) {
+  // File/audio cards remain in their source paragraph until the line-layout pass.
+  // Unwrapping a one-link paragraph loses its authored blank separator.
+  const isParagraphCard = next.matches('.site-attachment-file, .site-attachment-audio')
+  if (!isParagraphCard && parent && parent.tagName.toLowerCase() === 'p' && parent.childNodes.length === 1) {
     parent.replaceWith(next)
     return
   }

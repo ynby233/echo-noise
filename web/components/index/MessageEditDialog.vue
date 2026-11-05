@@ -94,7 +94,7 @@ MessageList opens/closes it but does not mutate its internal draft. -->
         <div class="edit-preview-block">
           <div class="edit-preview-title">预览</div>
           <div :class="['edit-preview-surface', { 'edit-preview-surface--shadow-open': editPreviewHasAttachmentCard }]">
-            <MarkdownRenderer :content="editingContent" :enableGithubCard="props.siteConfig?.enableGithubCard === true" />
+            <MarkdownRenderer :content="editingContent" :message-id="0" :draft-music-preview="true" :enableGithubCard="props.siteConfig?.enableGithubCard === true" />
           </div>
         </div>
       </div>
@@ -291,7 +291,7 @@ const isSaving = ref(false);
 // 预览面板默认是 300px 的滚动裁剪盒，会把这些阴影贴边切掉，
 // 与正文里 file-attachment-shadow-open 放开裁剪后的观感不一致，所以这里做同样的判定。
 const EDIT_ATTACHMENT_MARKER_RE = /\[(?:图片|视频|音频|文件)附件：/;
-const editPreviewHasAttachmentCard = computed(() => EDIT_ATTACHMENT_MARKER_RE.test(editingContent.value));
+const editPreviewHasAttachmentCard = computed(() => EDIT_ATTACHMENT_MARKER_RE.test(editingContent.value) || /\]\(\/music\/notes\/[A-Za-z0-9_-]+\)/.test(editingContent.value));
 const editTextareaRef = ref<any>(null);
 const editAttachmentInputRef = ref<HTMLInputElement | null>(null);
 type EditInsertTarget = { start: number; end: number; session: MessageEditSessionToken };

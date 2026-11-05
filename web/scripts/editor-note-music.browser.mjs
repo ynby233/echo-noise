@@ -17,7 +17,7 @@ const [music, editorMusic, editor, component] = await Promise.all([
 const plainSerializer = editor.slice(editor.indexOf('const serializePlainEditorBlockText ='), editor.indexOf('const serializePlainEditorDomAsMarkdown ='))
 const source = stripTypeScriptTypes([
   music.replace(/^export /gm, ''),
-  editorMusic.replace(/^import .*\n/gm, '').replace(/^export /gm, ''),
+  editorMusic.replace(/^import[^\r\n]*\r?\n/gm, '').replace(/^export /gm, ''),
   'const MARKDOWN_BLANK_LINE_SENTINEL = "fixture-blank"; const PLAIN_EMPTY_LINE_CLASS = "fixture-empty";',
   'const isMarkdownBlankLineSentinel = () => false; const normalizeAttachmentSourceText = value => value;',
   plainSerializer,
@@ -26,6 +26,7 @@ const source = stripTypeScriptTypes([
 const browser = await chromium.launch({ headless: true, executablePath: process.env.CHROMIUM_PATH || undefined })
 try {
   const page = await browser.newPage()
+  page.on('pageerror', error => console.error(error.message))
   await page.setContent('<main class="vditor-container" id="root"></main>')
   await page.addStyleTag({ content: component.match(/<style[^>]*>([\s\S]*?)<\/style>/)?.[1] || '' })
   await page.addScriptTag({ path: fileURLToPath(new URL('../node_modules/vditor/dist/js/lute/lute.min.js', import.meta.url)) })
@@ -44,13 +45,14 @@ try {
       const toMd = () => (mode === 'ir' ? lute.VditorIRDOM2Md(editable.innerHTML) : lute.VditorDOM2Md(editable.innerHTML)).trim()
       editable.innerHTML = fromMd(`上文 ${markdown} 下文\n\n移动目标\n\n[普通链接](https://example.com)\n\n\`${markdown}\`\n\n\`\`\`text\n${markdown}\n\`\`\``)
       const original = toMd()
-      const dispose = bindEditorNoteMusicInteractions(root)
+      const played = []
+      const dispose = bindEditorNoteMusicInteractions(root, async request => { played.push(request) })
       enhanceEditorNoteMusic(root)
       enhanceEditorNoteMusic(root)
       const marker = root.querySelector('.editor-note-music-node, a.editor-note-music-link')
       check(!!marker && marker.getAttribute('contenteditable') === 'false', `${mode}: atomic music marker`)
       check(toMd() === original, `${mode}: enhancement preserves native Lute/getValue output including ordinary links and code`)
-      check(marker.getAttribute('data-note-music-hint') === '发布后可播放', `${mode}: draft playback hint`)
+      check(marker.getAttribute('data-note-music-hint') === '点击试听', `${mode}: draft playback hint`)
       check(root.querySelectorAll('.editor-note-music-node, a.editor-note-music-link').length === 1, `${mode}: code examples are not enhanced`)
       if (mode === 'ir') {
         marker.classList.add('vditor-ir__node--expand')
@@ -66,6 +68,7 @@ try {
         marker.dispatchEvent(event)
         check(event.defaultPrevented, `${mode}: ${type} cannot navigate`)
       }
+      check(played.length === 1 && played[0].trackID === 'local-track_42' && played[0].draft === true && played[0].messageID === 0, `${mode}: clicking a draft uses temporary preview without a published note ID`)
       const caret = window.getSelection().getRangeAt(0)
       check(caret.collapsed && caret.startContainer === marker.parentNode && caret.startOffset === [...marker.parentNode.childNodes].indexOf(marker) + 1, `${mode}: click leaves the caret after the marker for continued typing`)
       for (const key of ['Enter', ' ']) {

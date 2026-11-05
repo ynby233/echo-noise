@@ -177,7 +177,7 @@ assert.match(
 
 assert.match(
   editDialog,
-  /const editPreviewHasAttachmentCard = computed\(\(\) => EDIT_ATTACHMENT_MARKER_RE\.test\(editingContent\.value\)\)/,
+  /const editPreviewHasAttachmentCard = computed\(\(\) => EDIT_ATTACHMENT_MARKER_RE\.test\(editingContent\.value\) \|\| [^\n]+\.test\(editingContent\.value\)\)/,
   'the edit preview attachment check must derive from the draft content itself rather than a DOM probe',
 )
 
@@ -192,7 +192,7 @@ assert.ok(
 
 assert.match(
   messageList,
-  /querySelector\(\s*'\.site-attachment-file, \.site-attachment-audio, \.site-attachment-failure, \.github-card',?\s*\)/,
+  /querySelector\(\s*'\.site-attachment-file, \.site-attachment-audio, \.site-attachment-failure, \.github-card, \.note-music-marker',?\s*\)/,
   'failed image and video placeholders must open the message overflow path so their card shadows are not clipped',
 )
 

@@ -89,10 +89,65 @@ export const markMarkdownPreservedBlankLineElements = (root: ParentNode | null |
   if (!root || typeof root.querySelectorAll !== 'function') return
   root.querySelectorAll<HTMLElement>('p, div').forEach((element) => {
     if (element.closest('pre, code, table')) return
+    // A container may contain an NBSP paragraph beside an empty audio player.
+    // Only blank leaf blocks are sentinels; never replace their ancestor tree.
+    if (Array.from(element.children).some((child) => child.tagName !== 'BR')) return
     const text = element.textContent || ''
     if (!text.includes(MARKDOWN_BLANK_LINE_SENTINEL) || !isMarkdownBlankLineSentinel(text)) return
     element.classList.add(MARKDOWN_PRESERVED_BLANK_LINE_CLASS)
     element.setAttribute('data-markdown-preserved-blank-line', 'true')
     element.textContent = MARKDOWN_BLANK_LINE_SENTINEL
+  })
+}
+
+const MARKDOWN_ATTACHMENT_CARD_SELECTOR = '.site-attachment-file, .site-attachment-audio, .note-music-marker'
+
+const attachmentParagraphLines = (container: Element): Node[][] => {
+  const lines: Node[][] = [[]]
+  for (const node of Array.from(container.childNodes)) {
+    const element = node.nodeType === 1 ? node as Element : null
+    if (element?.tagName === 'BR') {
+      lines.push([])
+    } else if (element && !element.matches(`${MARKDOWN_ATTACHMENT_CARD_SELECTOR}, code, pre, table`) && element.querySelector('br')) {
+      const parts = attachmentParagraphLines(element)
+      parts.forEach((part, index) => {
+        if (index) lines.push([])
+        const wrapper = element.cloneNode(false)
+        part.forEach((child) => wrapper.appendChild(child))
+        lines[lines.length - 1].push(wrapper)
+      })
+    } else {
+      lines[lines.length - 1].push(node)
+    }
+  }
+  return lines
+}
+
+// Run after link/media enhancement, before audio mounting. Keep each original
+// paragraph as one block so a blank separator cannot migrate across a card.
+export const normalizeMarkdownAttachmentParagraphs = (root: HTMLElement | null) => {
+  if (!root) return
+  root.querySelectorAll<HTMLParagraphElement>('p').forEach((paragraph) => {
+    if (paragraph.closest('pre, code, table')) return
+    if (!paragraph.querySelector(MARKDOWN_ATTACHMENT_CARD_SELECTOR)) return
+    const block = document.createElement('div')
+    for (const attribute of Array.from(paragraph.attributes)) {
+      block.setAttribute(attribute.name, attribute.value)
+    }
+    block.classList.add('markdown-attachment-paragraph')
+    for (const nodes of attachmentParagraphLines(paragraph)) {
+      const line = document.createElement('div')
+      line.className = 'markdown-attachment-line'
+      nodes.forEach((node) => line.appendChild(node))
+      // A card supplies its own line box; a BR between rows is not another row.
+      if (line.querySelector(MARKDOWN_ATTACHMENT_CARD_SELECTOR)) {
+        line.classList.add('markdown-attachment-line--card')
+      }
+      if (!line.children.length && /^[\t\r\n ]*$/.test(line.textContent || '')) {
+        line.classList.add('markdown-attachment-line--blank')
+      }
+      block.appendChild(line)
+    }
+    paragraph.replaceWith(block)
   })
 }

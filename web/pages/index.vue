@@ -2145,13 +2145,15 @@ const playNoteMusic: NoteMusicPlayer = async (request: NoteMusicRequest) => {
   noteMusicController = controller
   const current = () => !musicDisposed && sequence === noteMusicRequestSequence && !controller.signal.aborted
   try {
+    if (request.draft && !can('music.manage')) throw new Error('没有音乐试听权限')
     await publicMusic.refresh()
     if (!current()) return
     if (!musicPlaybackConfig.value.musicEnabled) throw new Error('站点音乐暂未启用')
     musicConfigLoaded.value = true
     const musicApi = String(baseApi).replace(/\/+$/, '')
-    const response = await $fetch<{ code: number; msg?: string; data?: PublicMusicTrack }>(`${musicApi}/music/notes/${encodeURIComponent(request.trackID)}`, {
-      query: { messageID: request.messageID }, credentials: 'include', signal: controller.signal, timeout: 10000, retry: 0, cache: 'no-store',
+    const endpoint = request.draft ? 'preview' : 'notes'
+    const response = await $fetch<{ code: number; msg?: string; data?: PublicMusicTrack }>(`${musicApi}/music/${endpoint}/${encodeURIComponent(request.trackID)}`, {
+      query: request.draft ? undefined : { messageID: request.messageID }, credentials: 'include', signal: controller.signal, timeout: 10000, retry: 0, cache: 'no-store',
     })
     if (!current()) return
     if (response.code !== 1 || !response.data?.streamURL) throw new Error(response.msg || '这首歌曲暂时无法播放')

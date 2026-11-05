@@ -176,13 +176,15 @@ dispose must remain paired. -->
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
+import { ref, inject, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useToast } from '#imports'
 import Vditor from 'vditor'
 import 'vditor/dist/index.css'
 import { createEditorDomSession } from '~/utils/editor-dom-session'
 import { createStickyEditorToolbar } from '~/utils/sticky-editor-toolbar'
 import { createVditorLifecycle } from '~/utils/vditor-lifecycle'
+import { NOTE_MUSIC_PLAYER_KEY, type NoteMusicPlayer } from '~/utils/note-music'
+import { useAdminCapabilities } from '~/composables/useAdminCapabilities'
 
 const props = defineProps({
   modelValue: { type: String, default: '' },
@@ -190,6 +192,8 @@ const props = defineProps({
 })
 const emit = defineEmits(['update:modelValue', 'ready'])
 const toast = useToast()
+const noteMusicPlayer = inject<NoteMusicPlayer | null>(NOTE_MUSIC_PLAYER_KEY, null)
+const { can } = useAdminCapabilities()
 const editorContainer = ref<HTMLElement>()
 const stickyToolbar = createStickyEditorToolbar({
   container: () => editorContainer.value || null,
@@ -200,6 +204,15 @@ const editorSession = createEditorDomSession({
   toolbar: () => stickyToolbar.element(),
   onChange: value => emit('update:modelValue', value),
   onPreviewError: () => toast.add({ title: '预览加载失败', description: '请再次点击附件重试。', color: 'red' }),
+  playDraftMusic: async (request) => {
+    try {
+      if (!noteMusicPlayer || !can('music.manage')) throw new Error('没有音乐试听权限')
+      await noteMusicPlayer(request)
+    } catch (error) {
+      toast.add({ title: '试听失败', description: error instanceof Error ? error.message : '请稍后重试', color: 'red' })
+      throw error
+    }
+  },
 })
 const {
   showHeadingMenu,

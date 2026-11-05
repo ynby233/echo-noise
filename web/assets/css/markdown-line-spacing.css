@@ -6,6 +6,45 @@
   white-space: normal;
 }
 
+.markdown-preview > .markdown-attachment-paragraph,
+.vditor-container .vditor-preview .vditor-reset > .markdown-attachment-paragraph {
+  display: block;
+  margin-block: 0 !important;
+  line-height: 1.6;
+  white-space: normal;
+}
+
+.markdown-preview > .markdown-attachment-paragraph + p,
+.markdown-preview > p:not(.markdown-preserved-blank-line) + .markdown-attachment-paragraph,
+.markdown-preview > .markdown-attachment-paragraph + .markdown-attachment-paragraph,
+.vditor-container .vditor-preview .vditor-reset > .markdown-attachment-paragraph + p,
+.vditor-container .vditor-preview .vditor-reset > p:not(.markdown-preserved-blank-line) + .markdown-attachment-paragraph,
+.vditor-container .vditor-preview .vditor-reset > .markdown-attachment-paragraph + .markdown-attachment-paragraph {
+  margin-block-start: 1.6em !important;
+}
+
+.markdown-attachment-line {
+  display: flow-root;
+  min-height: 0;
+  margin-block: 0;
+  line-height: inherit;
+}
+
+.markdown-attachment-line--blank {
+  min-height: 1.6em;
+}
+
+.markdown-attachment-line .note-music-marker {
+  display: flex;
+}
+
+.markdown-attachment-line > .site-attachment-file,
+.markdown-attachment-line > .site-attachment-audio,
+.markdown-attachment-line > .note-music-marker,
+.markdown-attachment-line > .site-attachment-render {
+  margin-block: 6px;
+}
+
 .markdown-preview > p:not(.markdown-preserved-blank-line) + p,
 .vditor-container .vditor-preview .vditor-reset > p:not(.markdown-preserved-blank-line) + p {
   margin-block-start: 1.6em !important;

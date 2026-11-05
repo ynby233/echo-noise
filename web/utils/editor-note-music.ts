@@ -1,6 +1,6 @@
-import { parseNoteMusicTrackID } from './note-music'
+import { parseNoteMusicTrackID, type NoteMusicPlayer } from './note-music'
 
-export const EDITOR_NOTE_MUSIC_HINT = '发布后可播放'
+export const EDITOR_NOTE_MUSIC_HINT = '点击试听'
 const LINK_SELECTOR = 'a, [data-type="a"]'
 const CODE_SELECTOR = 'code, [data-type="code-block"], [data-type="code-inline"], .vditor-ir__marker--pre, textarea'
 const EDITABLE_SELECTOR = '.vditor-ir pre.vditor-reset, .vditor-wysiwyg pre.vditor-reset'
@@ -60,7 +60,8 @@ export function replaceEditorNoteMusicWithSource(root: HTMLElement) {
   })
 }
 
-export function bindEditorNoteMusicInteractions(root: HTMLElement) {
+export function bindEditorNoteMusicInteractions(root: HTMLElement, playDraftMusic?: NoteMusicPlayer) {
+  const pending = new WeakSet<HTMLElement>()
   const doc = root.ownerDocument
   const hit = (event: Event) => {
     const target = event.target instanceof Element ? event.target : null
@@ -100,11 +101,17 @@ export function bindEditorNoteMusicInteractions(root: HTMLElement) {
     if (!node) return
     stop(event)
     select(node)
+    if (!playDraftMusic || pending.has(node)) return
+    pending.add(node)
+    node.setAttribute('aria-busy', 'true')
+    void playDraftMusic({ trackID: parseNoteMusicTrackID(editorNoteMusicInfo(node)!.href), messageID: 0, draft: true })
+      .catch(() => {})
+      .finally(() => { pending.delete(node); node.removeAttribute('aria-busy') })
   }
   const keydown = (event: KeyboardEvent) => {
     const focused = hit(event)
     if (event.key === 'Enter' || event.key === ' ') {
-      if (focused) stop(event)
+      if (focused) activate(event)
       return
     }
     const node = focused || selectedMarker()

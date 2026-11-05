@@ -74,7 +74,7 @@ export const createMessageContentLayout = (options: MessageContentLayoutOptions)
         const imageGrid = !!measureEl.querySelector('.image-grid')
         hasGrid.value[messageId] = imageGrid
         hasFileAttachment.value[messageId] = !!measureEl.querySelector(
-          '.site-attachment-file, .site-attachment-audio, .site-attachment-failure, .github-card',
+          '.site-attachment-file, .site-attachment-audio, .site-attachment-failure, .github-card, .note-music-marker',
         )
         const fullHeight = measureEl.scrollHeight
         const previousHeight = measuredHeights.value[messageId]

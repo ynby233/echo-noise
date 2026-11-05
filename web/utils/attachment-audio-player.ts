@@ -60,11 +60,16 @@ export const formatAudioTime = (seconds: number | null | undefined) => {
   return `${minutes}:${String(remaining).padStart(2, '0')}`
 }
 
+export const buildAttachmentAudioMarkdown = (src: string) => {
+  const url = String(src || '').replace(/[<>\s]/g, char => encodeURIComponent(char))
+  return `[音频附件：${audioFileName(src).replace(/[\\\[\]\r\n]/g, ' ')}](<${url}>)`
+}
+
 export const buildAttachmentAudioPlaceholderHtml = ({ src, name = '', size = null }: AttachmentAudioPlaceholderOptions) => {
   const safeSrc = escapeHtmlAttribute(String(src || '').trim())
   const safeName = escapeHtmlAttribute(audioFileName(src, name))
   const sizeAttribute = Number.isFinite(size) && Number(size) >= 0 ? ` data-audio-size="${Number(size)}"` : ''
-  return `<div class="site-attachment-audio" data-site-audio-player data-audio-src="${safeSrc}" data-audio-name="${safeName}"${sizeAttribute} data-site-attachment-kind="audio" data-site-attachment-url="${safeSrc}"></div>`
+  return `<span class="site-attachment-audio" data-site-audio-player data-audio-src="${safeSrc}" data-audio-name="${safeName}"${sizeAttribute} data-site-attachment-kind="audio" data-site-attachment-url="${safeSrc}"></span>`
 }
 
 const responseSize = (response: Response) => {

@@ -7,13 +7,14 @@ import { getFixedCoordinateScale, getFixedRect, positionFloatingMenu } from './f
 import { captureVideoFirstFrameFromSource, ensureFancyboxVideoThumbnail, getVideoPlaybackFrameForSource, normalizeMediaPreviewUrl } from './fancybox-video-close'
 import { loadMediaFancybox, createMediaFancyboxOptions } from './media-fancybox'
 import { buildAttachmentAudioPlaceholderHtml, closeAttachmentAudioPopover, destroyAttachmentAudioPlayers, enhanceAttachmentAudioPlayers, toggleAttachmentAudioPopover } from './attachment-audio-player'
-import { MARKDOWN_BLANK_LINE_SENTINEL, encodeMarkdownExtraBlankLines, isMarkdownBlankLineSentinel, markMarkdownPreservedBlankLineElements, serializeMarkdownEditorBlocks } from './markdown-blank-lines'
+import { MARKDOWN_BLANK_LINE_SENTINEL, encodeMarkdownExtraBlankLines, isMarkdownBlankLineSentinel, markMarkdownPreservedBlankLineElements, serializeMarkdownEditorBlocks, normalizeMarkdownAttachmentParagraphs } from './markdown-blank-lines'
 import { getFixedEditorClipInsets, insertEditorValueFallback, insertTableCellAtomicValue, replaceTableSourceLine, resolveTableAttachmentTarget, type TableAttachmentTarget } from './vditor-table-attachment'
 import { getTableResizeZoomScale } from './table-resize-session'
 import { createEditorTableResize } from './editor-table-resize'
 import { isBrowserPreviewableAttachmentUrl } from './attachment-preview'
 import { createPreReadyEditorInsertBuffer } from './editor-insert-buffer.mjs'
 import { bindEditorNoteMusicInteractions, editorNoteMusicInfo, enhanceEditorNoteMusic, replaceEditorNoteMusicWithSource } from './editor-note-music'
+import type { NoteMusicPlayer } from './note-music'
 
 
 import type Vditor from 'vditor'
@@ -64,6 +65,7 @@ type EditorDomSessionOptions = {
   root: () => HTMLElement | null
   toolbar: () => HTMLElement | null
   onChange: (value: string) => void
+  playDraftMusic?: NoteMusicPlayer
   onPreviewError: () => void
 }
 
@@ -393,16 +395,9 @@ const transformAttachmentPreviewHtml = (html: string) => {
     fragment.innerHTML = buildAttachmentPreviewHtml(info)
     const replacement = fragment.firstElementChild as HTMLElement | null
     if (!replacement) return
-    const parent = anchor.parentElement
-    const onlyAttachmentInParagraph = parent?.tagName.toLowerCase() === 'p'
-      && parent.children.length === 1
-      && (parent.textContent || '').trim() === (anchor.textContent || '').trim()
-    if (onlyAttachmentInParagraph && info.type !== 'image') {
-      parent?.replaceWith(replacement)
-      return
-    }
     anchor.replaceWith(replacement)
   })
+  normalizeMarkdownAttachmentParagraphs(holder)
   return holder.innerHTML
 }
 
@@ -724,7 +719,7 @@ const materializeAttachmentMarkersInTableCells = (root: HTMLElement) => {
 const setupAttachmentPreview = () => {
   const root = editorContainer.value
   if (!root || attachmentPreviewCleanup) return
-  const disposeNoteMusic = bindEditorNoteMusicInteractions(root)
+  const disposeNoteMusic = bindEditorNoteMusicInteractions(root, config.playDraftMusic)
 
   const getEventElement = (event: Event) => {
     const target = event.target as Node | null

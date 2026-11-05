@@ -36,8 +36,8 @@ import { useRuntimeConfig, useRouter } from '#imports';
 import { useMessageStore } from '~/store/message';
 import { ensureFancyboxVideoThumbnail, getVideoElementSource, normalizeMediaPreviewUrl } from '~/utils/fancybox-video-close'
 import { bindMediaFancybox, unbindMediaFancybox, createMediaFancyboxOptions } from '~/utils/media-fancybox'
-import { buildAttachmentAudioPlaceholderHtml, destroyAttachmentAudioPlayers, enhanceAttachmentAudioPlayers } from '~/utils/attachment-audio-player'
-import { encodeMarkdownExtraBlankLines, markMarkdownPreservedBlankLineElements } from '~/utils/markdown-blank-lines'
+import { buildAttachmentAudioMarkdown, buildAttachmentAudioPlaceholderHtml, destroyAttachmentAudioPlayers, enhanceAttachmentAudioPlayers } from '~/utils/attachment-audio-player'
+import { encodeMarkdownExtraBlankLines, markMarkdownPreservedBlankLineElements, normalizeMarkdownAttachmentParagraphs } from '~/utils/markdown-blank-lines'
 import { isManagedAttachmentURL, resolveManagedAttachmentURL } from '~/utils/media-url'
 import { loadVditorPreview } from '~/utils/vditor-preview'
 import { enhanceMetingPlayers } from '~/utils/meting-player'
@@ -49,6 +49,7 @@ import { applyAttachmentRenders, applyDeletedAttachmentPlaceholders, escapeRende
 import { createWindowedMarkdownBody, isMarkdownBodyNearViewport } from '~/utils/windowed-markdown-body'
 import { NOTE_MUSIC_PLAYER_KEY, noteMusicPlaybackLocation, type NoteMusicPlayer } from '~/utils/note-music'
 import { enhanceNoteMusicLinks } from '~/utils/rendered-note-music'
+import { useAdminCapabilities } from '~/composables/useAdminCapabilities'
 
 // 定义正则表达式
 const BILIBILI_REG = /https:\/\/www\.bilibili\.com\/video\/(BV[\w]+)\/?(?:\?[^\s<)]*)?/g;
@@ -74,11 +75,12 @@ const previewLoadFailed = ref(false)
 const noteMusicError = ref('')
 const noteMusicRouter = useRouter()
 const playNoteMusic = inject<NoteMusicPlayer | null>(NOTE_MUSIC_PLAYER_KEY, null)
+const { can: canPreviewMusic } = useAdminCapabilities()
 const enhanceNoteMusic = (root: HTMLElement | null) => {
   enhanceNoteMusicLinks(root, props.messageId, async (request) => {
     if (playNoteMusic) await playNoteMusic(request)
     else await noteMusicRouter.push(noteMusicPlaybackLocation(request))
-  }, (message) => { noteMusicError.value = message })
+  }, (message) => { noteMusicError.value = message }, props.draftMusicPreview && !!playNoteMusic && canPreviewMusic('music.manage'))
 }
 let renderSequence = 0
 let zoom: any = null;
@@ -117,6 +119,10 @@ const props = defineProps({
   messageId: {
     type: Number,
     default: 0,
+  },
+  draftMusicPreview: {
+    type: Boolean,
+    default: false,
   },
   taskListEditable: {
     type: Boolean,
@@ -349,6 +355,7 @@ const renderedTables = createRenderedTableDialog({
     applyDeletedAttachmentPlaceholders(root, String(BASE_API || '/api'))
     initializeMediaViewer(root)
     enhanceNoteMusic(root)
+    normalizeMarkdownAttachmentParagraphs(root)
   },
   cleanup: (root) => {
     unbindMediaFancybox(root)
@@ -407,14 +414,14 @@ const processMediaLinks = (content: string): string => {
   const AUDIO_FILE_REG = /(^|[\s>])((?:https?:\/\/|\/api\/audio\/)[^\s<"']+\.(?:webm|ogg|mp3|m4a|wav|flac)(?:\?[^\s<"']*)?)/g;
   content = content.replace(AUDIO_FILE_REG, (_m, prefix, audioUrl) => {
     const src = resolveImageUrl(audioUrl);
-    return `${prefix}${buildAttachmentAudioPlaceholderHtml({ src })}`;
+    return `${prefix}${buildAttachmentAudioMarkdown(src)}`;
   });
   const VIDEO_FILE_REG = /(^|[\s>])((?:https?:\/\/|\/api\/video\/|\/video\/)[^\s<"']+\.(?:mp4|webm|mov|avi)(?:\?[^\s<"']*)?)/g;
   content = content.replace(VIDEO_FILE_REG, (_m, prefix, videoUrl) => {
     const src = resolveImageUrl(videoUrl);
     const safeSrc = escapeRenderedHtml(src)
     if (isAudioAttachmentUrl(src)) {
-      return `${prefix}${buildAttachmentAudioPlaceholderHtml({ src })}`;
+      return `${prefix}${buildAttachmentAudioMarkdown(src)}`;
     }
     return `${prefix}<video src="${safeSrc}" controls preload="metadata" style="width:100%;height:auto" data-site-attachment-kind="video" data-site-attachment-url="${safeSrc}"></video>`;
   });
@@ -717,6 +724,7 @@ const renderMarkdown = async (markdown: string) => {
               }
           });
 
+          normalizeMarkdownAttachmentParagraphs(previewElement.value)
           if (previewElement.value) enhanceAttachmentAudioPlayers(previewElement.value)
           applyDeletedAttachmentPlaceholders(previewElement.value, String(BASE_API || '/api'));
           applyRenderedMediaLayout(previewElement.value, keepImagesFullSize);
@@ -958,17 +966,20 @@ watch(() => props.enableGithubCard, () => {
   display: inline-flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 10px;
-  width: fit-content;
+  gap: 12px;
+  width: calc(100% - 16px);
   min-width: 0;
-  max-width: min(100%, 440px);
+  max-width: calc(100% - 16px);
+  min-height: 72px;
   height: auto;
-  margin: 4px 0;
-  padding: 10px 14px;
-  border: 1px solid rgba(148, 163, 184, .3);
+  margin: 6px 8px;
+  padding: 12px;
+  border: 1px solid var(--file-card-border);
   border-radius: 12px;
-  color: inherit;
-  background: rgba(148, 163, 184, .08);
+  color: var(--file-card-text);
+  background: var(--file-card-bg);
+  box-shadow: var(--file-card-shadow);
+  transition: background-color .16s ease;
   font: inherit;
   line-height: 1.5;
   text-align: left;
@@ -979,21 +990,23 @@ watch(() => props.enableGithubCard, () => {
 .note-music-marker-icon {
   display: grid;
   place-items: center;
-  flex: 0 0 34px;
-  width: 34px;
-  height: 34px;
-  border-radius: 9px;
-  background: rgba(59, 130, 246, .12);
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--file-card-icon-border);
+  border-radius: 12px;
+  background: var(--file-card-icon-bg);
+  color: var(--file-card-icon);
   font-size: 24px;
   line-height: 1;
 }
-.note-music-marker-content { display: flex; flex-direction: column; min-width: 0; gap: 2px; }
-.note-music-marker-title { display: block; overflow-wrap: anywhere; }
-.note-music-marker-hint { display: block; font-size: 12px; opacity: .65 !important; }
+.note-music-marker-content { display: flex; flex-direction: column; min-width: 0; gap: 4px; }
+.note-music-marker-title { display: block; color: var(--file-card-name) !important; font-size: 14px; line-height: 1.35; font-weight: 400; overflow-wrap: anywhere; }
+.note-music-marker-hint { display: block; color: var(--file-card-meta) !important; font-size: 12px; line-height: 1.35; opacity: 1 !important; }
 .note-music-marker:hover:not(:disabled),
-.note-music-marker:focus-visible { border-color: rgba(59, 130, 246, .65); background: rgba(59, 130, 246, .1); }
-.note-music-marker:focus-visible { outline: 2px solid rgba(59, 130, 246, .4); outline-offset: 2px; }
-.note-music-marker:disabled { cursor: default; opacity: .7; }
+.note-music-marker:focus-visible { background: var(--file-card-bg-hover); }
+.note-music-marker:focus-visible { outline: none; box-shadow: var(--file-card-shadow), 0 0 0 2px rgba(249, 115, 22, .18); }
+.note-music-marker:disabled { cursor: default; }
 .note-music-marker[aria-busy="true"] { cursor: wait; }
 .note-music-error { color: #dc2626; font-size: 13px; }
 
@@ -1784,6 +1797,8 @@ body.is-resizing-rendered-table-column * {
 
 .markdown-preview .site-attachment-file,
 .rendered-table-expand-scroll .site-attachment-file,
+.markdown-preview .note-music-marker,
+.rendered-table-expand-scroll .note-music-marker,
 .markdown-preview .github-card,
 .rendered-table-expand-scroll .github-card {
   --file-card-bg: #ffffff;
@@ -1874,20 +1889,6 @@ body.is-resizing-rendered-table-column * {
   line-height: 1;
 }
 
-.markdown-preview .site-attachment-file + p,
-.rendered-table-expand-scroll .site-attachment-file + p {
-  margin-top: 0 !important;
-}
-
-.markdown-preview .site-attachment-file + .site-attachment-file,
-.rendered-table-expand-scroll .site-attachment-file + .site-attachment-file {
-  margin-top: 10px !important;
-}
-
-.markdown-preview p:has(+ .site-attachment-file),
-.rendered-table-expand-scroll p:has(+ .site-attachment-file) {
-  margin-bottom: 6px !important;
-}
 
 .markdown-preview .site-attachment-file__icon,
 .rendered-table-expand-scroll .site-attachment-file__icon {
@@ -2046,6 +2047,8 @@ body.is-resizing-rendered-table-column * {
 
 .markdown-preview.theme-dark .site-attachment-file,
 .rendered-table-expand-overlay.is-dark .rendered-table-expand-scroll .site-attachment-file,
+.markdown-preview.theme-dark .note-music-marker,
+.rendered-table-expand-overlay.is-dark .rendered-table-expand-scroll .note-music-marker,
 .markdown-preview.theme-dark .github-card,
 .rendered-table-expand-overlay.is-dark .github-card {
   --file-card-bg: rgba(15, 23, 42, 0.52);
@@ -2075,6 +2078,8 @@ body.is-resizing-rendered-table-column * {
 }
 
 @media (max-width: 520px) {
+  .note-music-marker { gap: 10px; min-height: 64px; padding: 10px; }
+  .note-music-marker-icon { flex-basis: 40px; width: 40px; height: 40px; }
   .markdown-preview .site-attachment-file,
   .rendered-table-expand-scroll .site-attachment-file {
     grid-template-columns: 40px minmax(0, 1fr) 24px !important;

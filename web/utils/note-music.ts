@@ -7,6 +7,7 @@ export interface NoteMusicSelection {
 export interface NoteMusicRequest {
   trackID: string
   messageID: number
+  draft?: boolean
 }
 
 export const NOTE_MUSIC_PLAYER_KEY = 'note-music-player'
