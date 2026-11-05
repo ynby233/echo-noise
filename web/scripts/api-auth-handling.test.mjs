@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { build } from 'esbuild'
+import { stripTypeScriptTypes } from 'node:module'
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const tmp = await mkdtemp(join(tmpdir(), 'echo-site-api-auth-'))
@@ -80,6 +81,54 @@ try {
     assert.equal(rejected.status, status, 'known rejection must remain distinguishable from a lost response')
     assert.equal(rejected.msg, '请重新检查并确认')
   }
+
+  const profile = await readFile(join(root, 'components/admin/sections/ProfileSection.vue'), 'utf8')
+  const saveBody = profile.match(/const updateCommonTags = async \(\) => \{([\s\S]*?)\n\}/)?.[1]
+  assert.ok(saveBody)
+  const saveScript = stripTypeScriptTypes(`async function save() {${saveBody}\n}`)
+  const createSave = new Function('userStore', 'commonTagsText', 'commonTagsSaving', 'putRequest', 'toast',
+    `const commonTagsAccountVersion = 0; const commonTagsDraftVersion = 0; ${saveScript}; return save`)
+  for (const httpError of [false, true]) {
+    reset()
+    const message = '常用标签不能包含空格、标点或符号'
+    globalThis.__fetch = async () => {
+      if (httpError) {
+        const error = new Error('Bad Request')
+        error.response = { status: 400, _data: { msg: message } }
+        throw error
+      }
+      return { code: 0, msg: message, data: null }
+    }
+    const text = { value: 'bad tag，工作\n阅读!' }
+    const saving = { value: false }
+    const save = createSave({ user: { userid: 2, commonTags: ['old'] } }, text, saving, api.putRequest, globalThis.__toast)
+    await save()
+    assert.equal(globalThis.__events.toasts.length, 1, 'actual profile + API must show exactly one validation failure')
+    assert.equal(globalThis.__events.toasts[0].description, message)
+    assert.equal(text.value, 'bad tag，工作\n阅读!', 'validation errors must preserve the draft')
+    assert.equal(saving.value, false)
+  }
+
+  reset()
+  globalThis.__fetch = async () => ({ code: 0, msg: '常用标签不能包含空格、标点或符号', data: null })
+  const invalidTags = await api.putRequest('user/update', { commonTags: ['bad tag'] }, { silent: true })
+  assert.equal(invalidTags.msg, '常用标签不能包含空格、标点或符号', 'silent PUT must preserve the validation message for the form')
+  assert.equal(globalThis.__events.toasts.length, 0, 'silent validation failure must not add a second request toast')
+
+  reset()
+  globalThis.__fetch = async () => {
+    const error = new Error('Bad Request')
+    error.response = { status: 400, _data: { msg: '每个常用标签最多 64 个字符' } }
+    throw error
+  }
+  const invalidLength = await api.putRequest('user/update', {}, { silent: true })
+  assert.equal(invalidLength.msg, '每个常用标签最多 64 个字符', 'HTTP failures must also retain the server validation message')
+  assert.equal(globalThis.__events.toasts.length, 0)
+
+  reset()
+  globalThis.__fetch = async () => ({ code: 0, msg: '原有调用错误', data: null })
+  assert.equal(await api.putRequest('other/update', {}), null, 'non-silent callers keep their existing failure contract')
+  assert.equal(globalThis.__events.toasts.length, 1)
 
   reset()
   globalThis.__fetch = async () => {

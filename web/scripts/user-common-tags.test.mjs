@@ -65,6 +65,7 @@ await nextTick()
 assert.equal(sent.path, 'user/update')
 assert.deepEqual(sent.payload, { commonTags: ['工作', '生活', '阅读', '工作'] }, 'all three separators must produce tags without silently filtering invalid content')
 assert.equal(sent.options.credentials, 'include')
+assert.equal(sent.options.silent, true, 'the profile owns the single save-result toast')
 assert.deepEqual(editor.userStore.user.commonTags, ['工作', '生活', '阅读'], 'canonical server result must be immediately available to the composer')
 assert.equal(editor.text.value, '工作\n生活\n阅读', 'successful save may normalize the submitted draft')
 editor.text.value = ''

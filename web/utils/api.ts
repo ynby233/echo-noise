@@ -186,7 +186,8 @@ export const putRequest = async <T>(url: string, body?: object, options?: { cred
                     timeout: 2000,
                 });
             }
-            return null;
+            // A caller handling its own error needs the server message intact.
+            return options?.silent ? response : null;
         }
 
         return response;
@@ -200,7 +201,7 @@ export const putRequest = async <T>(url: string, body?: object, options?: { cred
         if (!shouldSuppressToast(options)) {
             toast.add({ title: '请求失败', description: '网络异常或服务器不可用', color: 'red', timeout: 2000 });
         }
-        return { code: 0, msg: '网络异常', data: null } as any as Response<T>;
+        return { code: 0, msg: serverMsg, data: null };
     }
 };
 

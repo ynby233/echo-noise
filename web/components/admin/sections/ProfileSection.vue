@@ -149,7 +149,7 @@ const updateCommonTags = async () => {
   commonTagsSaving.value = true
   try {
     const commonTags = submittedText.split(/[\n\r,，]+/).map(tag => tag.trim()).filter(Boolean)
-    const response = await putRequest<any>('user/update', { commonTags }, { credentials: 'include' })
+    const response = await putRequest<{ commonTags?: string[] }>('user/update', { commonTags }, { credentials: 'include', silent: true })
     if (userStore.user?.userid !== accountID || commonTagsAccountVersion !== accountVersion) return
     if (response?.code !== 1) throw new Error(response?.msg || '保存失败')
     userStore.user.commonTags = Array.isArray(response.data?.commonTags) ? response.data.commonTags : []

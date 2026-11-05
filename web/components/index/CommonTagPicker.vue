@@ -245,6 +245,13 @@ const onKeydown = (event: KeyboardEvent) => {
     || (open.value && inControls(event.target))
   const action = commonTagKeyAction(event, open.value, scoped, composing)
   if (!action || props.disabled) return
+  if (action !== 'close') {
+    if (mode === 'caret' && editorFocused(props.getEditor())) refreshFromEditor()
+    if (!open.value || !candidates.value.length) {
+      close()
+      return
+    }
+  }
   // Window capture runs before Vditor's already-registered document capture
   // handlers, including its Tab insertion and Enter/table processing.
   event.preventDefault()
@@ -254,7 +261,6 @@ const onKeydown = (event: KeyboardEvent) => {
     close()
     if (menuFocused) buttonRef.value?.focus({ preventScroll: true })
   } else if (action === 'select') {
-    if (mode === 'caret' && editorFocused(props.getEditor())) refreshFromEditor()
     const tag = candidates.value[activeIndex.value]
     if (tag) selectTag(tag)
   } else {

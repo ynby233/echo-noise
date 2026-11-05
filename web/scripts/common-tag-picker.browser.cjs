@@ -100,6 +100,33 @@ async function verify(page) {
     assert.equal(await page.$('.common-tag-menu'), null)
     console.log(`Passed tag picker: ${kind}, zoom ${zoom}, dialog ${dialog}`)
   }
+  await verifyNoMatches(page)
+}
+
+async function verifyNoMatches(page) {
+  for (const kind of ['editable', 'textarea']) for (const dialog of [false, true]) {
+    for (const [key, shiftKey] of [['Enter', false], ['Tab', false], ['Tab', true]]) {
+      await page.evaluate(({ kind, dialog }) => {
+        document.body.style.zoom = '1'
+        window.mountFixture(kind, dialog)
+      }, { kind, dialog })
+      await page.click('#editor')
+      await page.keyboard.type('#zzzz')
+      await page.waitForSelector('.common-tag-empty')
+      const prevented = await page.evaluate(({ key, shiftKey }) => {
+        const event = new KeyboardEvent('keydown', { key, shiftKey, bubbles: true, cancelable: true })
+        document.querySelector('#editor').dispatchEvent(event)
+        return event.defaultPrevented
+      }, { key, shiftKey })
+      assert.equal(prevented, false, `${kind}, dialog ${dialog}: empty results must release ${key}`)
+      await page.waitForFunction(() => !document.querySelector('.common-tag-menu'))
+      if (key === 'Enter' && kind === 'textarea') {
+        await page.keyboard.press('Enter')
+        assert.equal(await page.$eval('#editor', el => el.value), '#zzzz\n')
+      }
+    }
+    console.log(`Passed empty-result keys: ${kind}, dialog ${dialog}`)
+  }
 }
 module.exports = { startServer, verify }
 if (require.main === module) (async () => {
