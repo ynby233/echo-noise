@@ -48,12 +48,13 @@
 
       <div class="admin-setting-block admin-profile-card admin-profile-card--token">
         <div class="admin-setting-heading">
-          <div><div class="admin-setting-title" :class="theme.text">API Token</div><p class="admin-setting-desc" :class="theme.mutedText">供脚本、MCP 等外部工具调用专用接口，权限与当前账号一致；重新生成后旧 Token 立即失效。</p></div>
+          <div><div class="admin-setting-title" :class="theme.text">API Token</div><p class="admin-setting-desc" :class="theme.mutedText">普通 API 凭据，供脚本等外部工具调用专用接口，权限与当前账号一致；重新生成后旧 Token 立即失效。MCP 请使用下方独立的 AI 专用凭据。</p></div>
           <div class="flex flex-wrap items-center justify-end gap-2"><UBadge color="primary" variant="soft" class="admin-badge">{{ userToken ? '已生成' : '未生成' }}</UBadge><UButton size="sm" color="primary" variant="soft" class="admin-action" :loading="regeneratingToken" @click="regenerateToken">重新生成</UButton></div>
         </div>
         <div v-if="userToken" class="flex items-center gap-2 w-full flex-nowrap"><UInput v-model="userToken" :type="showToken ? 'text' : 'password'" readonly class="admin-input font-mono text-sm flex-1 min-w-0" /><UButton size="sm" class="admin-action" color="gray" variant="soft" @click="showToken = !showToken">{{ showToken ? '隐藏' : '显示' }}</UButton><UButton size="sm" class="admin-action" icon="i-heroicons-clipboard" color="gray" variant="soft" @click="copyToken">复制</UButton></div>
         <p v-else class="admin-setting-desc" :class="theme.mutedText">暂无 Token</p>
       </div>
+      <AiCredentialsCard :theme="theme" />
     </div>
   </section>
 </template>
@@ -63,6 +64,7 @@ import { toRefs } from 'vue'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRuntimeConfig } from '#imports'
 import ImageCropperModal from '~/components/admin/ImageCropperModal.vue'
+import AiCredentialsCard from '~/components/admin/sections/AiCredentialsCard.vue'
 import { putRequest } from '~/utils/api'
 import { writeClipboardText } from '~/utils/clipboard'
 import { resolveManagedAttachmentURL } from '~/utils/media-url'

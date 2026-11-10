@@ -14,6 +14,7 @@
     </AdminModuleHeader>
 
     <div class="audit-body">
+      <p class="text-sm" :class="theme?.mutedText || 'text-slate-500'">{{ authViaDescription }}</p>
       <div v-if="isPrimaryAdmin" class="audit-policy-card" :class="[theme?.border || 'border-slate-200 dark:border-slate-700', theme?.subtleBg || 'bg-slate-50 dark:bg-slate-800/60']">
         <div class="audit-policy-copy">
           <span class="audit-policy-icon"><UIcon name="i-heroicons-shield-check" class="h-4 w-4" /></span>
@@ -73,10 +74,11 @@
           <UButton class="admin-action" size="sm" color="gray" variant="soft" icon="i-heroicons-arrow-down-tray" :loading="exporting" :disabled="loading || exporting" @click="exportCurrent">导出当前筛选结果</UButton>
         </div>
         <div class="audit-table-shell" :class="theme?.border || 'border-slate-200 dark:border-slate-700'">
-          <table class="min-w-[1040px] w-full table-fixed text-sm">
+          <table class="min-w-[1160px] w-full table-fixed text-sm">
             <colgroup>
               <col class="w-44" />
               <col class="w-28" />
+              <col class="w-32" />
               <col class="w-48" />
               <col class="w-28" />
               <col class="w-44" />
@@ -87,6 +89,7 @@
               <tr class="text-left">
                 <th class="px-4 py-3">时间</th>
                 <th class="px-3 py-3">操作人</th>
+                <th class="px-3 py-3">认证来源</th>
                 <th class="px-3 py-3">操作说明</th>
                 <th class="px-3 py-3">结果</th>
                 <th class="px-3 py-3">模块 / 动作</th>
@@ -95,11 +98,12 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-if="loading"><td colspan="7" class="px-3 py-12 text-center" :class="theme?.mutedText || 'text-slate-500'"><UIcon name="i-heroicons-arrow-path" class="mr-2 inline h-4 w-4 animate-spin" />正在读取审计记录…</td></tr>
-              <tr v-else-if="!items.length"><td colspan="7" class="px-3 py-12 text-center" :class="theme?.mutedText || 'text-slate-500'"><UIcon name="i-heroicons-clipboard-document-list" class="mx-auto mb-2 h-6 w-6 opacity-60" /><span>当前筛选下暂无审计记录</span></td></tr>
+              <tr v-if="loading"><td colspan="8" class="px-3 py-12 text-center" :class="theme?.mutedText || 'text-slate-500'"><UIcon name="i-heroicons-arrow-path" class="mr-2 inline h-4 w-4 animate-spin" />正在读取审计记录…</td></tr>
+              <tr v-else-if="!items.length"><td colspan="8" class="px-3 py-12 text-center" :class="theme?.mutedText || 'text-slate-500'"><UIcon name="i-heroicons-clipboard-document-list" class="mx-auto mb-2 h-6 w-6 opacity-60" /><span>当前筛选下暂无审计记录</span></td></tr>
               <tr v-for="item in items" v-else :key="item.id" class="audit-record-row" :class="theme?.border || 'border-slate-200 dark:border-slate-700'">
                 <td class="px-4 py-3 align-top whitespace-nowrap" :class="theme?.mutedText || 'text-slate-500'">{{ formatTime(item.created_at) }}</td>
                 <td class="px-3 py-3 align-top"><span class="font-medium">{{ item.actor_username }}</span><span v-if="item.actor_type !== 'system'" class="mt-0.5 block text-xs" :class="theme?.mutedText || 'text-slate-500'">ID {{ item.actor_user_id }}</span><span v-else class="mt-0.5 block text-xs" :class="theme?.mutedText || 'text-slate-500'">系统任务</span></td>
+                <td class="px-3 py-3 align-top whitespace-nowrap">{{ authViaLabel(item) }}</td>
                 <td class="px-3 py-3 align-top font-medium break-words">{{ item.operation_description || '管理员操作' }}</td>
                 <td class="px-3 py-3 align-top"><UBadge class="admin-badge" :color="resultColor(item.result)" size="xs" variant="soft">{{ item.result_description || item.result }}</UBadge><div class="mt-1 text-[11px]" :class="theme?.mutedText || 'text-slate-500'">{{ item.result }}</div></td>
                 <td class="px-3 py-3 align-top"><span class="break-all font-medium">{{ item.module }}</span><span class="mt-0.5 block break-all text-xs" :class="theme?.mutedText || 'text-slate-500'">{{ item.action }}</span></td>
@@ -131,7 +135,7 @@
         </template>
         <dl class="audit-detail-grid">
           <div><dt>时间</dt><dd>{{ formatTime(detail.created_at) }}</dd></div>
-          <div><dt>认证来源</dt><dd>{{ detail.auth_via || '-' }}</dd></div>
+          <div><dt>认证来源</dt><dd>{{ authViaLabel(detail) }}</dd></div>
           <div><dt>操作人</dt><dd>{{ detail.actor_type === 'system' ? detail.actor_username : `${detail.actor_username} #${detail.actor_user_id}` }}</dd></div>
           <div><dt>结果</dt><dd>{{ detail.result_description || detail.result }}（{{ detail.result }}）</dd></div>
           <div><dt>模块 / 动作</dt><dd>{{ detail.module }} / {{ detail.action }}</dd></div>
@@ -147,6 +151,8 @@
 </template>
 
 <script setup lang="ts">
+import { authViaDescription, authViaLabel } from '~/utils/auth-via'
+
 type AuditResult = 'success' | 'denied' | 'failure'
 type Audit = {
   id: number
@@ -167,7 +173,8 @@ type Audit = {
   summary: string
   reason: string
   changes_json: string
-  auth_via: string
+  auth_via?: string | null
+  AuthVia?: string | null
 }
 
 const props = defineProps<{ isPrimaryAdmin?: boolean; theme?: Record<string, string> }>()

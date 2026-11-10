@@ -63,6 +63,7 @@ func TestAccessLogMiddlewareRecordsDynamicRequestWithUser(t *testing.T) {
 		c.Set("user_id", user.ID)
 		c.Set("username", user.Username)
 		c.Set("is_admin", false)
+		c.Set("auth_via", "session")
 		c.JSON(http.StatusCreated, gin.H{"ok": true})
 	})
 	r.GET("/_nuxt/app.js", func(c *gin.Context) {
@@ -86,6 +87,9 @@ func TestAccessLogMiddlewareRecordsDynamicRequestWithUser(t *testing.T) {
 	}
 	if log.UserID != user.ID || log.Username != user.Username || log.IsAdmin {
 		t.Fatalf("unexpected access log user fields: %#v", log)
+	}
+	if log.AuthVia != "session" {
+		t.Fatalf("expected verified session source, got %q", log.AuthVia)
 	}
 	if log.UserAgent != "access-agent" {
 		t.Fatalf("expected user agent to be recorded, got %q", log.UserAgent)
@@ -120,6 +124,9 @@ func TestGetAccessLogsFiltersAndClears(t *testing.T) {
 	filtered := decodeAccessLogsResponse(t, performAccessLogRequest(r, http.MethodGet, "/security/access-logs?ip=198.51.100.7&username=ali&method=GET&path=messages&status=200&startDate=2026-01-02&endDate=2026-01-02", "127.0.0.1:1", "test"))
 	if len(filtered) != 1 || filtered[0].Username != user.Username || filtered[0].IP != "198.51.100.7" {
 		t.Fatalf("expected filtered access log, got %#v", filtered)
+	}
+	if filtered[0].AuthVia != "unknown" {
+		t.Fatalf("expected unspecified source to remain unknown, got %q", filtered[0].AuthVia)
 	}
 
 	visitor := decodeAccessLogsResponse(t, performAccessLogRequest(r, http.MethodGet, "/security/access-logs?username=%E8%AE%BF%E5%AE%A2", "127.0.0.1:1", "test"))
@@ -159,6 +166,7 @@ func TestSiteVisitMiddlewareRecordsHomepageOnly(t *testing.T) {
 		c.Set("user_id", user.ID)
 		c.Set("username", user.Username)
 		c.Set("is_admin", false)
+		c.Set("auth_via", "session")
 		c.String(http.StatusOK, "home")
 	})
 	r.GET("/api/messages/page", func(c *gin.Context) {
@@ -179,6 +187,9 @@ func TestSiteVisitMiddlewareRecordsHomepageOnly(t *testing.T) {
 	visit := siteVisits[0]
 	if visit.IP != "198.51.100.7" || visit.UserID != user.ID || visit.Username != user.Username || visit.UserAgent != "visit-agent" {
 		t.Fatalf("unexpected site visit fields: %#v", visit)
+	}
+	if visit.AuthVia != "session" {
+		t.Fatalf("expected verified session source, got %q", visit.AuthVia)
 	}
 
 	var accessCount int64
@@ -218,6 +229,9 @@ func TestGetSiteVisitsFiltersAndClears(t *testing.T) {
 	filtered := decodeSiteVisitsResponse(t, performAccessLogRequest(r, http.MethodGet, "/security/site-visits?ip=198.51.100.7&username=ali&startDate=2026-01-02&endDate=2026-01-02", "127.0.0.1:1", "test"))
 	if len(filtered) != 1 || filtered[0].Username != user.Username || filtered[0].IP != "198.51.100.7" {
 		t.Fatalf("expected filtered site visit, got %#v", filtered)
+	}
+	if filtered[0].AuthVia != "unknown" {
+		t.Fatalf("expected unspecified source to remain unknown, got %q", filtered[0].AuthVia)
 	}
 
 	visitor := decodeSiteVisitsResponse(t, performAccessLogRequest(r, http.MethodGet, "/security/site-visits?username=%E8%AE%BF%E5%AE%A2", "127.0.0.1:1", "test"))

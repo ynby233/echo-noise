@@ -1,4 +1,5 @@
-# Prebuilt final-mcp, single application service; do not add the development MCP service.
+# Prebuilt final-mcp application includes the optional MCP module in the same image.
+# MCP runs independently of the Go service; disable it with MCP_ENABLED=false.
 services:
   app:
     image: ${UPDATE_IMAGE:?Set a pinned digest in the administrator image.env}

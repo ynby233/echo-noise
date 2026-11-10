@@ -96,6 +96,7 @@ func TestExportAdminAuditLogsStreamsAllFilteredRowsAsUtf8BOMCSV(t *testing.T) {
 			Capability: "notes.pin_global", Module: "notes", Action: "set_global_pin",
 			TargetType: "message", TargetID: "59", Result: "success",
 			Summary: "global pin mutation completed", IP: "198.51.100.4", UserAgent: "secret-agent",
+			AuthVia: "ai_token",
 		},
 		{
 			ActorUserID: primary.ID, ActorUsername: primary.Username, ActorIsPrimary: true,
@@ -157,8 +158,15 @@ func TestExportAdminAuditLogsStreamsAllFilteredRowsAsUtf8BOMCSV(t *testing.T) {
 	if rows[0][0] != "筛选条件" || !strings.Contains(rows[0][1], "模块=notes") || !strings.Contains(rows[0][1], "关键词已设置") {
 		t.Fatalf("unexpected filter metadata: %#v", rows[0])
 	}
-	if got, want := rows[1], []string{"时间", "操作人", "操作说明", "结果", "模块", "动作", "能力", "摘要", "目标类型", "目标 ID", "拒绝原因"}; !reflect.DeepEqual(got, want) {
+	if got, want := rows[1], []string{"时间", "操作人", "操作说明", "结果", "模块", "动作", "能力", "摘要", "目标类型", "目标 ID", "拒绝原因", "认证来源"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("csv header=%#v, want %#v", got, want)
+	}
+	sources := map[string]bool{}
+	for _, row := range rows[2:] {
+		sources[row[11]] = true
+	}
+	if !sources["ai_token"] || !sources["unknown"] {
+		t.Fatalf("csv must preserve verified AI and historical unknown sources: %#v", sources)
 	}
 	content := w.Body.String()
 	if strings.Contains(content, "secret-value") || strings.Contains(content, "198.51.100") || strings.Contains(content, "secret-agent") {

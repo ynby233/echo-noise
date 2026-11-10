@@ -1,12 +1,12 @@
-# Local source development: separate backend and MCP builds.
+# Local source development: one application image with an optional MCP module.
 # Prebuilt final-mcp deployments use scripts/update/compose.example.yml instead.
 services:
   my-app:
     build:
       context: .
       dockerfile: Dockerfile
-      # 使用主Dockerfile，构建final目标（不含MCP）
-      target: final
+      # 默认打包 MCP；设置 APP_BUILD_TARGET=final 可选择不含 MCP 的镜像。
+      target: ${APP_BUILD_TARGET:-final-mcp}
     container_name: Ech0-Noise
     env_file:
       - .env
@@ -20,6 +20,12 @@ services:
       - DB_TYPE=sqlite
       - DB_PATH=/app/data/noise.db
       - HTTP_PORT=1314
+      - MCP_ENABLED=${MCP_ENABLED:-true}
+      - MCP_TRANSPORT=${MCP_TRANSPORT:-stdio}
+      - NOTE_HOST=http://127.0.0.1:1314
+      # stdio 由客户端 docker exec 按需启动；HTTP 需显式启用并配置允许的 Host。
+      - MCP_HTTP_HOST=${MCP_HTTP_HOST:-127.0.0.1}
+      - MCP_HTTP_PORT=${MCP_HTTP_PORT:-1315}
       # PWA Web Push（先运行 go run ./cmd/vapid-keygen 生成一对长期密钥）
       #- WEB_PUSH_VAPID_PUBLIC_KEY=
       # fnOS/Portainer 等图形面板可直接填写私钥；使用时不要再设置 PRIVATE_KEY_FILE。
@@ -40,7 +46,7 @@ services:
       #- DB_USER=
       #- DB_PASSWORD=
       #- DB_NAME=
-      # 如需与 MCP 联动，请在 MCP 服务内设置 NOTE_HOST 指向此服务
+      # 如需远程 MCP HTTP，请按 mcp/README.md 配置监听、反代及客户端凭据。
     ports:
       - "1314:1314"
     logging:
@@ -49,28 +55,7 @@ services:
         max-size: "10m"
         max-file: "3"
     restart: unless-stopped
-    depends_on:
-      - mcp
 
-  mcp:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      # 仅包含 Node 运行时 + MCP 单文件
-      target: mcp-final
-    container_name: Ech0-Noise-MCP
-    environment:
-      # MCP 通过 NOTE_HOST 访问后端服务（同网络）
-      - NOTE_HOST=http://my-app:1314
-      - NOTE_HTTP_PORT=1315
-    ports:
-      - "1315:1315"
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-    restart: unless-stopped
 
   # PostgreSQL 服务（可选）
   #postgres:

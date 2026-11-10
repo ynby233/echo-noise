@@ -349,7 +349,8 @@ docker run -d \
 > DB_TYPE=sqlite
 > DB_PATH=/app/data/noise.db
 > NOTE_HOST=http://localhost:1314
-> NOTE_HTTP_PORT=1315
+> MCP_ENABLED=true
+> MCP_TRANSPORT=stdio
 > ```
 >
 > `TRUSTED_PROXIES` 默认留空，此时不会信任客户端提供的 `X-Forwarded-For`/`X-Real-IP`。只有确认请求经过反向代理时才填写该代理的 IP 或 CIDR；不要配置 `0.0.0.0/0` 或 `::/0`。
@@ -380,38 +381,22 @@ docker run -d \
 
 本 fork 的 `final-mcp` 镜像分为两个渠道：`ghcr.io/ynby233/echo-noise:stable-mcp` 对应已发布的正式 Release，`ghcr.io/ynby233/echo-noise:edge-mcp` 对应 main 的测试构建。尚无正式 Release 时 `stable-mcp` 不可用。首期渠道产物仅验收 `linux/amd64`；运行前应解析并固定实际 digest。旧 `latest-mcp` 不再发布，也不参与版本检查。
 
-提供 HTTP/SSE（对外暴露 1315，便于 curl /浏览器调用 MCP）：
+默认打包模块但不监听 MCP 端口；AI 客户端通过 `docker exec -i` 按需启动 stdio 进程：
 
-```
+```sh
 docker run -d \
   --name Ech0-Noise \
   --log-opt max-size=10m \
   --log-opt max-file=3 \
   -p 1314:1314 \
-  -p 1315:1315 \
-  -e NOTE_HOST=http://localhost:1314 \
-  -e NOTE_HTTP_PORT=1315 \
   -e ACCESS_LOG=false \
   -e SESSION_SECRET=请替换为至少32位随机字符串 \
-  ghcr.io/ynby233/echo-noise:stable-mcp
+  ghcr.io/ynby233/echo-noise:edge-mcp
 ```
 
-验证： curl http://<服务器IP>:1315/mcp/tools
+在个人配置中创建专用 AI 凭据后，将其作为客户端进程的 `NOTE_TOKEN`，运行 `docker exec -i -e MCP_TRANSPORT=stdio -e NOTE_HOST=http://127.0.0.1:1314 -e NOTE_TOKEN Ech0-Noise node /app/mcp/server.js`。不同账号使用不同凭据。
 
-仅后端 API（不对外提供 MCP HTTP/SSE，后续用 docker exec 以 Stdio 连接 MCP）：
-
-```
-docker run -d \
-  --name Ech0-Noise \
-  --log-opt max-size=10m \
-  --log-opt max-file=3 \
-  -p 1314:1314 \
-  -e NOTE_HOST=http://localhost:1314 \
-  -e NOTE_HTTP_PORT=0 \
-  -e ACCESS_LOG=false \
-  -e SESSION_SECRET=请替换为至少32位随机字符串 \
-  ghcr.io/ynby233/echo-noise:stable-mcp
-```
+HTTP 按需设置 `MCP_TRANSPORT=http`，使用标准 Streamable HTTP `/mcp`；每个请求携带客户端自己的 AI 凭据。停用模块用 `MCP_ENABLED=false`。完整配置见 [MCP 操作说明](mcp/README.md)。
 
 ------
 
@@ -449,10 +434,9 @@ docker compose build --no-cache my-app && docker compose up -d
   - 手动构建示例：`docker build --target final -t ech0-noise:nomcp .`
 - `final-ffmpeg`（不带 MCP，显式标记“带 ffmpeg”）：与 `final` 内容一致，仅用于构建命令中更直观地表达“该镜像需要 ffmpeg”。
   - 手动构建示例：`docker build --target final-ffmpeg -t ech0-noise:nomcp .`
-- `final-mcp`（带 MCP）：基于 `final`（因此也包含 `ffmpeg`），安装 `nodejs`，复制 `mcp/server.bundle.mjs`，容器内同时启动 MCP 与后端。
+- `final-mcp`（带 MCP）：基于 `final`，包含 Node.js 与独立 `/app/mcp/` 模块。stdio 按需启动，HTTP 显式启用；MCP 子进程故障不影响 Go 主服务和健康检查。
   - 手动构建示例：`docker build --target final-mcp -t ech0-noise:mcp .`
-- 本仓库的 `docker-compose.yml` 默认使用 `final`（不含 MCP），并单独启动 `mcp` 服务（见 docker-compose.yml）。
-  - 如需将 MCP 合并到同容器，请将 `my-app.build.target` 改为 `final-mcp`。
+- `docker-compose.yml` 默认使用 `final-mcp`，无需独立 MCP 镜像。`.env` 中设置 `APP_BUILD_TARGET=final` 可不打包模块；运行时 `MCP_ENABLED=false` 可停用已打包模块。
 
 ## 无服务器平台+postgres免费数据库部署
 
@@ -1371,229 +1355,17 @@ curl -X POST http://localhost:8080/api/notify/send \
 
 ## MCP接入
 
-不运行带有mcp镜像包的版本一样可以连接分开使用，完整的 MCP 操作说明已迁移至单独文档：
+MCP 为独立代码模块，可选打包；`stable-mcp` / `edge-mcp` 默认内置。主服务不依赖 MCP 运行，模块停止、配置错误或崩溃不影响主站。
 
-[MCP 操作说明（mcp/README.md）](mcp/README.md)
+1. 使用有效网页会话在个人配置中创建专用 AI 凭据；普通用户与受托管理员都可创建，权限及登录期限沿用所属账号。
+2. 客户端用本地 `node mcp/server.js` 或内置模块的 `docker exec -i` 接入 stdio，配置 `NOTE_HOST` 和 `NOTE_TOKEN`（AI 凭据）。
+3. 调用 `identity` 验证来源为 `ai_token`，再使用搜索、发布、更新等工具。账号登录期限过期可在站点重新登录，或通过 `login` 使用当前 AI 凭据及同账号密码续期。
 
-- 拉取下载仓库mcp 文件夹，主文件为server.js
+远程接入采用标准 Streamable HTTP `/mcp`，必须由每个客户端提供自己的 AI Bearer 凭据。旧 `/mcp/tools`、`/mcp/tool/*` 和自定义 `/mcp/sse` 已移除；普通 API Token 和旧 Cookie 模式不能替代专用 AI 凭据。
 
-- 安装环境依赖，确保本地已安装 Node
+删除操作仅接受明确 ID 并移入回收站，没有关键词删除、改写正文或永久删除兜底。审计来源由服务端验证：AI 专用凭据、网页会话、普通 API、未知；来源不等于对真实人类或 AI 的证明。
 
-- npm install
-
-  ```
-  npm install
-  ```
-
-- 推荐（跨平台）写法：使用环境变量字段而不是 `env` 命令
-
-  ```json
-  {
-    "mcpServers": {
-      "ech0-noise-local-stdio": {
-        "command": "node",
-        "args": ["/你的文件地址/server.js"],
-        "env": {
-          "NOTE_HOST": "http://<服务器IP>:1314",
-          "NOTE_HTTP_PORT": "0",
-          "NOTE_TOKEN": "<你的Token>"
-        }
-      }
-    }
-  }
-  ```
-
-- 可选（类 Unix）写法：使用 `env` 作为命令设置环境再运行 `node`
-
-  ```json
-  {
-    "mcpServers": {
-      "ech0-noise-local-stdio-env": {
-        "command": "env",
-        "args": [
-          "NOTE_HOST=http://<服务器IP>:1314",
-          "NOTE_HTTP_PORT=0",
-          "NOTE_TOKEN=<你的Token>",
-          "node",
-          "/你的文件地址/server.js"
-        ]
-      }
-    }
-  }
-  ```
-
-  示例：cherry studio 连接使用env：![WkQC3LegSlm8qBU](https://s2.loli.net/2025/12/05/WkQC3LegSlm8qBU.png)
-
-- 使用本地mcp实例单独运行
-
-  `docker exec` 启动 `stdio` 握手的实例时，将 `NOTE_HTTP_PORT` 设为 `0`，只进行握手，不再监听 HTTP
-
-```json
-{
-  "mcpServers": {
-    "ech0-noise-mcp-stdio": {
-      "command": "docker",
-      "args": [
-        "exec",
-        "-i",
-        "-e", "NOTE_HOST=http://<服务器IP>:1314",
-        "-e", "NOTE_HTTP_PORT=0",
-        "-e", "NOTE_TOKEN=<你的Token>",
-        "Ech0-Noise",
-        "node",
-        "/app/mcp/server.bundle.mjs"
-      ]
-    }
-  }
-}
-```
-
-- 保留 SSE 监控仅用于事件订阅，不作为握手连接
-
-```json
-{
-  "mcpServers": {
-    "ech0-noise-mcp-sse-monitor": {
-      "type": "sse",
-      "url": "http://<服务器IP>:1315/mcp/sse"
-    }
-  }
-}
-```
-
-### SSE 握手与保活
-- 连接到 `GET /mcp/sse` 后，服务会立即推送握手事件：
-  - `event: mcp_hello` 携带服务名称与版本
-  - `event: mcp_tools` 携带可用工具列表
-  - `event: keepalive` 每 30 秒推送一次，保持连接活跃
-- 示例：
-  ```bash
-  curl -N http://localhost:1315/mcp/sse | head -n 10
-  # 预期输出包含：
-  # event: mcp_hello
-  # data: {"name":"ech0-noise-mcp","version":"0.1.0"}
-  # event: mcp_tools
-  # data: ["search","publish",...]
-  ```
-- 提示：SSE 侧仅提供握手信号与运行事件；完整的 MCP 协议交互仍通过 `stdio` 完成。
-
-### 工具与命令
-
-- 工具名称（英文优先）：`search`、`publish`、`delete`、`update`、`message`、`page`、`status`、`calendar`、`config`、`login`、`token`、`rss`
-- 中文名称兼容但可能触发客户端校验警告：`搜索`、`发布`、`删除`、`更新`、`消息`、`页面`、`状态`、`日历`、`配置`、`登录`、`令牌`、`RSS`
-
-#### 认证要求与提示
-- 无需认证：`search`、`page`、`message`、`status`、`calendar`、`config`、`rss`
-- 支持令牌或会话：`publish`
-- 令牌或会话（需后端启用 token 路由）：`update`、`delete`、`pin`、`settings`
-- 未登录或无令牌时工具会直接返回友好提示：
-  - `需要登录或令牌：请先调用 登录 工具，或在配置中设置 NOTE_TOKEN。发布支持令牌；更新/删除/置顶/设置支持令牌（需后端启用）或会话认证。`
-  - 令牌无效：`令牌无效或已过期：请在后台重新生成 token，或先 登录。`
-  - 后端未启用：`后端未启用 token 路由：请更新后端并重启服务，或使用 登录 获取会话后再操作。`
-
-#### 快捷别名（自然语言更友好）
-- 发布别名：`笔记`、`说说`、`说说笔记`（均等价于 `发布`）
-- 示例：
-  ```json
-  { "tool": "笔记", "params": { "content": "这是一段内容", "private": false } }
-  { "tool": "说说", "params": { "type": "image", "image": "https://example.com/a.jpg", "content": "配文可选" } }
-  ```
-
-#### 避免未格式化的输出
-- 一些客户端会原样展示工具调用日志（如 `<tool_use_result>` 等）。建议在提示语中明确要求：
-  - “只输出解析后的中文列表，不展示工具调用日志或原始 JSON，不使用任何未渲染标签。”
-  - “按中文列出 id、用户名、时间与内容摘要。”
-
-#### 搜索空参回退与输出格式
-- 当 `搜索` 未提供 `keyword/query` 时自动回退到分页列表（第一页），避免校验错误
-- `搜索/页面` 会同时返回：
-  - 可读摘要文本（`id/用户名/时间/内容前200字`）
-  - 原始 JSON（便于程序消费）
-
-### Docker 独立运行MCP
-1. 构建镜像：
-   ```bash
-   cd mcp
-   docker build -t ech0-noise-mcp .
-   ```
-2. 以 Token 认证运行：
-   ```bash
-   docker run --rm -e NOTE_HOST=https://your-domain.example -e NOTE_TOKEN=你的_token ech0-noise-mcp
-   ```
-3. 以用户名密码运行：
-   ```bash
-   docker run --rm -e NOTE_HOST=https://your-domain.example ech0-noise-mcp
-   # 在客户端调用“登录”工具设置 Cookie 会话
-   ```
-
-### docker-compose 一键启动（后端 + 前端静态 + MCP 同容器）
-仓库根目录已有 `docker-compose.yml`。执行：
-```bash
-docker-compose up -d
-```
-- 服务 `my-app`：后端 Go + 前端静态，并内置 MCP 服务（Node）。
-- 端口：应用 `1314`、MCP HTTP/SSE `1315`（皆映射至宿主）。
-
-查看工具列表与流式调用：
-```bash
-curl http://localhost:1315/mcp/tools
-curl -N -X POST http://localhost:1315/mcp/tool/搜索 -H 'Content-Type: application/json' -d '{"keyword":"#CDN"}'
-```
-
-### HTTP 与 SSE
-- 开启 HTTP 与 SSE：设置 `NOTE_HTTP_PORT` 启动服务端口
-  ```bash
-  NOTE_HOST=https://your-domain.example \
-  NOTE_TOKEN=你的_token \
-  NOTE_HTTP_PORT=1315 \
-  npm start
-  ```
-- 列出工具：`GET /mcp/tools`
-  ```bash
-  curl http://localhost:1315/mcp/tools
-  ```
-- 流式调用工具：`POST /mcp/tool/{name}` 返回换行分隔 JSON
-  ```bash
-  curl -N -X POST http://localhost:1315/mcp/tool/搜索 \
-    -H 'Content-Type: application/json' \
-    -d '{"keyword":"#CDN","page":1,"pageSize":10}'
-  ```
-- SSE 订阅：`GET /mcp/sse`，推送 `tool_start`、`tool_end`
-  ```bash
-  curl -N http://localhost:1315/mcp/sse
-  ```
-
-#### 前端联动
-- 置顶联动：前端列表会将置顶项排在顶部，取消置顶后按时间顺序排列（逻辑见 `web/components/index/MessageList.vue:260-264`）。
-- 更新联动：修改内容后列表即时读取更新，无需重建；详情页 `消息` 工具可用于验证。
-- 设置联动：通过 `settings` 更新后端配置，`配置` 工具可直接获取最新前端配置用于前端渲染。
-
-### 常用工具与入参
-- 搜索/`search`：`{ keyword, page?, pageSize? }`（支持 `#标签`）
-- 发布/`publish`：`{ content, private?, imageURL? }`
-- 删除/`delete`：`{ id }`
-- 更新/`update`：`{ id, content }`
-- 消息/`消息`：`{ id }`
-- 页面/`页面`：`{ page?, pageSize? }`
-- 状态/`状态`：无入参
-- 日历/`日历`：无入参
-- 配置/`配置`：无入参
-- 登录/`登录`：`{ username, password }`（设置 Cookie 会话）
-- 令牌/`令牌`：无入参（基于会话生成新 Token）
-- RSS/`RSS`：无入参（返回全文 XML）
-
-### 与现有 API 的对应关系
-- 搜索：`/api/messages/search` 或 `/api/messages/tags/:tag`
-- 发布：`/api/messages`（会话）、`/api/token/messages`（Token）
-- 删除/更新：`/api/messages/:id`
-- 消息：`/api/messages/:id`
-- 页面：`/api/messages/page`
-- 状态：`/api/status`
-- 日历：`/api/messages/calendar`
-- 配置：`/api/frontend/config`
-- 登录：`/api/login`（读取 `Set-Cookie`）
-- 令牌：`/api/user/token/regenerate`
-- RSS：`/rss`
+客户端配置、镜像运行开关、权限和迁移说明见 [MCP 操作说明](mcp/README.md)。
 
 ## Skill使用
 
@@ -1609,7 +1381,7 @@ curl -N -X POST http://localhost:1315/mcp/tool/搜索 -H 'Content-Type: applicat
 适用能力包括：
 
 - 发布、搜索、分页、详情、更新、删除、置顶
-- 登录、获取或重建 token
+- 登录期限续期；凭据创建与撤销在个人配置中管理
 - 查询状态、配置、日历、RSS
 - 排查当前环境应走 API 还是 MCP
 
@@ -1659,24 +1431,17 @@ curl http://localhost:1314/rss
 
 若以上接口正常，说明可以直接通过 API 模式使用这份 skill。
 
-如已明确启用 MCP，再额外验证：
-
-```bash
-curl http://localhost:1315/mcp/tools
-curl -N http://localhost:1315/mcp/sse
-```
-
-若以上接口正常，说明可切换到 MCP 模式。
+如已配置 MCP 客户端，调用其 `identity` 工具，确认 `auth_via` 为 `ai_token`，再验证 `page` 或 `search`。仅 HTTP 端口可达不代表 MCP 已正确认证或工具可用。
 
 使用建议：
 
 - 普通默认部署先走 API，不要默认假设 MCP 已启用
-- 若已配置 MCP 客户端，或已验证 `/mcp/tools`、`/mcp/sse` 可访问，再切换 MCP 模式
+- MCP 必须由实际协议握手、AI 凭据身份和工具调用验证后使用
 - 删除、更新、置顶等危险操作，先确认目标内容再执行
 
 补充说明：
 
-- 本仓库 `docker-compose.yml` 默认主应用使用 `final`，并不等于默认直接走 MCP
+- 本仓库 Compose 默认打包 MCP，stdio 按需启动；打包模块并不等于已配置客户端或开启 HTTP
 - 如需结合 MCP 使用，请同时参考本节上方的 `MCP接入` 说明与 `mcp/README.md`
 
 ------

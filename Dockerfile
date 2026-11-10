@@ -63,20 +63,6 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     go build -trimpath -ldflags "-s -w" -o /app/update-tool ./cmd/update-tool
 RUN mkdir -p /app/data /app/public && chmod -R 755 /app/data
 
-# MCP 构建阶段（打包为单文件，避免在最终镜像中保留 node_modules）
-# MCP 产物为 JS bundle，与 CPU 架构无关，同样固定在 BUILDPLATFORM 上构建。
-FROM --platform=$BUILDPLATFORM docker.io/library/node:20-alpine AS mcp-build
-WORKDIR /app/mcp
-COPY ./mcp/package.json ./
-RUN --mount=type=cache,target=/root/.npm \
-    npm install --omit=dev --prefer-offline --no-audit --no-fund
-COPY ./mcp/server.js ./server.js
-RUN npx --yes esbuild@0.23.0 server.js \
-    --bundle \
-    --platform=node \
-    --format=esm \
-    --outfile=server.bundle.mjs
-
 # FFmpeg 构建阶段（尽量静态链接，减少运行时依赖体积）
 # 注意：源码编译非常耗时，且 multi-arch 下会被重复构建。
 # 默认 final 镜像将改为通过 apk 安装 ffmpeg；如需自编译版本，请使用 --target final-ffmpeg。
@@ -204,7 +190,7 @@ LABEL org.opencontainers.image.version=$VERSION \
       org.opencontainers.image.revision=$REVISION \
       org.opencontainers.image.created=$BUILD_TIME
 
-# 启动后端与 MCP（MCP 后台运行，Go 服务为主进程）
+# 启动 Go 主服务
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 CMD ["/app/docker-healthcheck.sh"]
 
 CMD ["/app/noise"]
@@ -221,15 +207,21 @@ RUN set -eux; \
     /usr/local/bin/ffprobe -version >/dev/null; \
     /usr/local/bin/ffmpeg -hide_banner -encoders 2>/dev/null | grep -q libmp3lame
 
-FROM final AS final-mcp
-RUN apk update && \
-    apk add --no-cache nodejs && \
-    rm -rf /var/cache/apk/*
-COPY --from=mcp-build /app/mcp/server.bundle.mjs /app/mcp/server.bundle.mjs
-
-CMD ["sh","-c","node /app/mcp/server.bundle.mjs & exec /app/noise"]
-
-FROM docker.io/library/node:20-alpine AS mcp-final
+# MCP 依赖与源码独立；选择 final 时不会构建或安装此模块。
+FROM --platform=$BUILDPLATFORM docker.io/library/node:20-alpine AS mcp-build
 WORKDIR /app/mcp
-COPY --from=mcp-build /app/mcp/server.bundle.mjs /app/mcp/server.bundle.mjs
-CMD ["node","/app/mcp/server.bundle.mjs"]
+COPY ./mcp/package.json ./mcp/package-lock.json ./
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --omit=dev --ignore-scripts --prefer-offline --no-audit --no-fund
+COPY ./mcp/server.js ./server.js
+COPY ./mcp/src/ ./src/
+
+# stable-mcp / edge-mcp 默认包含模块；与主服务之间仅通过 HTTP API 通信。
+FROM final AS final-mcp
+RUN apk add --no-cache nodejs
+COPY --from=mcp-build /app/mcp /app/mcp
+COPY ./mcp/start-with-app.sh /app/mcp/start-with-app.sh
+RUN chmod +x /app/mcp/start-with-app.sh
+ENV MCP_ENABLED=true
+ENV MCP_TRANSPORT=stdio
+CMD ["/app/mcp/start-with-app.sh", "/app/noise"]

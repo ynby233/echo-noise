@@ -61,6 +61,12 @@ func recordUserLoginAudit(c *gin.Context, user *models.User, action string) erro
 			return nil
 		}
 	}
+	authVia := c.GetString("auth_via")
+	if authVia == "" {
+		// Login/logout callers are trusted internal handlers. AI login supplies
+		// ai_token explicitly; legacy session handlers may omit the context value.
+		authVia = "session"
+	}
 	audit := models.SecurityLoginAudit{
 		UserID:    user.ID,
 		Username:  strings.TrimSpace(user.Username),
@@ -69,6 +75,7 @@ func recordUserLoginAudit(c *gin.Context, user *models.User, action string) erro
 		Action:    normalizeLoginAuditAction(action),
 		IP:        c.ClientIP(),
 		UserAgent: c.GetHeader("User-Agent"),
+		AuthVia:   models.NormalizeSecurityLogAuthVia(authVia),
 	}
 	return db.Create(&audit).Error
 }

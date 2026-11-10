@@ -8,7 +8,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 	"github.com/rcy1314/echo-noise/internal/database"
 	"github.com/rcy1314/echo-noise/internal/models"
@@ -214,7 +213,7 @@ func recordAccessLog(c *gin.Context, duration time.Duration) {
 		return
 	}
 
-	userID, username, isAdmin := resolveAccessLogUser(c)
+	userID, username, isAdmin, authVia := resolveAccessLogUser(c)
 	status := c.Writer.Status()
 	if status == 0 {
 		status = 200
@@ -228,6 +227,7 @@ func recordAccessLog(c *gin.Context, duration time.Duration) {
 		UserID:     userID,
 		Username:   trimLogField(username, 191),
 		IsAdmin:    isAdmin,
+		AuthVia:    authVia,
 		UserAgent:  trimLogField(c.GetHeader("User-Agent"), 2048),
 		Referer:    trimLogField(c.GetHeader("Referer"), 2048),
 		DurationMS: duration.Milliseconds(),
@@ -240,12 +240,13 @@ func recordSiteVisitLog(c *gin.Context) {
 	if db == nil {
 		return
 	}
-	userID, username, isAdmin := resolveAccessLogUser(c)
+	userID, username, isAdmin, authVia := resolveAccessLogUser(c)
 	log := models.SecuritySiteVisitLog{
 		IP:        trimLogField(c.ClientIP(), 191),
 		UserID:    userID,
 		Username:  trimLogField(username, 191),
 		IsAdmin:   isAdmin,
+		AuthVia:   authVia,
 		UserAgent: trimLogField(c.GetHeader("User-Agent"), 2048),
 		Referer:   trimLogField(c.GetHeader("Referer"), 2048),
 	}
@@ -351,62 +352,14 @@ func FlushAccessLogs(ctx context.Context) error {
 	}
 }
 
-func resolveAccessLogUser(c *gin.Context) (uint, string, bool) {
-	var userID uint
-	var username string
-	var isAdmin bool
-
-	if v, ok := c.Get("user_id"); ok {
-		if id, ok := toUint(v); ok {
-			userID = id
-		}
+func resolveAccessLogUser(c *gin.Context) (uint, string, bool, string) {
+	// ResolveReadIdentity owns validation and keeps read-only identity separate
+	// from authorization context. Never fall back to raw session values or headers.
+	user, authVia, ok := ResolveReadIdentity(c)
+	if !ok || user.ID == 0 {
+		return 0, "", false, "unknown"
 	}
-	if v, ok := c.Get("username"); ok {
-		username = toString(v)
-	}
-	if v, ok := c.Get("is_admin"); ok {
-		isAdmin = toBool(v)
-	}
-
-	if userID == 0 {
-		session := sessions.Default(c)
-		if v := session.Get("user_id"); v != nil {
-			if id, ok := toUint(v); ok {
-				userID = id
-			}
-		}
-		if username == "" {
-			username = toString(session.Get("username"))
-		}
-		if !isAdmin {
-			isAdmin = toBool(session.Get("is_admin"))
-		}
-	}
-
-	return userID, strings.TrimSpace(username), isAdmin
-}
-
-func toString(v any) string {
-	switch val := v.(type) {
-	case string:
-		return strings.TrimSpace(val)
-	case []byte:
-		return strings.TrimSpace(string(val))
-	default:
-		return ""
-	}
-}
-
-func toBool(v any) bool {
-	switch val := v.(type) {
-	case bool:
-		return val
-	case string:
-		s := strings.ToLower(strings.TrimSpace(val))
-		return s == "true" || s == "1" || s == "yes"
-	default:
-		return false
-	}
+	return user.ID, strings.TrimSpace(user.Username), user.IsAdmin, models.NormalizeSecurityLogAuthVia(authVia)
 }
 
 func trimLogField(value string, limit int) string {

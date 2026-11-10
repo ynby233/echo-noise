@@ -1,744 +1,174 @@
-# MCP 接入（AI 客户端）
+# Echo Noise MCP
 
-| ![7eucz1CMm5dAhKl](https://s2.loli.net/2025/11/26/7eucz1CMm5dAhKl.png) | ![odsglFVurO73wSf](https://s2.loli.net/2025/11/26/odsglFVurO73wSf.png) |
-| ------------------------------------------------------------ | ------------------------------------------------------------ |
-| ![7a9pVJDAFUTmrNh](https://s2.loli.net/2025/11/27/7a9pVJDAFUTmrNh.png) | ![WkQC3LegSlm8qBU](https://s2.loli.net/2025/12/05/WkQC3LegSlm8qBU.png) |
+MCP 是代码独立的 Node.js 模块，通过主服务 API 操作笔记。`stable-mcp` 和 `edge-mcp` 镜像默认包含该模块；源码构建可选择不打包。默认使用 stdio，不监听端口，客户端连接时才启动独立 MCP 进程。需要远程接入时可启用标准 Streamable HTTP；MCP 启动失败、崩溃或停用不影响 Go 主服务及健康检查。
 
-## ❤️简介
+## 准备 AI 凭据
 
-通过MCP协议，部署连接后，我们可以在任意支持MCP的AI客户端中进行对笔记系统的权限操作（搜索、发布、更新、删除等）
+需要支持 AI 凭据契约的后端版本。在后台使用有效登录会话创建专用 AI 凭据；凭据管理接口为 `/api/user/ai-credentials`，创建返回的 `token` 只展示一次，应保存在 MCP 客户端的私有配置中。普通用户 token 不能替代 AI 凭据。
 
-本地快速简单使用
+每次工具操作先以同一 Bearer 凭据请求 `GET /api/auth/identity`，并验证 `data.auth_via` 为 `ai_token`。缺少凭据、普通 token、撤销或过期均返回工具错误，不会降级为匿名读取或网页会话。MCP 不自行给普通 token 标记 AI 身份，实际业务权限和可见范围由后端决定。
 
-- 拉取下载仓库mcp文件夹，主文件为server.js
+`login` 是账号登录期限续期工具：使用当前 AI 凭据请求 `POST /api/ai/login`，提交同账号的 `username` 与 `password`，再验证身份。此端点允许未撤销的 AI 凭据在账号登录期限已过时续期。不会设置 Cookie、生成普通 token 或切换到另一用户。密码不应写进提示词、日志或共享配置；可优先在后台完成账号登录。
 
-- 安装环境依赖，确保本地已安装 Node
+AI 凭据的创建、撤销和续期在单主服务进程内按账号串行执行；当前保证包括 SQLite 单实例部署。多个主服务实例共享数据库时，撤销与续期的并发顺序不具备分布式锁保证。密钥撤销后不再用于新请求，已经执行中的业务请求不回滚。
 
-- 安装依赖
+## 本地 stdio
 
-  ```
-  cd mcp
-  npm install
-  ```
+使用 Node.js 20 或更新版本。独立目录只需要本目录的源码与锁文件，不需要 Go、前端或主站构建产物。首次准备依赖：
 
-- 然后在支持mcp运行环境的客户端（如cherry studio）配置json数据指向该文件即可启用
+```sh
+cd mcp
+npm ci
+```
 
-  ```
-  {
-    "mcpServers": {
-      "e-noise": {
-        "command": "env",
-        "args": [
-          "NOTE_HOST=https://your-domain.example",  //改为你的地址
-          "NOTE_HTTP_PORT=0",
-          "NOTE_TOKEN=你的后台token",
-          "node",
-          "/Library/Github/Ech0-Noise/mcp/server.js"  //改为你的本地文件路径
-        ]
-      }
-    }
-  }
-  ```
-
-------
-
-👀快速查看简要
-
-[本地运行](#本地运行)🟢  [本地连接远程MCP](#本地连接远程MCP)🟢  [Docker运行](#Docker运行)🟢  [常用工具与入参](#常用工具与入参)🟢
-
-## 连接方式与配置建议
-
-#### 端口约定（统一说明）
-- 后端 API 与静态页面：`1314`（容器映射 `-p 1314:1314`）
-- 本地前端开发服务器：`1316`（开发时代理 `/api`、`/rss` 到 `1314`）
-- MCP HTTP/SSE（可选）：`1315`（设置 `NOTE_HTTP_PORT=1315` 并映射 `-p 1315:1315`）
-- 仅 Stdio 握手：`NOTE_HTTP_PORT=0`（不监听 HTTP，不占用任何端口）
-
- 说明：MCP 作为客户端访问 `NOTE_HOST`（默认 `http://localhost:1314`），不会与后端端口产生占用冲突；只有在开启 MCP 的 HTTP/SSE 服务时才需要 `1315`。
-
-- 使用 `docker exec` 方式需要本地已安装并运行 Docker，且当前 CLI 指向目标 Docker 守护进程（本机或远程）。如需操作云服务器上的容器，必须先切换到远程 Docker 上下文（`docker context use <remote>`）或配置 `DOCKER_HOST`，否则命令会作用于本机。
-- 容器需为 `final-mcp` 目标并已运行，容器名与配置保持一致（例如 `Ech0-Noise`）。
-- 环境变量值必须是纯字符串，不要包含反引号或多余空格（如 `NOTE_HOST=http://<服务器IP>:1314`）。
-- 不使用本地 Docker 时，可改用 SSH + Stdio 或 HTTP/SSE 网关；详见下文“本地连接远程 MCP（多种方式）”。
-- 避免二次占用 `1315` 端口导致 `EADDRINUSE`（如需同时运行多实例，请将第二实例的 `NOTE_HTTP_PORT` 设为 `0`）
-- 使用 `docker exec` 启动 `stdio` 握手的实例时，将 `NOTE_HTTP_PORT` 设为 `0`，只进行握手，不再监听 HTTP
+在支持 MCP 的客户端中配置绝对路径：
 
 ```json
 {
   "mcpServers": {
-    "ech0-noise-mcp-stdio": {
+    "echo-noise": {
+      "command": "node",
+      "args": ["/absolute/path/to/mcp/server.js"],
+      "env": {
+        "NOTE_HOST": "https://notes.example.com",
+        "NOTE_TOKEN": "<专用 AI 凭据>"
+      }
+    }
+  }
+}
+```
+
+每个 stdio 进程只使用自身的 `NOTE_HOST`、`NOTE_TOKEN`。不同账号配置不同进程。`NOTE_HOST` 默认 `http://localhost:1314`；远程站点应使用 HTTPS。stdout 仅承载 MCP 协议，不输出工具参数、凭据或调试日志。
+
+## 镜像内置模块
+
+`final-mcp` 构建目标包含 Node.js 和 `/app/mcp/` 模块，`final` 不包含。发布渠道 `ghcr.io/ynby233/echo-noise:edge-mcp` 和 `stable-mcp` 使用 `final-mcp`；尚无正式 Release 时 stable 渠道仍不可用。
+
+源码 Compose 默认打包模块：
+
+```sh
+docker compose up -d --build
+```
+
+如不需要打包 MCP，在 `.env` 设置 `APP_BUILD_TARGET=final` 后重新构建。已打包时可设置 `MCP_ENABLED=false` 停用模块。该开关是运行配置，不替代用户权限检查。
+
+客户端通过 `docker exec -i` 启动专属 stdio 进程，不需要另一个镜像或后台 MCP 服务：
+
+```json
+{
+  "mcpServers": {
+    "echo-noise": {
       "command": "docker",
-      "args": [
-        "exec",
-        "-i",
-        "-e", "NOTE_HOST=http://localhost:1314",
-        "-e", "NOTE_HTTP_PORT=0",
-        "-e", "NOTE_TOKEN=你的后台TOKEN",
-        "Ech0-Noise",
-        "node",
-        "/app/mcp/server.bundle.mjs"
-      ]
+      "args": ["exec", "-i", "-e", "MCP_TRANSPORT=stdio", "-e", "NOTE_HOST=http://127.0.0.1:1314", "-e", "NOTE_TOKEN", "Ech0-Noise", "node", "/app/mcp/server.js"],
+      "env": { "NOTE_TOKEN": "<专用 AI 凭据>" }
     }
   }
 }
 ```
 
-- 保留 SSE 监控仅用于事件订阅，不作为握手连接
+不要加 `-t`。Docker CLI 必须连接运行该容器的主机；远程主机需配置 Docker context 或 SSH。每个客户端使用自己的 AI 凭据和进程，不共享站长凭据。容器中的 `NOTE_HOST` 指向同容器主服务；主服务非默认端口时相应修改。
+
+主服务和 MCP 的代码、依赖和进程分别管理；它们只通过 API 通信。`mcp/start-with-app.sh` 保留主服务退出码并转发停止信号。MCP 失败不会停止主服务，主服务退出时会结束后台 MCP。健康检查只检查主服务，不能用主服务健康推断 MCP 正常。
+容器停止时会先转发终止信号，给 MCP 活动请求至多 5 秒完成响应；包装器在 6 秒后才强制结束未退出模块，避免其阻塞主服务退出。
+
+
+
+## 可选 Streamable HTTP
+
+显式设置以下环境变量后运行 `node server.js`：
+
+```text
+MCP_TRANSPORT=http
+NOTE_HOST=https://notes.example.com
+MCP_HTTP_HOST=127.0.0.1
+MCP_HTTP_PORT=1315
+```
+
+客户端使用支持 **Streamable HTTP** 的传输连接 `http://127.0.0.1:1315/mcp`，并在每个请求携带 `Authorization: Bearer <该客户端的 AI 凭据>`。这是无状态的标准 MCP JSON-RPC 端点；初始化、工具列表与调用均通过 `POST /mcp`，成功响应使用 JSON。不分配 MCP session ID，`GET /mcp` 与 `DELETE /mcp` 返回 405。
+
+HTTP 模式完全忽略服务端 `NOTE_TOKEN`，不接受 Cookie 登录，也不使用全局会话。每个请求创建独立 API 客户端与 MCP server，登录续期也只使用该请求的 Bearer 凭据。客户端 B 不能继承客户端 A 的凭据；只有同一账号在后端共享的登录期限会按后端契约刷新。请勿把凭据放到 URL 查询参数中。
+
+在同容器开启 HTTP 时，设置 `MCP_TRANSPORT=http`、`MCP_ENABLED=true`、`MCP_HTTP_HOST=0.0.0.0`、`MCP_HTTP_PORT=1315`，并将 `1315` 映射到宿主机回环地址（例如 `127.0.0.1:1315:1315`）。主服务启动器会单独启动 MCP HTTP 子进程；stdio 客户端仍应显式覆盖 `MCP_TRANSPORT=stdio`。
+
+远程使用时配置可信反向代理、HTTPS，并明确设置 Host/Origin 允许列表。代理需要保留客户端 Authorization，不能注入统一服务端凭据；`X-Forwarded-Host` 不参与放行判断。
+
+| 配置 | 默认值 | 含义 |
+| --- | --- | --- |
+| `MCP_ENABLED` | `true` | `false` 或 `0` 停用已打包模块；不替代用户认证 |
+| `MCP_TRANSPORT` | `stdio` | `stdio` 或 `http`，不会同时启动两种传输 |
+| `NOTE_HOST` | `http://localhost:1314` | 固定上游地址，HTTP 请求不能覆盖 |
+| `NOTE_TOKEN` | 空 | 仅 stdio 的 AI 凭据；HTTP 忽略 |
+| `NOTE_TIMEOUT_MS` | `10000` | 上游请求超时，范围 100–120000 毫秒 |
+| `MCP_HTTP_HOST` | `127.0.0.1` | HTTP 监听地址 |
+| `MCP_HTTP_PORT` | `1315` | HTTP 端口 |
+| `MCP_ALLOWED_HOSTS` | `localhost:端口,127.0.0.1:端口,[::1]:端口` | 逗号分隔的精确 Host 值，含端口；不支持通配符 |
+| `MCP_ALLOWED_ORIGINS` | 空 | 默认拒绝所有带 Origin 的请求；允许浏览器时填写精确 Origin（含协议及非默认端口） |
+| `MCP_MAX_BODY_BYTES` | `1048576` | 单次请求体上限，范围 1024–10485760 字节 |
+| `MCP_MAX_CONCURRENT` | `32` | HTTP 实例并发请求上限 |
+| `MCP_REQUESTS_PER_MINUTE` | `120` | HTTP 实例总请求速率上限；不是每 token 独立额度 |
+
+Host/Origin 拒绝返回 403，缺少请求 Bearer 返回 401，过大请求体返回 413，限流返回 429。不接受压缩请求体或 JSON-RPC 批量请求。工具执行失败通过 MCP `isError: true` 返回，不能把 HTTP 200 的协议响应当成业务成功。
+
+## 工具与参数
+
+工具使用稳定英文名称和中文描述；不注册中文别名。所有工具遵循真实后端权限，无自动换凭据、换路由或写操作重试。
+
+| 工具 | 参数与行为 |
+| --- | --- |
+| `identity` | 验证 AI 凭据身份，返回经过过滤的身份信息 |
+| `search` | `keyword` 或 `query`；空查询列出最新消息，`#标签` 走标签查询 |
+| `page` | 分页读取；`page` / `page_number`，`pageSize` / `page_size` |
+| `message` | `id`，读取消息详情 |
+| `publish` | 内容与可见性；支持文字、Markdown、图片与混合内容 |
+| `update` | `id`，以及 `content`、`visibility` 或旧 `private` 字段 |
+| `delete` | 必须明确 `id`；调用后端 DELETE 将该消息移入回收站 |
+| `pin` | `id`、`pinned`；走后端 token 路由，按后端权限允许或拒绝 |
+| `settings` | `allowRegistration`、`frontendSettings`；走 token 设置路由，仅后端允许的管理员权限可执行 |
+| `status` | 查询系统状态 |
+| `calendar` | 查询发布日历 |
+| `config` | 查询前端公开配置 |
+| `login` | `username`、`password`；用当前 AI 凭据续期同一账号登录期限 |
+| `rss` | 读取 RSS |
+
+搜索与分页都支持上述分页别名。页码从 1 开始，pageSize 范围 1–100；同时传入同义参数但值不一致会报错。`format` 可选 `text` 或 `json`。读请求也携带 AI Bearer，后端据此决定可见范围。
+
+`publish` 兼容 `type: text|markdown|md|image|multipart` 和 `image/images/imageURL`，同时支持 `image_url/video_url`。单图使用后端图片字段，多图与视频链接写入 Markdown 正文以确保保存；不会上传本地附件。搜索和分页默认返回 JSON，`format=text` 返回可读列表。
+
+发布可见性为 `public`（公开）、`users`（登录用户）、`contacts`（联系关系范围）、`private`（仅自己）。**发布未指定可见性时仍默认公开**，以保持原行为。兼容 `private: true` → `private`、`private: false` → `public`；显式 `visibility` 优先。更新不传可见性字段时保留原可见性。
 
 ```json
-{
-  "mcpServers": {
-    "ech0-noise-mcp-sse-monitor": {
-      "type": "sse",
-      "url": "http://localhost:1315/mcp/sse"
-    }
-  }
-}
+{"content":"本周记录","type":"markdown","visibility":"contacts"}
 ```
-
-### SSE 握手与保活
-- 连接到 `GET /mcp/sse` 后，服务会立即推送握手事件：
-  - `event: mcp_hello` 携带服务名称与版本
-  - `event: mcp_tools` 携带可用工具列表
-  - `event: keepalive` 每 30 秒推送一次，保持连接活跃
-- 示例：
-  ```bash
-  curl -N http://localhost:1315/mcp/sse | head -n 10
-  # 预期输出包含：
-  # event: mcp_hello
-  # data: {"name":"ech0-noise-mcp","version":"0.1.0"}
-  # event: mcp_tools
-  # data: ["search","publish",...]
-  ```
-- 提示：SSE 侧仅提供握手信号与运行事件；完整的 MCP 协议交互仍通过 `stdio` 完成。
-
-## 工具与命令
-
-- 工具名称（英文优先）：`search`、`publish`、`delete`、`update`、`message`、`page`、`status`、`calendar`、`config`、`login`、`token`、`rss`
-- 中文名称兼容但可能触发客户端校验警告：`搜索`、`发布`、`删除`、`更新`、`消息`、`页面`、`状态`、`日历`、`配置`、`登录`、`令牌`、`RSS`
-
-#### 认证要求与提示
-- 无需认证：`search`、`page`、`message`、`status`、`calendar`、`config`、`rss`
-- 支持令牌或会话：`publish`
-- 令牌或会话（需后端启用 token 路由）：`update`、`delete`、`pin`、`settings`
-- 未登录或无令牌时工具会直接返回友好提示：
-  - `需要登录或令牌：请先调用 登录 工具，或在配置中设置 NOTE_TOKEN。发布支持令牌；更新/删除/置顶/设置支持令牌（需后端启用）或会话认证。`
-  - 令牌无效：`令牌无效或已过期：请在后台重新生成 token，或先 登录。`
-  - 后端未启用：`后端未启用 token 路由：请更新后端并重启服务，或使用 登录 获取会话后再操作。`
-
-#### 快捷别名（自然语言更友好）
-- 发布别名：`笔记`、`说说`、`说说笔记`（均等价于 `发布`）
-- 示例：
-  ```json
-  { "tool": "笔记", "params": { "content": "这是一段内容", "private": false } }
-  { "tool": "说说", "params": { "type": "image", "image": "https://example.com/a.jpg", "content": "配文可选" } }
-  ```
-
-#### 避免未格式化的输出
-- 一些客户端会原样展示工具调用日志（如 `<tool_use_result>` 等）。建议在提示语中明确要求：
-  - “只输出解析后的中文列表，不展示工具调用日志或原始 JSON，不使用任何未渲染标签。”
-  - “按中文列出 id、用户名、时间与内容摘要。”
-
-#### 搜索空参回退与输出格式
-- 当 `搜索` 未提供 `keyword/query` 时自动回退到分页列表（第一页），避免校验错误
-- `搜索/页面` 会同时返回：
-  - 可读摘要文本（`id/用户名/时间/内容前200字`）
-  - 原始 JSON（便于程序消费）
-
-#### HTTP 调试端点
-- 列出工具：
-  ```bash
-  curl http://localhost:1315/mcp/tools
-  ```
-- 流式调用工具：返回换行分隔 JSON 事件（`start`、`data`、`end`、`error`）
-  ```bash
-  curl -N -X POST http://localhost:1315/mcp/tool/search \
-    -H 'Content-Type: application/json' \
-    -d '{"keyword":"#CDN","page":1,"pageSize":10}'
-  ```
-- 订阅事件（工具执行的 `tool_start`/`tool_end` 会推送到 SSE）：
-  ```bash
-  curl -N http://localhost:1315/mcp/sse
-  ```
-
-#### 调用示例（AI 客户端/HTTP 皆适用的参数结构）
-- 搜索（支持 `keyword` 或 `query`）：
-  ```json
-  { "tool": "search", "params": { "query": "welcome", "page": 1, "pageSize": 10 } }
-  ```
-- 分页列表（参数别名兼容）：
-  ```json
-  { "tool": "page", "params": { "page": 1, "pageSize": 10 } }
-  ```
-- 获取消息：
-  ```json
-  { "tool": "message", "params": { "id": "123" } }
-  ```
-- 发布（纯文本）：
-  ```json
-  { "tool": "publish", "params": { "type": "text", "content": "一段文本内容" } }
-  ```
-- 发布（Markdown）：
-  ```json
-  { "tool": "publish", "params": { "type": "markdown", "content": "# 标题\n正文..." } }
-  ```
-- 发布（单图）：
-  ```json
-  { "tool": "publish", "params": { "type": "image", "image": "https://example.com/image.jpg" } }
-  ```
-- 发布（多图混合，附可选配文）：
-  ```json
-  { "tool": "publish", "params": { "type": "multipart", "images": ["https://a.jpg","https://b.jpg"], "content": "配文可选" } }
-  ```
-- 发布（兼容旧字段）：
-  ```json
-  { "tool": "publish", "params": { "type": "image", "imageURL": "https://example.com/image.jpg" } }
-  ```
-
-#### HTTP 调试与事件
-- 列出工具：
-  ```bash
-  curl http://localhost:1315/mcp/tools
-  ```
-- 流式调用工具（返回换行分隔 JSON 事件）：
-  ```bash
-  curl -N -X POST http://localhost:1315/mcp/tool/search \
-    -H 'Content-Type: application/json' \
-    -d '{"query":"welcome","page":1,"pageSize":10}'
-  ```
-- 订阅事件与握手：
-  ```bash
-  curl -N http://localhost:1315/mcp/sse
-  ```
-- 删除：
-  ```json
-  { "tool": "delete", "params": { "id": "123" } }
-  ```
-- 更新：
-  ```json
-  { "tool": "update", "params": { "id": "123", "content": "更新后的文本" } }
-  ```
-- 置顶消息：
-  ```json
-  { "tool": "pin", "params": { "id": "123", "pinned": true } }
-  ```
-  取消置顶：
-  ```json
-  { "tool": "pin", "params": { "id": "123", "pinned": false } }
-  ```
-- 系统设置：
-  ```json
-  { "tool": "settings", "params": { "allowRegistration": true } }
-  ```
-- 状态与日历：
-  ```json
-  { "tool": "status", "params": {} }
-  { "tool": "calendar", "params": {} }
-  ```
-- 配置：
-  ```json
-  { "tool": "config", "params": {} }
-  ```
-- 登录（会话认证，成功后内部保存 `set-cookie`）：
-  ```json
-  { "tool": "login", "params": { "username": "admin", "password": "admin" } }
-  ```
-- 令牌（使用会话或 Token 调用）：
-  ```json
-  { "tool": "token", "params": {} }
-  ```
-- RSS：
-  ```json
-  { "tool": "rss", "params": {} }
-  ```
-
-#### 认证与环境变量
-- Token 认证：在 MCP 进程环境中设置 `NOTE_TOKEN`，或在 HTTP 调试请求头中附带 `Authorization`
-- 会话认证：先调用 `login` 获取服务端 `set-cookie`，内部自动携带会话调用需要认证的工具
-- 后端地址：`NOTE_HOST`，容器默认 `http://localhost:1314`（同域接口位于 `/api`）
-
-## 常见问题与排查
-- `Invalid content type, expected text/event-stream`：反向代理未正确转发 `/mcp/sse` 或开启缓冲。确保保留 `Content-Type: text/event-stream`，关闭 `proxy_buffering`。
-- `EADDRINUSE :::1315`：容器内已有 MCP 监听 `1315`。使用 `docker exec` 启动第二实例时设置 `NOTE_HTTP_PORT=0`，仅进行 `stdio` 握手。
-- 工具名校验警告（中文名）：优先使用英文名称 `search/publish/delete/update/message/page/pin/settings/status/calendar/config/login/token/rss`。
-- 入参校验错误：
-  - `search` 支持 `keyword` 或 `query`
-  - `page` 支持 `page/page_number` 与 `pageSize/page_size`
-  - `publish` 支持 `type: text|markdown|image|multipart`，图片参数兼容 `image/images/imageURL`
-  - 客户端显示“乱码”或原始 JSON：工具默认返回 JSON 文本。请在提示词中要求模型“解析工具返回的 JSON，并用中文列出 id、用户名、时间与内容摘要”，避免直接原样输出。
-
-## 功能概述
-- 支持工具：搜索/发布/删除/更新/消息/页面/置顶/设置/状态/日历/配置/登录/令牌/RSS。
-- 认证：API Token 或 用户名/密码（会话 Cookie）。
-- 传输：标准 Stdio（大多数 MCP 客户端通用）。
-
-## 本地运行
-1. 进入 `mcp` 目录并安装依赖：
-   ```bash
-   cd mcp
-   npm install
-   ```
-2. 使用 Token 认证启动：
-   ```bash
-   NOTE_HOST=https://your-domain.example \
-   NOTE_TOKEN=你的_token \
-   npm start
-   ```
-3. 使用用户名密码登录（会话认证）：
-   ```bash
-   NOTE_HOST=https://your-domain.example npm start
-   # 在客户端调用“登录”工具：
-   # { "username": "admin", "password": "your_password" }
-   ```
-
-## Docker运行
-1. 构建镜像：
-   ```bash
-   cd mcp
-   docker build -t ech0-noise-mcp .
-   ```
-2. 以 Token 认证运行：
-   ```bash
-   docker run --rm -e NOTE_HOST=https://your-domain.example -e NOTE_TOKEN=你的_token ech0-noise-mcp
-   ```
-3. 以用户名密码运行：
-   ```bash
-   docker run --rm -e NOTE_HOST=https://your-domain.example ech0-noise-mcp
-   # 在客户端调用“登录”工具设置 Cookie 会话
-   ```
-
-### docker-compose 一键启动（后端 + 前端静态 + MCP 同容器）
-仓库根目录已有 `docker-compose.yml`。执行：
-```bash
-docker-compose up -d
-```
-- 服务 `my-app`：后端 Go + 前端静态，并内置 MCP 服务（Node）。
-- 端口：应用 `1314`、MCP HTTP/SSE `1315`（皆映射至宿主）。
-
-查看工具列表与流式调用：
-```bash
-curl http://localhost:1315/mcp/tools
-curl -N -X POST http://localhost:1315/mcp/tool/搜索 -H 'Content-Type: application/json' -d '{"keyword":"#CDN"}'
-```
-
-## 镜像构建（多阶段）
-- 带 MCP（同时提供 HTTP/SSE 与 Stdio）：
-  ```bash
-  docker buildx build \
-    --platform linux/amd64,linux/arm64 \
-    --target final-mcp \
-    -t noise233/echo-noise:latest \
-    --push --no-cache .
-  ```
-- 不带 MCP（仅后端与静态前端）：
-  ```bash
-  docker buildx build \
-    --platform linux/amd64,linux/arm64 \
-    --target final \
-    -t noise233/echo-noise:latest \
-    --push --no-cache .
-  ```
-- 如需单架构或自定义标签，可调整示例：
-  ```bash
-  docker buildx build --platform linux/amd64 --target final -t noise233/echo-noise:last --push --no-cache .
-  ```
-
-## HTTP 与 SSE
-- 开启 HTTP 与 SSE：设置 `NOTE_HTTP_PORT` 启动服务端口
-  ```bash
-  NOTE_HOST=https://your-domain.example \
-  NOTE_TOKEN=你的_token \
-  NOTE_HTTP_PORT=1315 \
-  npm start
-  ```
-- 列出工具：`GET /mcp/tools`
-  ```bash
-  curl http://localhost:1315/mcp/tools
-  ```
-- 流式调用工具：`POST /mcp/tool/{name}` 返回换行分隔 JSON
-  ```bash
-  curl -N -X POST http://localhost:1315/mcp/tool/搜索 \
-    -H 'Content-Type: application/json' \
-    -d '{"keyword":"#CDN","page":1,"pageSize":10}'
-  ```
-- SSE 订阅：`GET /mcp/sse`，推送 `tool_start`、`tool_end`
-  ```bash
-  curl -N http://localhost:1315/mcp/sse
-  ```
-
-#### 远程 URL 配置示例（不在本地运行进程）
-- 一些客户端支持以 URL 订阅远程 SSE（无需本地启动 MCP 进程）。请使用纯净 URL 字符串，不要添加反引号或多余空格。
-  ```json
-  {
-    "mcpServers": {
-      "ech0-noise-mcp-http": {
-        "url": "http://<你的服务器IP>:1315/mcp/sse"
-      }
-    }
-  }
-  ```
-- 服务器端要求：容器以 `final-mcp` 目标运行，并设置 `NOTE_HTTP_PORT=1315`、映射端口 `-p 1315:1315`、`NOTE_HOST=http://localhost:1314`。
-- 工具调用需通过 HTTP 端点：`POST http://<你的服务器IP>:1315/mcp/tool/{name}`，请求体为 JSON；SSE 用于事件订阅与握手展示。
-
-#### SSE 工具执行（仅使用 SSE 触发并流式返回）
-- 新增端点：`GET /mcp/sse/tool/{name}?input=<urlencoded-json>`
-- 行为：立即触发工具执行，并以事件流返回：`tool_start`、`tool_data`、`tool_end`
-- 示例：搜索
-  ```bash
-  curl -N "http://<服务器IP>:1315/mcp/sse/tool/search?input=%7B%22query%22:%22welcome%22,%22page%22:1,%22pageSize%22:10%7D"
-  ```
-- 示例：发布（容器端需已设置 `NOTE_TOKEN` 或先登录）
-  ```bash
-  curl -N "http://<服务器IP>:1315/mcp/sse/tool/publish?input=%7B%22type%22:%22text%22,%22content%22:%22测试内容%22%7D"
-  ```
-- 提示：`input` 为 URL 编码的 JSON；不建议在 URL 中使用反引号或空格。
-
-## 本地连接远程MCP
-
-- 方式 A：SSE URL 订阅（不运行本地进程）
-  - 适合仅订阅事件与握手展示，不进行完整 MCP 调用
-  - 配置：`type: sse`，`url: http://<服务器IP>:1315/mcp/sse`
-  - 注意：URL 必须是纯字符串，不要包含反引号或多余空格
-  - 排错：
-    - 确认服务器容器已设置 `NOTE_HTTP_PORT=1315` 并映射 `-p 1315:1315`
-    - 服务器内执行 `curl -N http://localhost:1315/mcp/sse` 应返回事件流
-    - 外网执行 `curl -N http://<服务器IP>:1315/mcp/sse` 验证链路；若失败检查防火墙/安全组开放 `1315/tcp`
-    - 经由反向代理时需透传 `text/event-stream` 与 `Connection: keep-alive`
-
-- 方式 B：Stdio 通过 docker exec 在容器内运行（本地/远程取决于 Docker 上下文）
-  - 适合本地不安装 Node，通过容器完成握手与交互
-  - 示例：
-    ```json
-    {
-      "mcpServers": {
-        "ech0-noise-mcp-stdio": {
-          "command": "docker",
-          "args": [
-            "exec",
-            "-i",
-            "-e", "NOTE_HOST=http://<服务器IP>:1314",
-            "-e", "NOTE_HTTP_PORT=0",
-            "-e", "NOTE_TOKEN=<你的Token>",
-            "Ech0-Noise",
-            "node",
-            "/app/mcp/server.bundle.mjs"
-          ]
-        }
-      }
-    }
-    ```
-  - 说明：
-    - `NOTE_HTTP_PORT=0` 仅握手，不在容器内监听 HTTP；工具调用可走 HTTP 端点
-    - `docker exec` 默认连接“本机 Docker 守护进程”。要操作云服务器上的容器，需先切换到“远程 Docker 上下文”。
-  - 远程 Docker 上下文配置：
-    ```bash
-    # 创建远程上下文（通过 SSH）
-    docker context create ech0-remote --docker "host=ssh://<user>@<服务器IP>"
-    # 切换到远程上下文
-    docker context use ech0-remote
-    # 验证当前指向远程：应列出云服务器上的容器
-    docker ps
-    # 现在再执行 docker exec 即针对远程容器
-    docker exec -it Ech0-Noise node /app/mcp/server.bundle.mjs
-    ```
-  - 常见错误：`Error response from daemon: No such container: Ech0-Noise`
-    - 原因：当前 Docker 指向本机而非远程；或容器名不一致
-    - 处理：切换到远程上下文，或确认容器名与 `docker-compose.yml` 的 `container_name: Ech0-Noise` 保持一致
-
-- 方式 C：Stdio 在本地运行 Node，连接远程后端
-  - 适合本地已安装 Node，直接运行仓库内 `mcp/server.js`
-  - 推荐（跨平台）写法：使用环境变量字段而不是 `env` 命令
-    ```json
-    {
-      "mcpServers": {
-        "ech0-noise-local-stdio": {
-          "command": "node",
-          "args": ["/absolute/path/to/mcp/server.js"],
-          "env": {
-            "NOTE_HOST": "http://<服务器IP>:1314",
-            "NOTE_HTTP_PORT": "0",
-            "NOTE_TOKEN": "<你的Token>"
-          }
-        }
-      }
-    }
-    ```
-  - 可选（类 Unix）写法：使用 `env` 作为命令设置环境再运行 `node`
-    ```json
-    {
-      "mcpServers": {
-        "ech0-noise-local-stdio-env": {
-          "command": "env",
-          "args": [
-            "NOTE_HOST=http://<服务器IP>:1314",
-            "NOTE_HTTP_PORT=0",
-            "NOTE_TOKEN=<你的Token>",
-            "node",
-            "/absolute/path/to/mcp/server.js"
-          ]
-        }
-      }
-    }
-    ```
-  - 提示：
-    - 不要在 URL 中添加反引号或空格
-    - 本地运行需提前 `cd mcp && npm install`
-    - 为避免端口冲突，保持 `NOTE_HTTP_PORT=0`（仅 stdio 握手）；如需开启 HTTP/SSE，请设置为非 0 的端口并确认未被占用
-
-  - 路径来源与依赖
-    - `mcp/server.js` 位于本仓库根目录的 `mcp` 子目录中；请将示例中的绝对路径替换为你本机的实际克隆路径
-      - macOS 示例：`/Library/Github/Ech0-Noise/mcp/server.js`
-      - Windows 示例：`C:\Users\<你>\Github\Ech0-Noise\mcp\server.js`
-      - Linux 示例：`/home/<你>/Github/Ech0-Noise/mcp/server.js`
-    - 运行前在 `mcp` 目录安装依赖：`npm install`
-    - Node.js 版本建议 `>= 20`（启用 ESM 与内置 `fetch`），否则可能出现模块或网络调用问题
-    - 环境变量必须是纯字符串（不要加反引号或空格）：
-      - 正确：`"NOTE_HOST": "http://154.219.122.129:1314"`
-      - 错误：`"NOTE_HOST": " \`http://154.219.122.129:1314\` "`
-    - 如果你不希望在本地安装 Node，可改用“方式 B：docker exec 远程容器”，命令中路径为容器内的 `/app/mcp/server.bundle.mjs`
-
-- 方式 D：SSH + Stdio（无需本地 Docker）
-  - 适合不在本地运行 Docker，通过 SSH 在远端启动 MCP 进程，STDIN/STDOUT 直接与本地客户端握手。
-  - 远端要求：
-    - 安装 Node.js `>= 20`
-    - 已存在 MCP 文件：容器内单文件 `/app/mcp/server.bundle.mjs`（`final-mcp` 目标）或源码 `mcp/server.js`
-    - 开放 SSH，建议使用非 `root` 用户（例如 `ubuntu`、`ec2-user`、`debian` 等）
-  - 生成与安装 SSH 密钥（本地 macOS/Linux）：
-    ```bash
-    # 生成 Ed25519 密钥（推荐设置强口令；如不需要可回车留空）
-    ssh-keygen -t ed25519 -a 100 -C "ech0" -f ~/.ssh/ech0_ed25519
-    
-    # 加载到本地代理（可选）
-    ssh-add ~/.ssh/ech0_ed25519
-    
-    # 将公钥安装到远端用户（示例：ubuntu@<服务器IP>）
-    ssh ubuntu@<服务器IP> 'mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat >> ~/.ssh/authorized_keys' < ~/.ssh/ech0_ed25519.pub
-    # 在远端设置权限
-    # （如无法登录远端，可通过云平台控制台或已有账户手动写入 authorized_keys 并设置权限）
-    chmod 600 ~/.ssh/authorized_keys
-    
-    # 测试 SSH 连通性
-    ssh -i ~/.ssh/ech0_ed25519 ubuntu@<服务器IP> uname -a
-    ```
-  - MCP 配置示例（SSH + Stdio，纯字符串环境变量）：
-    ```json
-    {
-      "mcpServers": {
-        "ech0-mcp-stdio": {
-          "command": "ssh",
-          "args": [
-            "-o", "IdentitiesOnly=yes",
-            "-i", "/Users/<你>/.ssh/ech0_ed25519",
-            "ubuntu@<服务器IP>",
-            "bash", "-lc",
-            "NOTE_HOST=http://<服务器IP>:1314 NOTE_HTTP_PORT=0 NOTE_TOKEN=<你的Token> node /app/mcp/server.bundle.mjs"
-          ]
-        }
-      }
-    }
-    ```
-    - 如远端 SSH 非 `22` 端口，加入 `-p <端口>` 参数。
-    - 不要在 `NOTE_HOST` 中加入反引号或多余空格。
-    - 若容器未内置 `server.bundle.mjs`，可改为路径 `node /absolute/path/to/mcp/server.js`（确保远端已安装依赖）。
-  - 安全建议：
-    - 为私钥设置口令（passphrase），避免泄露风险。
-    - 尽量使用短期 Token；或在客户端先调用 `login` 工具获取会话后再进行敏感操作。
-  - 常见排错：
-    - `Permission denied (publickey,...)`：确认公钥已写入正确用户的 `~/.ssh/authorized_keys`，并设置权限 `700 ~/.ssh`、`600 ~/.ssh/authorized_keys`；确认使用的用户与 `-i` 指定的密钥匹配；很多云主机默认禁用 `root` 密钥登录。
-    - 仅密码可用：移除 `BatchMode=yes` 才会提示密码，但不少 MCP 客户端不支持交互密码；建议改用密钥。
-    - 环境变量格式：`NOTE_HOST` 必须是纯 URL 字符串；避免反引号与前后空格。
-    - 远端 Node 版本过低：升级到 `>= 20` 以确保 ESM 与内置 `fetch` 可用。
-
-#### 前端联动
-- 置顶联动：前端列表会将置顶项排在顶部，取消置顶后按时间顺序排列（逻辑见 `web/components/index/MessageList.vue:260-264`）。
-- 更新联动：修改内容后列表即时读取更新，无需重建；详情页 `消息` 工具可用于验证。
-- 设置联动：通过 `settings` 更新后端配置，`配置` 工具可直接获取最新前端配置用于前端渲染。
-
-## 本地开发同时启动 MCP（可选）
-- 启动后端（Go）：
-  ```bash
-  go run ./cmd/server/main.go
-  ```
-- 启动前端（Nuxt 开发）：
-  ```bash
-  cd web && npm install && npm run dev
-  ```
-> 提示：容器集成版本已自动启动 MCP；本地开发时如需单独运行 MCP，可执行：
-```bash
-cd mcp && npm install && NOTE_HOST=http://localhost:1314 NOTE_HTTP_PORT=1315 npm start
-```
-
-## 桌面应用内自带 MCP（示例）
-在 Electron 主进程中以子进程方式启动 MCP（避免用户二次启动）：
-```js
-// main.js（Electron）
-import { spawn } from 'node:child_process'
-const mcp = spawn('node', ['server.js'], { cwd: path.join(app.getAppPath(), 'mcp'), env: { NOTE_HOST: 'http://localhost:1314', NOTE_HTTP_PORT: '1315' } })
-mcp.stdout.on('data', (d) => console.log('[mcp]', d.toString()))
-mcp.stderr.on('data', (d) => console.error('[mcp]', d.toString()))
-app.on('before-quit', () => { try { mcp.kill() } catch {} })
-```
-客户端可通过 Stdio（子进程）、或 `http://localhost:1315/mcp/tool/{name}` 流式调用 MCP 工具。
-
-## MCP 客户端接入示例（Node）
-使用 @modelcontextprotocol/sdk 连接并调用工具：
-```js
-import { Client } from '@modelcontextprotocol/sdk/client/index.js'
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
-
-const transport = new StdioClientTransport({
-  command: 'node',
-  args: ['mcp/server.js'],
-  env: { NOTE_HOST: 'https://your-domain.example', NOTE_TOKEN: '你的_token' }
-})
-
-const client = new Client()
-await client.connect(transport)
-
-// 搜索
-const res = await client.callTool({
-  name: '搜索',
-  input: { keyword: '#CDN', page: 1, pageSize: 10 }
-})
-console.log(res)
-
-// 发布
-await client.callTool({ name: '发布', input: { content: '测试内容', private: false } })
-
-// 删除
-await client.callTool({ name: '删除', input: { id: '123' } })
-```
-
-## 常用工具与入参
-- 搜索/`search`：`{ keyword, page?, pageSize? }`（支持 `#标签`）
-- 发布/`publish`：`{ content, private?, imageURL? }`
-- 删除/`delete`：`{ id }`
-- 更新/`update`：`{ id, content }`
-- 消息/`消息`：`{ id }`
-- 页面/`页面`：`{ page?, pageSize? }`
-- 状态/`状态`：无入参
-- 日历/`日历`：无入参
-- 配置/`配置`：无入参
-- 登录/`登录`：`{ username, password }`（设置 Cookie 会话）
-- 令牌/`令牌`：无入参（基于会话生成新 Token）
-- RSS/`RSS`：无入参（返回全文 XML）
-
-### 与现有 API 的对应关系
-- 搜索：`/api/messages/search` 或 `/api/messages/tags/:tag`
-- 发布：`/api/messages`（会话）、`/api/token/messages`（Token）
-- 删除/更新：`/api/messages/:id`
-- 消息：`/api/messages/:id`
-- 页面：`/api/messages/page`
-- 状态：`/api/status`
-- 日历：`/api/messages/calendar`
-- 配置：`/api/frontend/config`
-- 登录：`/api/login`（读取 `Set-Cookie`）
-- 令牌：`/api/user/token/regenerate`
-- RSS：`/rss`
-
-### 接入其它客户端
-- 绝大多数 MCP 客户端支持以 Stdio 方式接入：将命令设置为 `node mcp/server.js`，并传入环境变量 `NOTE_HOST`、`NOTE_TOKEN` 或在运行后调用“登录”。
-- 工具名同时提供中文与英文，便于自然语言调用。
-
-## 客户端配置示例
-
-#### Claude Desktop
 
 ```json
-{
-  "mcpServers": {
-    "ech0-noise-mcp-stdio": {
-      "command": "docker",
-      "args": [
-        "exec",
-        "-i",
-        "-e", "NOTE_HOST=http://localhost:1314",
-        "-e", "NOTE_HTTP_PORT=0",
-        "-e", "NOTE_TOKEN=你的后台TOKEN",
-        "Ech0-Noise",
-        "node",
-        "/app/mcp/server.bundle.mjs"
-      ]
-    },
-    "ech0-noise-mcp-sse-monitor": {
-      "type": "sse",
-      "url": "http://localhost:1315/mcp/sse"
-    }
-  }
-}
+{"id":"明确的消息ID","content":"修订正文","visibility":"private"}
 ```
 
-#### Trae IDE
+删除先搜索、展示候选项并确定具体 ID，再调用 `delete`：
 
 ```json
-{
-  "mcpServers": {
-    "ech0-noise-mcp-stdio": {
-      "command": "docker",
-      "args": [
-        "exec",
-        "-i",
-        "-e", "NOTE_HOST=http://localhost:1314",
-        "-e", "NOTE_HTTP_PORT=0",
-        "-e", "NOTE_TOKEN=你的后台TOKEN",
-        "Ech0-Noise",
-        "node",
-        "/app/mcp/server.bundle.mjs"
-      ]
-    },
-    "ech0-noise-mcp-sse-monitor": {
-      "type": "sse",
-      "url": "http://localhost:1315/mcp/sse"
-    }
-  }
-}
+{"id":"明确的消息ID"}
 ```
 
-#### Cherry Studio
+`delete` 不接受 `keyword` 或 `content`，不会批量扫描、清空内容、硬删除或在失败后尝试其他路由。后端非成功 HTTP 状态、`code` 非 1、无有效 JSON 等均作为错误；不会虚构删除成功。需要恢复时使用主站回收站。
 
-```json
-{
-  "mcpServers": {
-    "ech0-noise-mcp-sse": {
-      "type": "sse",
-      "url": "http://localhost:1315/mcp/sse"
-    }
-  }
-}
+## 从旧版迁移
+
+- `final-mcp` 和 `edge-mcp` / `stable-mcp` 仍包含 MCP；`final` 可排除该模块。无需独立镜像。原 `/app/mcp/server.bundle.mjs` 入口改为 `/app/mcp/server.js`；客户端采用上述 docker exec 或本地 Node 配置。
+- `NOTE_HTTP_PORT` 和 `NOTE_SESSION` 不再支持；设置这些旧变量会阻止启动，请删除后按上面的新配置迁移。默认无需设置端口变量。
+- 旧 `/mcp/tools`、`/mcp/tool/:name`、`/mcp/sse`、`/mcp/sse/tool/:name` 自定义 HTTP/SSE 接口已移除，返回 410。它们与标准 Streamable HTTP **不兼容**，不能只更换 URL 后继续使用旧事件解析器。需要支持 Streamable HTTP 的 MCP 客户端，或切换 stdio。
+- 中文工具名改为表中的英文名；`token` / `令牌` 轮换工具移除。`login` 不再执行网页登录或返回 Cookie。普通 token 配置必须改为后台创建的专用 AI 凭据。
+- 任何超时或错误都不触发隐式写操作重试。写请求超时后状态可能未知，应先查询确认，避免重复发布或重复操作。
+
+## 开发与验证
+
+模块划分：`src/client.js` 负责固定上游、身份验证与错误处理；`src/tools.js` 定义 schema 和工具注册；`src/transports.js` 提供 stdio 与独立的 HTTP 请求生命周期；`server.js` 是入口。
+
+安装锁文件依赖后，使用 Node 自带测试运行器：
+
+```sh
+cd mcp
+npm test
 ```
 
-#### Cursor
-
-```json
-{
-  "mcpServers": {
-    "ech0-noise-mcp-stdio": {
-      "command": "docker",
-      "args": [
-        "exec",
-        "-i",
-        "-e", "NOTE_HOST=http://localhost:1314",
-        "-e", "NOTE_HTTP_PORT=0",
-        "-e", "NOTE_TOKEN=你的后台TOKEN",
-        "Ech0-Noise",
-        "node",
-        "/app/mcp/server.bundle.mjs"
-      ]
-    },
-    "ech0-noise-mcp-sse-monitor": {
-      "type": "sse",
-      "url": "http://localhost:1315/mcp/sse"
-    }
-  }
-}
-```
-
-提示：
-
-- `stdio` 用于握手与完整交互；为避免容器端口冲突，第二实例设置 `NOTE_HTTP_PORT=0`。
-- `sse` 用于事件订阅与握手展示，不承担完整 MCP 交互。需要调用工具时使用 HTTP 或 `stdio`。
-# Visibility
-
-`publish` and `update` accept `visibility: public | users | contacts | private`. The MCP server also sends the legacy `private` field for compatibility. If `visibility` is omitted, `private=true` maps to `private`; otherwise the legacy MCP default remains `public`.
-
-Authenticated read tools use `NOTE_TOKEN` or `NOTE_SESSION`, including page, search, tag, message, status, calendar, and config reads.
+`tests/` 使用本地 mock API 与官方 SDK 客户端执行真实 stdio / Streamable HTTP 调用，覆盖四种可见性、旧 private 默认、读请求鉴权、分页与查询别名、按 ID 删除、权限与业务错误、来源校验、客户端隔离和凭据保护。不会访问真实笔记或登录账号。选择 `final` 构建不依赖 MCP 安装；选择 `final-mcp` 时按锁文件打包模块，但运行健康与 Go 主服务隔离。

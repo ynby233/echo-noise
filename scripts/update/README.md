@@ -58,7 +58,7 @@ docker run -d --name echo-noise --network host --restart=no \
   --log-driver json-file --log-opt max-size=100m --log-opt max-file=5 "$UPDATE_IMAGE"
 ```
 
-Compose 的管理员文件是真源。`compose.example.yml` 使用单服务预构建 **final-mcp**，包含 MCP，不再启动第二个 MCP；根 `docker-compose.yml` 保留作源码开发。固定项目名、service 和 image 文件，只有指定服务引用 `${UPDATE_IMAGE}`；不支持源码 build 或多副本。首次与日后人工 up 都使用同一组参数：
+Compose 的管理员文件是真源。`compose.example.yml` 使用单服务预构建 **final-mcp**；`edge-mcp` / `stable-mcp` 渠道默认包含 MCP 模块，无需另起镜像。MCP 代码与主服务分离、作为独立子进程按需运行，可通过 `MCP_ENABLED=false` 停用；其失败不影响 Go 主服务及健康检查。不需要打包 MCP 时可从源码选择 `final` 目标。根 `docker-compose.yml` 保留作源码开发。固定项目名、service 和 image 文件，只有指定服务引用 `${UPDATE_IMAGE}`；不支持源码 build 或多副本。首次与日后人工 up 都使用同一组参数：
 
 ```sh
 docker compose --project-name echo-noise --env-file /etc/echo-noise-update/image.env \

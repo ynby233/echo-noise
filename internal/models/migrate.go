@@ -33,6 +33,9 @@ func MigrateDB(db *gorm.DB) error {
 	if err != nil {
 		return err
 	}
+	if err := db.AutoMigrate(&AICredential{}); err != nil {
+		return fmt.Errorf("migrate AI credentials: %w", err)
+	}
 	if dbType == "sqlite" {
 		if err := enforceSQLiteRegistrationCandidateNotNull(db); err != nil {
 			return err

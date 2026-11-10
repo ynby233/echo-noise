@@ -52,6 +52,11 @@ func TestLoginAuditRecordsOrdinaryUsersAndDelegatedAdministrators(t *testing.T) 
 	if len(audits) != 3 {
 		t.Fatalf("expected ordinary-user and delegated-administrator audits, got %d", len(audits))
 	}
+	for _, audit := range audits {
+		if audit.AuthVia != "session" {
+			t.Fatalf("expected internal login/logout to default to session, got %#v", audit)
+		}
+	}
 	for _, audit := range audits[:2] {
 		if audit.UserID != user.ID || audit.Username != user.Username {
 			t.Fatalf("unexpected audited user: %#v", audit)
@@ -98,6 +103,9 @@ func TestGetLoginAuditsFiltersByUsernameAndIP(t *testing.T) {
 	filtered := decodeLoginAuditsResponse(t, performLoginAuditListRequest(r, "/security/login-audits?username=alice&ip=198.51.100.7"))
 	if len(filtered) != 1 || filtered[0].Username != user.Username || filtered[0].IP != "198.51.100.7" {
 		t.Fatalf("expected filtered alice audit, got %#v", filtered)
+	}
+	if filtered[0].AuthVia != "unknown" {
+		t.Fatalf("expected historical source to remain unknown, got %q", filtered[0].AuthVia)
 	}
 
 	all := decodeLoginAuditsResponse(t, performLoginAuditListRequest(r, "/security/login-audits"))

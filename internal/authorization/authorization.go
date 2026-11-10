@@ -403,7 +403,7 @@ func (a *Authorizer) writeAudit(db *gorm.DB, record models.AdminAuditLog) error 
 		record.ActorUserID = 0
 		record.ActorUsername = "系统自动任务"
 		record.ActorIsPrimary = false
-		record.AuthVia = "system"
+		record.AuthVia = "unknown"
 	} else {
 		var actor models.User
 		if err := db.Select("id,username,is_admin").First(&actor, record.ActorUserID).Error; err != nil {
@@ -417,6 +417,7 @@ func (a *Authorizer) writeAudit(db *gorm.DB, record models.AdminAuditLog) error 
 		record.ActorUsername = actor.Username
 		record.ActorIsPrimary = actor.ID == models.PrimaryAdminUserID
 	}
+	record.AuthVia = models.NormalizeSecurityLogAuthVia(record.AuthVia)
 	record.Summary = strings.TrimSpace(record.Summary)
 	if record.Result == "" {
 		record.Result = "success"

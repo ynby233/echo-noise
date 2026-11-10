@@ -78,40 +78,25 @@ func SessionAuthMiddleware() gin.HandlerFunc {
 	}
 }
 
+// legacyBearerHeader preserves raw ordinary tokens only on the two legacy
+// middleware paths. AI credentials and public identity reads require Bearer.
+func legacyBearerHeader(header string) string {
+	parts := strings.Fields(header)
+	if len(parts) == 1 && !strings.HasPrefix(parts[0], "noise_ai_") {
+		return "Bearer " + parts[0]
+	}
+	return header
+}
+
 func authenticateAdminBearerToken(ctx *gin.Context) bool {
-	auth := ctx.GetHeader("Authorization")
-	if strings.TrimSpace(auth) == "" {
-		return false
-	}
-	var token string
-	if strings.HasPrefix(auth, "Bearer ") {
-		token = strings.TrimPrefix(auth, "Bearer ")
-	} else {
-		token = auth
-	}
-	token = strings.TrimSpace(token)
-	if token == "" {
-		return false
-	}
-	db, err := database.GetDB()
-	if err != nil {
-		return false
-	}
-	var user models.User
-	if err := db.Where("token = ?", token).First(&user).Error; err != nil || user.ID == 0 || user.Token == "" || !user.IsAdmin {
-		return false
-	}
-	issuedAt := int64(0)
-	if user.LoginIssuedAt != nil {
-		issuedAt = user.LoginIssuedAt.Unix()
-	}
-	if services.IsUserLoginExpired(&user, issuedAt, time.Now()) {
+	user, _, via, err := services.ResolveBearerIdentity(legacyBearerHeader(ctx.GetHeader("Authorization")), false)
+	if err != nil || user == nil || via != "token" || !user.IsAdmin {
 		return false
 	}
 	ctx.Set("user_id", user.ID)
 	ctx.Set("username", user.Username)
-	ctx.Set("is_admin", true)
-	ctx.Set("auth_via", "token")
+	ctx.Set("is_admin", user.IsAdmin)
+	ctx.Set("auth_via", via)
 	return true
 }
 
@@ -271,57 +256,19 @@ func toUint(v any) (uint, bool) {
 
 func TokenAuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		auth := c.GetHeader("Authorization")
-		if auth == "" {
-			c.JSON(http.StatusUnauthorized, dto.Fail[any]("未提供认证信息"))
-			c.Abort()
-			return
-		}
-
-		// 提取 token
-		var token string
-		if strings.HasPrefix(auth, "Bearer ") {
-			token = strings.TrimPrefix(auth, "Bearer ")
-		} else {
-			token = auth
-		}
-
-		db, err := database.GetDB()
-		if err != nil {
-			c.JSON(http.StatusUnauthorized, dto.Fail[any]("系统错误"))
-			c.Abort()
-			return
-		}
-
-		// 查询用户
-		var user models.User
-		if err := db.Where("token = ?", token).First(&user).Error; err != nil {
-			c.JSON(http.StatusUnauthorized, dto.Fail[any]("无效的token"))
-			c.Abort()
-			return
-		}
-
-		// 检查 token 是否为空
-		if user.Token == "" {
-			c.JSON(http.StatusUnauthorized, dto.Fail[any]("token已失效"))
-			c.Abort()
-			return
-		}
-		issuedAt := int64(0)
-		if user.LoginIssuedAt != nil {
-			issuedAt = user.LoginIssuedAt.Unix()
-		}
-		if services.IsUserLoginExpired(&user, issuedAt, time.Now()) {
+		user, credential, via, err := services.ResolveBearerIdentity(legacyBearerHeader(c.GetHeader("Authorization")), false)
+		if err != nil || user == nil {
 			c.JSON(http.StatusUnauthorized, dto.Fail[any]("未登录或登录已过期"))
 			c.Abort()
 			return
 		}
-
-		// 设置用户信息到上下文
 		c.Set("user_id", user.ID)
 		c.Set("username", user.Username)
 		c.Set("is_admin", user.IsAdmin)
-		c.Set("auth_via", "token")
+		c.Set("auth_via", via)
+		if credential != nil {
+			c.Set("credential_id", credential.ID)
+		}
 		c.Next()
 	}
 }

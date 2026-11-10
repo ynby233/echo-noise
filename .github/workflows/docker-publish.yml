@@ -1,4 +1,4 @@
-name: Build MCP Docker Image
+name: Build Application Docker Image
 run-name: ${{ github.event_name == 'release' && format('stable {0}', github.event.release.tag_name) || (github.event_name == 'workflow_dispatch' && inputs.channel == 'stable' && format('stable {0}', inputs.release_tag) || format('edge {0}', github.sha)) }}
 
 on:
@@ -37,11 +37,12 @@ concurrency:
 
 jobs:
   build-mcp-image:
-    name: Build and publish final-mcp image
+    name: Build and publish application with optional MCP module
     if: github.event_name != 'release' || (!github.event.release.draft && !github.event.release.prerelease)
     runs-on: ubuntu-latest
     env:
       IMAGE: ghcr.io/ynby233/echo-noise
+      # Both channels include the optional MCP module; application health is independent.
       EDGE_TAG: edge-mcp
       STABLE_TAG: stable-mcp
 

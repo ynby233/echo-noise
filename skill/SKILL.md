@@ -7,8 +7,8 @@ description: "说说笔记单一综合 skill。默认走 HTTP API，MCP 仅在�
 
 本 skill 仅保留一份，统一封装“说说笔记”的两种调用模式：
 
-- `API 模式`：默认模式，项目默认部署通常不启用 MCP 时使用
-- `MCP 模式`：只有在环境明确已启用 MCP 时才使用
+- `API 模式`：默认模式，直接调用现有 HTTP API
+- `MCP 模式`：客户端已配置 stdio 或标准 Streamable HTTP，并通过 AI 身份验证后使用
 
 核心要求：
 
@@ -42,9 +42,10 @@ description: "说说笔记单一综合 skill。默认走 HTTP API，MCP 仅在�
 
 - 开始执行前先读取 `skill/config.json`
 - 将 `baseUrl` 作为 API 基础地址
-- 将 `mcpBaseUrl` 作为 MCP HTTP/SSE 验证地址
+- 将 `mcpBaseUrl` 作为可选 Streamable HTTP 服务根地址，连接路径为 `mcp.endpoint=/mcp`
+- `mcp.transport=stdio` 时无需 HTTP 地址或端口；`mcp.credentialEnv=NOTE_TOKEN` 指向客户端私有环境中的 AI 凭据
 - `defaultMode=api` 时默认走 API
-- 当 `autoFallbackToApi=true` 且 MCP 不可用时自动回退 API
+- `autoFallbackToApi=true` 只允许在尚未发出写请求且 MCP 传输不可用时按既有 API 配置回退；认证或权限失败不得换凭据绕过，写入失败或超时不得自动换路由重试
 
 ### 首次安装自动引导（无需用户先说固定指令）
 
@@ -58,7 +59,7 @@ description: "说说笔记单一综合 skill。默认走 HTTP API，MCP 仅在�
 
 1. 你的站点域名是什么（如 `https://example.com`）？
 2. 本次默认走 `API` 还是 `MCP`？
-3. 是否启用“`MCP 失败自动回退 API`”？
+3. 是否允许“尚未发出写请求且 MCP 传输不可用时回退 API”？
 
 引导完成后，AI 应在后续对话中默认沿用本轮确认的配置，并在必要时提醒你同步更新 `skill/config.json`。
 
@@ -66,23 +67,14 @@ description: "说说笔记单一综合 skill。默认走 HTTP API，MCP 仅在�
 
 默认决策顺序必须如下：
 
-1. 先判断是否已明确可用 MCP
-2. 若未明确启用 MCP，则直接走 API 模式
-3. 若已明确启用 MCP，再根据任务选择 MCP 模式
-4. MCP 失败时，若等价 API 可用，应回退到 API
+1. 按 `defaultMode` 与本轮要求选择调用模式；API 默认可直接使用
+2. 选择 MCP 时，确认客户端传输配置并完成标准 MCP 初始化、`tools/list`
+3. 调用 `identity`，验证后端 `GET /api/auth/identity` 的 `data.auth_via=ai_token`
+4. MCP 不可用时按上面的回退限制处理；不得以匿名读取代替身份验证
 
-以下情况视为“已明确启用 MCP”：
+`stable-mcp`、`edge-mcp` 默认在主服务同一镜像内包含模块，源码 Compose 默认使用 `final-mcp`；`final` 可排除模块。已打包时可用 `MCP_ENABLED=false` 停用。无需独立 MCP 镜像或容器。
 
-- 用户明确说明已配置 MCP 客户端
-- 环境已提供可调用的 MCP server 配置
-- 已知服务运行在 `final-mcp`、独立 `mcp` 容器，或已暴露 `/mcp/*` 端点
-- 已验证 `GET /mcp/tools` 或 `GET /mcp/sse` 可访问
-
-以下情况一律按“未启用 MCP”处理：
-
-- 普通默认部署
-- `docker-compose.yml` 使用主应用 `target: final`
-- 只有后端服务可访问，但未确认 `1315` 或 MCP 子进程
+镜像包含模块、主服务健康或端口可达都不足以证明 MCP 可用。默认 stdio 不监听 `1315`，客户端连接时启动专属进程；可选 HTTP 通过标准 `POST /mcp` 使用默认端口 `1315`。
 
 ## 双模式能力总览
 
@@ -110,22 +102,16 @@ API 模式为默认首选，直接调用后端 HTTP 接口。
 
 ### MCP 模式
 
-MCP 模式仅在确认已启用后使用，工具入口位于 `mcp/server.js`。
+MCP 工具入口为 `mcp/server.js`，仅注册稳定英文名称，中文用于描述：
 
-- `search` / `搜索`
-- `page` / `页面`
-- `message` / `消息`
-- `publish` / `发布` / `笔记` / `说说` / `说说笔记`
-- `delete` / `删除`
-- `update` / `更新`
-- `pin` / `置顶消息`
-- `settings` / `设置`
-- `status` / `状态`
-- `calendar` / `日历`
-- `config` / `配置`
-- `login` / `登录`
-- `token` / `令牌`
-- `rss` / `RSS`
+- `identity`：验证 AI 凭据身份
+- `search`、`page`、`message`：搜索、分页、详情
+- `publish`、`update`、`delete`：发布、更新、按明确 ID 移入回收站
+- `pin`、`settings`：置顶与设置，使用业务 token 路由并由后端检查权限
+- `status`、`calendar`、`config`、`rss`：状态、日历、公开配置与 RSS
+- `login`：用当前 AI 凭据续期同一账号的登录期限
+
+MCP 不提供中文工具别名或 token 轮换工具。
 
 ## 模式选择规则
 
@@ -188,12 +174,16 @@ MCP 模式仅在确认已启用后使用，工具入口位于 `mcp/server.js`。
 - `update`、`pin`、`settings` 更稳妥的方式是先登录，使用会话路由
 - `读取 token` 与 `重建 token` 必须先登录
 
+原有 API 会话与普通 token 调用保持兼容。AI 使用普通 API token 仍记为普通 API 来源，不能据此标记可信 AI；需要 AI 归因时使用专用 AI 凭据，业务 token 路由支持该凭据并由后端判定权限。
+
 ### MCP 模式认证
 
-- `search`、`page`、`message`、`status`、`calendar`、`config`、`rss` 通常无需认证
-- `publish`、`delete` 可使用 `NOTE_TOKEN` 或已登录会话
-- `update`、`pin`、`settings` 应优先先执行 `login`
-- `token` 必须先执行 `login`
+- 在后台“个人配置”创建专用 AI 凭据（管理接口 `/api/user/ai-credentials`）；创建返回的 token 只展示一次，存入 MCP 客户端私有配置，不写入共享 `skill/config.json`
+- 每次工具操作都以同一 Bearer 请求 `GET /api/auth/identity` 并验证 `data.auth_via=ai_token`；读取工具同样需要认证
+- stdio 使用该进程的 `NOTE_TOKEN`；HTTP 每次请求携带客户端自己的 AI Bearer，完全忽略服务端 `NOTE_TOKEN`，不接受 Cookie 或全局会话
+- 缺失、普通 token、过期或撤销凭据均为工具错误，不降级匿名读取
+- `login` 使用当前 AI Bearer 请求 `POST /api/ai/login`，提交同账号 `username`、`password` 后再验证身份；未撤销凭据可在账号登录期限过期时续期，不设置 Cookie、不生成普通 token、不切换用户
+- 密码不得写入提示词、日志或共享配置，可优先在后台完成账号登录
 
 ## 推荐执行流程
 
@@ -232,6 +222,8 @@ MCP 模式仅在确认已启用后使用，工具入口位于 `mcp/server.js`。
 2. 对危险操作再次确认目标 `id`
 3. 选择可用认证方式执行写操作
 4. 必要时重新读取结果确认变更已生效
+
+MCP `delete` 只接受明确 `id`：先搜索、展示候选并确定 ID，再调用后端 DELETE 移入回收站。不得按关键词批删、清空正文或硬删除；恢复使用主站回收站。工具返回 `isError: true` 或后端业务错误时不得报告成功；任何写入超时或错误都不自动重试，应先查询确认状态。
 
 ## API 参数速查
 
@@ -364,6 +356,8 @@ POST /api/user/token/regenerate
 
 ## MCP 参数速查
 
+以下为英文工具的参数，通过 MCP 客户端标准 `tools/call` 传递。搜索支持 `keyword` / `query`，搜索和分页支持 `page` / `page_number`、`pageSize` / `page_size`；页码从 1 开始，页大小 1–100，同义参数冲突时报错。`format` 可为 `text` 或 `json`。
+
 ### 搜索
 
 ```json
@@ -426,12 +420,12 @@ POST /api/user/token/regenerate
 }
 ```
 
-### 登录
+### 同账号登录期限续期（login）
 
 ```json
 {
-  "username": "admin",
-  "password": "your_password"
+  "username": "<当前 AI 凭据所属账号>",
+  "password": "<由私密输入提供，不写入提示词或共享配置>"
 }
 ```
 
@@ -466,7 +460,6 @@ skill/
 
 ```bash
 export BASE_URL="https://your-domain.com"
-export MCP_BASE_URL="https://your-domain.com"
 ```
 
 基础地址示例：
@@ -482,41 +475,62 @@ export MCP_BASE_URL="https://your-domain.com"
 
 ## MCP 使用建议
 
-MCP 不是默认前提，需要单独启用后再使用。
+MCP 契约以 `mcp/README.md` 为准。支持本地 Node 与同镜像内模块，默认 stdio；需要远程连接时显式开启标准 Streamable HTTP。
 
-### 本地 Node 运行
+### 本地 Node stdio
+
+使用 Node.js 20 或更新版本，首次安装锁定依赖：
 
 ```bash
-cd /Library/Github/Ech0-Noise/mcp
-npm install
+cd /absolute/path/to/mcp
+npm ci
 ```
 
-客户端配置思路：
+客户端配置使用绝对路径与私有 AI 凭据：
 
 ```json
 {
   "mcpServers": {
     "shuoshuo-notes": {
       "command": "node",
-      "args": ["/Library/Github/Ech0-Noise/mcp/server.js"],
+      "args": ["/absolute/path/to/mcp/server.js"],
       "env": {
         "NOTE_HOST": "https://your-domain.com",
-        "NOTE_HTTP_PORT": "0",
-        "NOTE_TOKEN": "你的后台token"
+        "NOTE_TOKEN": "<专用 AI 凭据>"
       }
     }
   }
 }
 ```
 
-### 独立容器运行
+每个账号使用各自进程和凭据。默认不监听端口，stdout 只承载 MCP 协议。
 
-若使用独立 `mcp` 服务或 `final-mcp` 目标，可通过 `/mcp/*` 端点验证。
+### 同镜像内 stdio
 
-```bash
-curl "$MCP_BASE_URL/mcp/tools"
-curl -N "$MCP_BASE_URL/mcp/sse"
+`stable-mcp`、`edge-mcp` 使用 `final-mcp` 目标，包含 Node.js 与 `/app/mcp/`；尚无正式 Release 时 stable 渠道仍不可用。源码 Compose 默认打包；设置 `APP_BUILD_TARGET=final` 后重新构建可排除，运行时 `MCP_ENABLED=false` 可停用已打包模块。
+
+```json
+{
+  "mcpServers": {
+    "shuoshuo-notes": {
+      "command": "docker",
+      "args": ["exec", "-i", "-e", "MCP_TRANSPORT=stdio", "-e", "NOTE_HOST=http://127.0.0.1:1314", "-e", "NOTE_TOKEN", "Ech0-Noise", "node", "/app/mcp/server.js"],
+      "env": { "NOTE_TOKEN": "<专用 AI 凭据>" }
+    }
+  }
+}
 ```
+
+不要加 `-t`；Docker CLI 需连接容器所在主机，每个客户端启动自己的进程。MCP 通过 API 操作主服务，启动失败、崩溃或停用不影响主服务及健康检查。
+
+### 可选 Streamable HTTP
+
+同容器设置 `MCP_ENABLED=true`、`MCP_TRANSPORT=http`、`MCP_HTTP_HOST=0.0.0.0`、`MCP_HTTP_PORT=1315`，并将端口映射到宿主机回环地址，例如 `127.0.0.1:1315:1315`。单独运行 Node 时监听默认 `127.0.0.1` 即可。
+
+客户端以 Streamable HTTP 连接 `http://127.0.0.1:1315/mcp`，每个请求携带 `Authorization: Bearer <该客户端的 AI 凭据>`。初始化、`tools/list`、`tools/call` 均为标准 JSON-RPC `POST /mcp`，成功响应为 JSON；无 MCP session ID，`GET /mcp`、`DELETE /mcp` 返回 405。HTTP 200 不代表工具成功，仍须检查 `isError` 和业务结果。
+
+HTTP 忽略服务端 `NOTE_TOKEN`，每请求隔离客户端，不共享凭据。远程访问使用 HTTPS 与可信反代，保留客户端 Authorization，设置精确的 `MCP_ALLOWED_HOSTS`（含端口）与 `MCP_ALLOWED_ORIGINS`；凭据不能放入 URL。
+
 
 ## 输出要求
 
@@ -532,12 +546,7 @@ curl -N "$MCP_BASE_URL/mcp/sse"
 
 ### 为什么不能默认走 MCP
 
-因为项目默认部署并不等于默认启用 MCP。
-
-已知依据：
-
-- `docker-compose.yml` 中主应用使用 `target: final`
-- `README.md` 明确区分了不带 MCP 的 `final` 与带 MCP 的 `final-mcp`
+镜像包含模块不代表客户端已接通。`stable-mcp`、`edge-mcp` 默认包含 MCP，源码 Compose 默认打包 `final-mcp`；`final` 可排除，`MCP_ENABLED=false` 可停用。stdio 不监听端口，必须通过客户端初始化与 `identity` 验证可用性。
 
 ### API 可用但 MCP 不可用
 
@@ -545,23 +554,23 @@ curl -N "$MCP_BASE_URL/mcp/sse"
 
 处理方式：
 
-- 继续走 API 模式
-- 不要要求用户必须先部署 MCP
+- 未发出写请求且只是传输不可用时，可按配置继续 API 模式
+- 认证或权限失败先修复 AI 凭据；写入失败或超时先查询状态，不自动回退重试
 
 ### 写操作 401 或 403
 
 处理方式：
 
-- 检查是否已登录
-- 检查 token 是否有效
-- 区分当前走的是会话路由还是 token 路由
+- API 模式检查登录会话、普通 token 与所用路由
+- MCP 模式检查专用 AI 凭据是否有效及 `auth_via=ai_token`，账号登录期限过期时仅续期同一账号
+- 不得通过换凭据、匿名读取或换路由绕过权限错误
 
 ### MCP 端口占用
 
 若遇到 `EADDRINUSE`：
 
-- 将 `NOTE_HTTP_PORT` 设为 `0`
-- 或更换未占用端口
+- 无需 HTTP 时使用默认 `MCP_TRANSPORT=stdio`，不监听端口
+- 使用 HTTP 时检查 `MCP_HTTP_PORT`（默认 `1315`）并更换未占用端口，同步客户端地址
 
 ## 配套文档
 
@@ -578,6 +587,6 @@ curl -N "$MCP_BASE_URL/mcp/sse"
 - MCP 服务入口：`mcp/server.js`
 # 可见范围约定
 
-发布或更新内容时优先显式传入 `visibility`：`public`（公开）、`users`（登录用户）、`contacts`（VoceChat 联系人）、`private`（仅自己）。同时发送兼容字段 `private = visibility !== "public"`。未指定时沿用调用面的既有默认值；MCP 和浏览器扩展默认公开，网页发布器默认登录用户可见。
+发布或更新内容时优先显式传入 `visibility`：`public`（公开）、`users`（登录用户）、`contacts`（VoceChat 联系人）、`private`（仅自己）。API 调用同时发送兼容字段 `private = visibility !== "public"`。MCP 显式 `visibility` 优先，兼容 `private: true` → `private`、`private: false` → `public`；发布未指定可见性仍默认公开，更新未传可见性字段保留原值。浏览器扩展默认公开，网页发布器默认登录用户可见。
 
 读取消息、分页、搜索、标签、日历、状态和配置时，如果已有 Token 或 Session，必须携带认证信息，不能以匿名身份读取后误判内容不存在。

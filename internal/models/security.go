@@ -55,6 +55,7 @@ type SecurityLoginAudit struct {
 	Action    string `gorm:"type:varchar(20);index;default:login" json:"action"`
 	IP        string `gorm:"type:varchar(191);index" json:"ip"`
 	UserAgent string `gorm:"type:text" json:"user_agent"`
+	AuthVia   string `gorm:"type:varchar(20);not null;default:unknown" json:"auth_via"`
 }
 
 type SecurityAccessLog struct {
@@ -69,6 +70,7 @@ type SecurityAccessLog struct {
 	UserAgent  string `gorm:"type:text" json:"user_agent"`
 	Referer    string `gorm:"type:text" json:"referer"`
 	DurationMS int64  `json:"duration_ms"`
+	AuthVia    string `gorm:"type:varchar(20);not null;default:unknown" json:"auth_via"`
 }
 
 type SecuritySiteVisitLog struct {
@@ -79,4 +81,16 @@ type SecuritySiteVisitLog struct {
 	IsAdmin   bool   `gorm:"index" json:"is_admin"`
 	UserAgent string `gorm:"type:text" json:"user_agent"`
 	Referer   string `gorm:"type:text" json:"referer"`
+	AuthVia   string `gorm:"type:varchar(20);not null;default:unknown" json:"auth_via"`
+}
+
+// NormalizeSecurityLogAuthVia preserves only verified authentication source names.
+// Missing or unsupported sources, including historical records, remain unknown.
+func NormalizeSecurityLogAuthVia(value string) string {
+	switch value {
+	case "session", "token", "ai_token":
+		return value
+	default:
+		return "unknown"
+	}
 }

@@ -16,6 +16,7 @@ import (
 	"github.com/rcy1314/echo-noise/internal/authorization"
 	"github.com/rcy1314/echo-noise/internal/database"
 	"github.com/rcy1314/echo-noise/internal/dto"
+	"github.com/rcy1314/echo-noise/internal/middleware"
 	"github.com/rcy1314/echo-noise/internal/models"
 	"github.com/rcy1314/echo-noise/internal/services"
 	"github.com/rcy1314/echo-noise/pkg"
@@ -169,53 +170,16 @@ func writeMessageMutationSuccessAudit(c *gin.Context, authorizer *authorization.
 // identity wins; a valid Bearer token is a read-only fallback and is not copied
 // into Gin context, so it cannot accidentally authorize session-protected writes.
 func currentReadUser(c *gin.Context) (models.User, bool) {
-	if value, exists := c.Get("user_id"); exists {
-		uid, ok := commentUint(value)
-		if !ok || uid == 0 {
+	user, via, ok := middleware.ResolveReadIdentity(c)
+	if ok && via == "ai_token" && c.GetString("auth_via") != "ai_token" {
+		path := c.Request.URL.Path
+		readOnly := c.Request.Method == http.MethodGet || c.Request.Method == http.MethodHead ||
+			(c.Request.Method == http.MethodPost && (path == "/api/messages/page" || path == "/api/messages/locate"))
+		if !readOnly {
 			return models.User{}, false
 		}
-		if user, err := services.GetUserByID(uid); err == nil && user != nil && user.ID != 0 {
-			return *user, true
-		}
 	}
-
-	session := sessions.Default(c)
-	if uid, ok := commentUint(session.Get("user_id")); ok && uid > 0 {
-		if user, err := services.GetUserByID(uid); err == nil && user != nil && user.ID != 0 {
-			expireAt := parseReadSessionExpireAt(session.Get("login_expire_at"))
-			issuedAt := parseReadSessionExpireAt(session.Get("login_issued_at"))
-			if services.IsUserLoginExpired(user, issuedAt, time.Now()) || (issuedAt <= 0 && expireAt > 0 && time.Now().Unix() > expireAt) {
-				_ = pkg.ClearUserSession(c)
-			} else {
-				return *user, true
-			}
-		}
-	}
-
-	parts := strings.Fields(strings.TrimSpace(c.GetHeader("Authorization")))
-	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-		return models.User{}, false
-	}
-	token := strings.TrimSpace(parts[1])
-	if token == "" || strings.EqualFold(token, "null") {
-		return models.User{}, false
-	}
-	db, err := database.GetDB()
-	if err != nil {
-		return models.User{}, false
-	}
-	var user models.User
-	if err := db.Where("token = ? AND token <> ''", token).First(&user).Error; err != nil || user.ID == 0 {
-		return models.User{}, false
-	}
-	issuedAt := int64(0)
-	if user.LoginIssuedAt != nil {
-		issuedAt = user.LoginIssuedAt.Unix()
-	}
-	if services.IsUserLoginExpired(&user, issuedAt, time.Now()) {
-		return models.User{}, false
-	}
-	return user, true
+	return user, ok
 }
 
 func parseReadSessionExpireAt(value interface{}) int64 {
@@ -306,6 +270,7 @@ func Login(c *gin.Context) {
 		c.JSON(http.StatusOK, dto.Fail[any]("Session 保存失败"))
 		return
 	}
+	c.Set("auth_via", "session")
 	_ = recordUserLoginAudit(c, user, loginAuditActionLogin)
 
 	c.JSON(http.StatusOK, dto.OK(selfUserResponse(safeUser), "登录成功"))

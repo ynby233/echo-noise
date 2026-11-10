@@ -46,7 +46,7 @@ func ExportAdminAuditLogs(c *gin.Context) {
 	if err := writer.Write([]string{"筛选条件", auditFilterSummary(filters)}); err != nil {
 		return
 	}
-	if err := writer.Write([]string{"时间", "操作人", "操作说明", "结果", "模块", "动作", "能力", "摘要", "目标类型", "目标 ID", "拒绝原因"}); err != nil {
+	if err := writer.Write([]string{"时间", "操作人", "操作说明", "结果", "模块", "动作", "能力", "摘要", "目标类型", "目标 ID", "拒绝原因", "认证来源"}); err != nil {
 		return
 	}
 	for rows.Next() {
@@ -69,6 +69,7 @@ func ExportAdminAuditLogs(c *gin.Context) {
 			log.TargetType,
 			log.TargetID,
 			presentation.ReasonDescription,
+			models.NormalizeSecurityLogAuthVia(log.AuthVia),
 		}); err != nil {
 			return
 		}

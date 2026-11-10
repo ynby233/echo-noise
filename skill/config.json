@@ -3,6 +3,12 @@
   "mcpBaseUrl": "",
   "defaultMode": "api",
   "autoFallbackToApi": true,
+  "mcp": {
+    "transport": "stdio",
+    "endpoint": "/mcp",
+    "credentialEnv": "NOTE_TOKEN",
+    "requiredAuthVia": "ai_token"
+  },
   "onboarding": {
     "enabled": true,
     "completed": false,
@@ -12,5 +18,5 @@
     "token": "",
     "preferSessionForUpdatePinSettings": true
   },
-  "notes": "首次安装建议保留空 baseUrl。AI 在首次使用时应主动引导你通过对话填写域名与模式。"
+  "notes": "首次安装保留空 baseUrl，引导填写站点与模式。auth 仅用于原有 API 模式，普通 API token 即使由 AI 使用仍记普通 API 来源；业务 token 路由支持 AI 凭据以获得 AI 归因。MCP 使用个人配置创建且 token 仅展示一次的 AI 专用凭据，存于客户端私有配置，不填入本文件。stdio 从 credentialEnv 指定的 NOTE_TOKEN 读取；HTTP 每请求携带该客户端的 AI Bearer，忽略服务端 NOTE_TOKEN。HTTP 时将 mcpBaseUrl 填为服务根地址（如 http://127.0.0.1:1315），使用 Streamable HTTP POST /mcp。每次工具操作验证 identity 的 auth_via=ai_token。autoFallbackToApi 只允许在未发出写请求且传输不可用时使用既有 API 配置，认证或权限失败不得降级，写入错误或超时不得自动重试。"
 }
