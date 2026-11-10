@@ -418,7 +418,11 @@ func DeleteUser(c *gin.Context) {
 		c.JSON(http.StatusOK, dto.Fail[string]("缺少用户ID"))
 		return
 	}
-	id, _ := strconv.Atoi(userIDStr)
+	id, err := strconv.ParseUint(userIDStr, 10, 64)
+	if err != nil || id == 0 {
+		c.JSON(http.StatusOK, dto.Fail[string](models.InvalidIDMessage))
+		return
+	}
 
 	// 不允许删除自己
 	if uint(id) == currentID {
@@ -427,7 +431,11 @@ func DeleteUser(c *gin.Context) {
 	}
 	// 至少保留一位管理员：当删除目标是管理员时检查数量
 	target, err := repository.GetUserByID(uint(id))
-	if err == nil && target.IsAdmin {
+	if err != nil || target == nil {
+		c.JSON(http.StatusOK, dto.Fail[string](models.UserNotFoundMessage))
+		return
+	}
+	if target.IsAdmin {
 		if target.ID == models.PrimaryAdminUserID {
 			c.JSON(http.StatusForbidden, dto.Fail[string]("不能删除站长"))
 			return

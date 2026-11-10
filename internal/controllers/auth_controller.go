@@ -65,6 +65,21 @@ func deleteCaptcha(id string) {
 	delete(captchaStore.m, id)
 }
 
+func consumeCaptcha(id, code string) error {
+	captchaStore.Lock()
+	defer captchaStore.Unlock()
+	item, ok := captchaStore.m[id]
+	if !ok || (item.Exp > 0 && time.Now().Unix() > item.Exp) {
+		delete(captchaStore.m, id)
+		return fmt.Errorf("验证码已过期")
+	}
+	if !strings.EqualFold(strings.TrimSpace(code), strings.TrimSpace(item.Code)) {
+		return fmt.Errorf("验证码不正确")
+	}
+	delete(captchaStore.m, id)
+	return nil
+}
+
 func checkUser(c *gin.Context) (*models.User, error) {
 	userID, exists := c.Get("user_id") // 修改 userid 为 user_id
 	if !exists {
@@ -358,36 +373,15 @@ func Register(c *gin.Context) {
 		return
 	}
 
-	// 优先使用 captcha_id（适配移动端/不依赖 Cookie 的场景）
-	if strings.TrimSpace(user.CaptchaId) != "" {
-		it, ok := getCaptcha(strings.TrimSpace(user.CaptchaId))
-		if !ok {
-			c.JSON(http.StatusOK, dto.Fail[string]("验证码已过期"))
-			return
-		}
-		if strings.ToLower(strings.TrimSpace(user.Captcha)) != strings.ToLower(strings.TrimSpace(it.Code)) {
-			c.JSON(http.StatusOK, dto.Fail[string]("验证码不正确"))
-			return
-		}
-		deleteCaptcha(strings.TrimSpace(user.CaptchaId))
-	} else {
-		// 兼容旧逻辑：使用 Session Cookie 存储验证码
-		session := sessions.Default(c)
-		sc := session.Get("captcha_code")
-		se := session.Get("captcha_exp")
-		if sc == nil || se == nil {
-			c.JSON(http.StatusOK, dto.Fail[string]("验证码已过期"))
-			return
-		}
-		exp, ok := se.(int64)
-		if !ok || time.Now().Unix() > exp {
-			c.JSON(http.StatusOK, dto.Fail[string]("验证码已过期"))
-			return
-		}
-		if strings.ToLower(user.Captcha) != strings.ToLower(fmt.Sprintf("%v", sc)) {
-			c.JSON(http.StatusOK, dto.Fail[string]("验证码不正确"))
-			return
-		}
+	captchaID := strings.TrimSpace(user.CaptchaId)
+	if captchaID == "" {
+		// A signed cookie must only reference server-side state. Replaying an
+		// older cookie cannot restore a consumed captcha.
+		captchaID, _ = sessions.Default(c).Get("captcha_id").(string)
+	}
+	if err := consumeCaptcha(captchaID, user.Captcha); err != nil {
+		c.JSON(http.StatusOK, dto.Fail[string](err.Error()))
+		return
 	}
 
 	result, err := services.RegisterWithResult(user)
@@ -422,8 +416,9 @@ func GetCaptcha(c *gin.Context) {
 	}
 
 	session := sessions.Default(c)
-	session.Set("captcha_code", code)
-	session.Set("captcha_exp", exp)
+	session.Set("captcha_id", capID)
+	session.Delete("captcha_code")
+	session.Delete("captcha_exp")
 	session.Save()
 	c.Data(http.StatusOK, "image/svg+xml", []byte(svg))
 }

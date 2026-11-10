@@ -27,6 +27,11 @@ import (
 
 const maxPendingRegistrationApplications = 5
 
+// Registration and review share a process-wide writer lock: quota/name checks,
+// password backups and remote provisioning must finish before a review can act.
+// The application is deployed as a single writer per database.
+var registrationWriteMu sync.Mutex
+
 type RegisterResult struct {
 	ApplicationID string `json:"application_id"`
 	Status        string `json:"status"`
@@ -256,8 +261,8 @@ func usernameCaseFoldReserved(username string) (bool, error) {
 		}
 	}
 
-	applications, _, err := repository.ListRegistrationApplications(models.RegistrationApplicationStatusPending, maxPendingRegistrationApplications, 0)
-	if err != nil {
+	var applications []models.RegistrationApplication
+	if err := database.DB.Select("username").Where("status = ?", models.RegistrationApplicationStatusPending).Find(&applications).Error; err != nil {
 		return false, err
 	}
 	for _, application := range applications {
@@ -281,6 +286,8 @@ func RegisterWithResult(userdto dto.RegisterDto) (RegisterResult, error) {
 	if err := validateRegistrationUsername(username); err != nil {
 		return RegisterResult{}, err
 	}
+	registrationWriteMu.Lock()
+	defer registrationWriteMu.Unlock()
 
 	exists, err := existingUser(username)
 	if err != nil {
@@ -378,7 +385,7 @@ func RegisterWithResult(userdto dto.RegisterDto) (RegisterResult, error) {
 
 	result := RegisterResult{ApplicationID: application.ApplicationID, Status: application.Status}
 	if autoApproveRegistrationEnabled(policy) {
-		created, err := ApproveRegistrationApplication(application.ID, 0, "系统自动通过审核")
+		created, err := approveRegistrationApplicationLocked(application.ID, 0, "系统自动通过审核")
 		if err != nil {
 			if !isRegistrationApprovalDeferred(err) {
 				return result, err

@@ -97,6 +97,13 @@ func ListRegistrationApplicationsForViewer(viewerUserID uint, status string, lim
 }
 
 func ApproveRegistrationApplication(id uint, reviewerUserID uint, reviewNote string) (*models.User, error) {
+	registrationWriteMu.Lock()
+	defer registrationWriteMu.Unlock()
+	return approveRegistrationApplicationLocked(id, reviewerUserID, reviewNote)
+}
+
+// Caller must hold registrationWriteMu, including automatic approval.
+func approveRegistrationApplicationLocked(id uint, reviewerUserID uint, reviewNote string) (*models.User, error) {
 	if id == 0 {
 		return nil, errors.New(models.InvalidIDMessage)
 	}
@@ -200,6 +207,8 @@ func ApproveRegistrationApplication(id uint, reviewerUserID uint, reviewNote str
 }
 
 func RejectRegistrationApplication(id uint, reviewerUserID uint, reviewNote string) error {
+	registrationWriteMu.Lock()
+	defer registrationWriteMu.Unlock()
 	if id == 0 {
 		return errors.New(models.InvalidIDMessage)
 	}
