@@ -1,17 +1,17 @@
 # 渠道发布与版本发现：验收结论与修复记录
 
-日期：2026-09-18。本文保留当时的审查问题、修复要求与验收记录；修复完成结论见第 10 节。早期“未完成”等措辞只描述对应提交的状态，不构成当前施工指令。
+日期：2026-09-18。本文保留当时的审查问题、修复要求与验收记录；第 1–9 节为修复前审查与当时要求，第 10 节为修复完成结果。本文不代表最新代码、当前部署状态或当前部署指南，早期“未完成”和历史命令不构成当前施工指令。
 
-## 1. 开工入口与范围
+## 1. 当时的开工入口与范围
 
-先阅读本报告及 `docs/direct-update-implementation-handoff-2026-09-11.md`，尤其第 2 节已确认决策、第 4.4 节判断规则、第 6 节渠道发布与版本发现。原实施报告中的“当前旧行为”是开工前快照，不应误当最新代码状态。
+当时要求先阅读本报告及 `docs/direct-update-implementation-handoff-2026-09-11.md`，尤其第 2 节已确认决策、第 4.4 节判断规则、第 6 节渠道发布与版本发现。原实施报告中的“当前旧行为”是开工前快照，不应误当最新代码状态。
 
 本次审查范围：
 
 - 渠道发布与版本发现前基点：`ac9b3544e8e46c3549787796cda565259a430c72`。
 - 被审查 HEAD：`94699803d1ed7f763f0967f8b31de61756c8d72c`，提交 `feat(updates): add stable and edge release discovery`。
 - 比较命令：`git diff ac9b3544...94699803`。
-- 开工必须重新读取 HEAD、工作区和远端状态；若新会话已有修复，不重复覆盖，按行为复验。
+- 当时要求开工刷新 HEAD、工作区和远端状态，并避免覆盖已有修复。
 
 本次只修渠道发布与版本发现正式渠道发现与发布验收缺口，不展开更新任务、执行器与后续验收，不实现自动安装、任务 API、执行器或后台双渠道完整 UI。不得更新当前 NAS 容器、创建正式 Release、删除 GHCR 历史产物、改实际任务计划。
 
@@ -27,7 +27,7 @@
 
 完整运行身份和确定产物是用户接受的技术方案；用户并未逐字提出“禁止所有历史 Release 重建”。因此第三项应修复真实身份验证缺口，而非借此无条件新增最低提交 hash 门禁。
 
-## 3. 当前验收结论
+## 3. 原审查结论（修复前）
 
 已确认 edge 真实链路成功，正式 stable 链路尚存在逻辑错误与验收缺口。未发现明确的规范违规或无关范围膨胀。不能宣布渠道发布与版本发现全部完成。
 
@@ -81,7 +81,7 @@ GitHub `/releases/latest` 的选择不能假设永远按语义版本最高值返
 
 当前可以选择历史正式 Release，并用该提交的旧 Dockerfile 构建。当前工作流可以在外层 OCI 标签写上完整身份，但 smoke 只检查镜像 label 和健康，不证明二进制具备相同完整 revision/构建时间/显示版本。历史源码不支持构建参数时，标签“正确”仍可能掩盖运行身份不足。
 
-这是条件性风险，尚未通过真实历史 Release 镜像证明已发生。新会话先模拟/复现，不把猜测当结果：
+这是条件性风险，尚未通过真实历史 Release 镜像证明已发生。当时要求先模拟/复现，不把猜测当结果：
 
 1. 创建一个旧式目标样例：镜像 label 有完整 revision、应用健康，但应用缺少或返回不同运行身份。证明当前 smoke 仍会接受。
 2. 明确普通健康检查、Git revision、外层 label 为何不足以证明容器内二进制身份。
@@ -93,7 +93,7 @@ GitHub `/releases/latest` 的选择不能假设永远按语义版本最高值返
 
 同一固定目标已存在时，新 smoke 对象和最终提升的既有固定产物可能不同，也应核对最终被提升产物的身份，不能验证候选 A 却提升未经本次验证的 B。不要为此默认覆盖正式版本标签。
 
-## 5. 建议执行顺序
+## 5. 当时建议的执行顺序
 
 1. 核对 HEAD/worktree，重新读取三个问题的真实调用链及旧测试。若代码已改，先测行为是否消失。
 2. 在 `internal/updates/discovery_test.go` 添加 F1/F2 行为 red，跑到真实失败；不要用正则出现某行代码替代测试。
@@ -126,7 +126,7 @@ GitHub `/releases/latest` 的选择不能假设永远按语义版本最高值返
 
 ## 7. 复验命令与上次结果
 
-PowerShell 环境脚本会改变当前目录，前端命令需在加载后显式 `Set-Location web`。
+以下为 2026-09-18 的历史复验命令及旧路径，仅用于追溯；当前环境入口按本机环境 README 核对。
 
 ```powershell
 . D:\ChatGPT\environments\echo-noise\env.ps1
@@ -149,7 +149,7 @@ git status --short
 
 全量 `go test ./...` 未完成。随后 90 秒限定运行剩余包，`internal/services` 超时，正在执行 `TestChangePasswordWithFailedCompensationMarksOneIncompletePasswordUpdate`，堆栈主要在 bcrypt。其他剩余有测试包通过。该目录未被渠道发布与版本发现修改，目前没有证据归因于渠道发布与版本发现，也没有在渠道发布与版本发现前基点复跑证明它必然既有；应表述为“全量验收未完成、非渠道发布与版本发现修改路径的超时”，不能直接宣布全仓绿，也不要展开密码工作线。
 
-GitHub 当前正式支持 `concurrency.queue: max`，可排队最多 100 个任务；本工作流搭配 `cancel-in-progress: false` 合法，已经线上运行成功。不要根据旧知识删除它或把它列为 bug。官方依据：<https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax>。
+当时已核实 GitHub 正式支持 `concurrency.queue: max`，可排队最多 100 个任务；本工作流搭配 `cancel-in-progress: false` 合法，已经线上运行成功。不要根据旧知识删除它或把它列为 bug。官方依据：<https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax>。
 
 ## 8. 远端与真实验收边界
 
@@ -185,4 +185,4 @@ F1/F2 red：`go test ./internal/updates -run 'TestStable(RemainsValidWhenLatestR
 
 代码提交 `2e5215aff5a5b0a5377329b575283ab9751c93b6` 已推送到 `origin/main`。GitHub Actions `Build MCP Docker Image` 运行 `35351554173` 成功：真实 Docker 候选 smoke、身份失配负例拒绝、runner 本地且不推送的 `v0.0.0` 正式身份样例、最终固定产物二次 smoke、edge 移动均通过。公开 GHCR manifest 复核显示 `edge-mcp` 与 `sha-2e5215aff5a5b0a5377329b575283ab9751c93b6-mcp` 同指向 `sha256:1c03e4484b15203b04a785b165f95ff56ea7752b1c28e55d1a713e968b6c7aa4`，revision、version `2e5215aff5a5`、created `2026-09-18T13:40:29Z` 一致。
 
-渠道发布与版本发现的 F1/F2/F3、真实独立镜像、最终固定产物和 edge 远端产物关闭条件均已满足，可以关闭渠道发布与版本发现。正式 Release 与当前 NAS 均未操作，因此本结论不宣称 stable 正式发版或真实 NAS 部署已经发生；自动安装入口仍保持不可用。更新任务、执行器与后续验收未触碰。
+渠道发布与版本发现的 F1/F2/F3、真实独立镜像、最终固定产物和 edge 远端产物关闭条件均已满足，可以关闭渠道发布与版本发现。正式 Release 与当前 NAS 均未操作，因此本结论不宣称 stable 正式发版或真实 NAS 部署已经发生；该轮自动安装入口仍保持不可用，未触碰任务、执行器与后续验收；后续受控创建与部署结果见[总实施历史](direct-update-implementation-handoff-2026-09-11.md#0-历史进度与后续结果)。

@@ -31,10 +31,10 @@
 
 ```text
 skill/
-  shuoshuo-notes/
-    SKILL.md
-    USAGE.md
-    EXAMPLES.md
+  SKILL.md
+  USAGE.md
+  EXAMPLES.md
+  config.json
 ```
 
 文件作用：
@@ -174,7 +174,7 @@ API 写入类任务先准备有效会话或普通 API token。MCP 的所有工�
 
 ### 镜像、开关与端口不能单独决定模式
 
-- 发布渠道 `stable-mcp`、`edge-mcp` 使用含模块的 `final-mcp` 构建目标；尚无正式 Release 时 stable 渠道仍不可用
+- 发布渠道 `stable-mcp`、`edge-mcp` 使用含模块的 `final-mcp` 构建目标；stable 标签是否可拉取取决于正式 Release 的发布情况
 - 源码 Compose 默认使用 `final-mcp`；设置 `APP_BUILD_TARGET=final` 后重建可排除模块
 - 已打包模块可用 `MCP_ENABLED=false` 或 `0` 停用，开关不授予用户权限
 - 默认 `MCP_TRANSPORT=stdio`，客户端连接时启动专属进程，不监听 `1315`；只开放 `1314`、`1315` 不通都不能据此判定没有 MCP
@@ -332,7 +332,7 @@ curl "$BASE_URL/api/messages/search?keyword=欢迎&page=1&pageSize=10"
 说明：
 
 - `keyword` 常用于关键词搜索
-- 标签语义可以配合 `#标签名` 使用
+- 标签内容使用 `/api/messages/tags/:tag`（标签名需 URL 编码）；直接搜索 API 不会自动将 `#标签` 转为标签路由，`query` 别名也仅属于 MCP
 - 若没有关键词，更适合走分页
 
 #### 分页
@@ -361,7 +361,7 @@ curl "$BASE_URL/api/messages/123"
 curl -X POST "$BASE_URL/api/token/messages" \
   -H "Authorization: Bearer <你的Token>" \
   -H "Content-Type: application/json" \
-  -d '{"type":"text","content":"今天完成了双模式 skill 调整"}'
+  -d '{"content":"今天完成了双模式 skill 调整"}'
 ```
 
 #### 发布 Markdown
@@ -370,8 +370,16 @@ curl -X POST "$BASE_URL/api/token/messages" \
 curl -X POST "$BASE_URL/api/token/messages" \
   -H "Authorization: Bearer <你的Token>" \
   -H "Content-Type: application/json" \
-  -d '{"type":"markdown","content":"# 标题\n正文内容"}'
+  -d '{"content":"# 标题\n正文内容"}'
 ```
+
+API 发布读取 `content`、`visibility` / `private`、`image_url`、`notify`、`created_at` 等字段，不识别 MCP 的 `type`、`image`、`images` 参数。单图使用 `image_url`，多图使用正文 Markdown：
+
+```json
+{"content":"多图说明\n\n![图片一](https://example.com/a.jpg)\n![图片二](https://example.com/b.jpg)","image_url":"https://example.com/a.jpg","visibility":"users"}
+```
+
+`video_url` 在当前 API 发布控制器中用于通知处理；需要保存视频链接时也应写入 `content`。
 
 #### 更新内容
 
@@ -392,11 +400,13 @@ curl -X DELETE "$BASE_URL/api/token/messages/123" \
 #### 置顶内容
 
 ```bash
-curl -X PUT "$BASE_URL/api/messages/123/pin" \
+curl -X PUT "$BASE_URL/api/messages/123/pin/personal" \
   -H "Content-Type: application/json" \
   -b cookie.txt \
   -d '{"pinned":true}'
 ```
+
+上例为本人笔记的个人置顶；全局置顶使用 `/pin/global`，需 `notes.pin_global` 能力并满足目标内容权限。旧 `/pin` 仍表示全局置顶，不能用来绕过权限。相同后缀也支持 `/api/token/messages/:id/...` 路径。
 
 #### 获取 token
 
@@ -425,8 +435,8 @@ AI 客户端支持 MCP 工具调用、已完成协议连接和 AI 身份验证�
 | `publish` | 发布内容，明确指定所需可见范围 |
 | `update` | 按 `id` 修改内容或可见范围；不传可见性字段时保持原值 |
 | `delete` | 仅按明确 `id` 移入回收站，不接受关键词，不执行批量扫描或硬删除 |
-| `pin` | `id`、`pinned`；使用业务 token 路由，权限由后端检查 |
-| `settings` | 修改后端允许的站点设置，管理员权限仍由后端检查 |
+| `pin` | `id`、`pinned`、可选 `scope`；默认 `global` 需全局置顶权限，`personal` 仅允许本人笔记 |
+| `settings` | `allowRegistration`、`autoApproveRegistration`、`frontendSettings` 至少一项，需 `site_settings.manage` 能力 |
 | `status`、`calendar`、`config`、`rss` | 状态、日历、公开配置与 RSS；读取同样要求 AI 凭据 |
 | `login` | 用当前 AI 凭据和同账号用户名、密码续期登录期限，不执行网页登录或返回 Cookie |
 
@@ -646,11 +656,18 @@ Authorization: Bearer <你的Token>
 1. 在后台通过有效登录会话进入个人配置，创建专用 AI 凭据；管理接口为 `/api/user/ai-credentials`
 2. 创建响应中的 `token` 仅展示一次，存入 MCP 客户端私有配置；不要写进共享 `skill/config.json`、提示词、日志或版本库
 3. stdio 将其传入该进程的 `NOTE_TOKEN`；HTTP 每次请求单独提供该客户端的 AI Bearer，服务端 `NOTE_TOKEN` 无效
-4. 先调用 `identity`；每次后续业务工具操作都会以同一 Bearer 请求 `GET /api/auth/identity`，验证 `data.auth_via=ai_token`
+4. 先调用 `identity`；除 `login` 续期前的特殊流程外，每次后续工具操作都会以同一 Bearer 请求 `GET /api/auth/identity`，验证 `data.auth_via=ai_token`
 
 缺少凭据、普通 token、撤销或过期均按工具错误处理，不降级为匿名读取或网页登录。后端决定内容可见范围和业务权限，MCP 不会把普通 token 自行标记为 AI 身份。
 
-`login` 用当前 AI 凭据调用 `POST /api/ai/login`，提交同账号的 `username`、`password` 后再次验证身份。账号登录期限已过时，可用未撤销的 AI 凭据续期；该工具不切换账号、不设置 Cookie、不生成普通 token。优先在后台完成账号登录，密码不要写入提示词、日志或共享配置。同账号登录期限可能按后端契约共享刷新，不代表不同 HTTP 客户端共享凭据。
+`login` 用当前 AI 凭据调用 `POST /api/ai/login`，提交同账号的 `username`、`password` 后再次验证身份。账号登录期限过期后，可用未撤销的 AI 凭据续期；该工具不切换账号、不设置 Cookie、不返回或轮换普通 token。优先在后台完成账号登录，密码不要写入提示词、日志或共享配置。
+
+### 登录期限与密钥隔离
+
+普通 API token 与 AI 凭据分别生成、管理和撤销，重建普通 token 不影响 AI 凭据。两种 Bearer 使用账号数据库中的最近登录时间，不按各密钥创建时间分别计时。普通用户与授权管理员各有期限配置，默认均为 3 天；0 天 0 小时表示永久，主站长（用户 ID 1）不受期限限制。
+
+成功网页登录或 AI `login` 刷新同账号所有 Bearer 的登录期限；创建或重建密钥本身不续期。这不意味着客户端共享密钥。Cookie 会话仍按各自签发时间检查，不随其他客户端续期延长。期限已过返回 HTTP 401、`error: "login_expired"`，携带过期身份的公开读取也被拒绝。应重新登录同账号；MCP 也可用未撤销 AI 凭据调用 `login`。已撤销凭据须重新创建，登录不能恢复它。
+
 
 ### 选择建议
 
@@ -819,6 +836,6 @@ API/MCP 发布可使用以下明确可见范围示例：
 {"content":"仅联系人可见","visibility":"contacts"}
 ```
 
-可选值为 `public`、`users`、`contacts`、`private`。MCP 发布未指定可见性时仍默认公开；更新不传 `visibility` / `private` 时保持原值。兼容旧 `private: true` 表示仅自己、`private: false` 表示公开；不要同时提交相互冲突的 `private` 与 `visibility`，MCP 会拒绝冲突参数。
+可选值为 `public`、`users`、`contacts`、`private`。MCP 发布未指定可见性时仍默认公开；更新不传 `visibility` / `private` 时保持原值。兼容旧 `private: true` 表示仅自己、`private: false` 表示公开；同时提交时显式 `visibility` 优先，MCP 不会因这两个字段冲突而报错。
 
 API 使用 Token 读取时请在所有读取请求中携带 `Authorization: Bearer <token>`；MCP 读取必须使用专用 AI 凭据，实际可见范围由后端判断。混用两种模式时保持授权身份一致，不将匿名查询的缺失结果视为记录不存在。

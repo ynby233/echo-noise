@@ -1,14 +1,16 @@
 # 外部更新执行器：复核与六项修复记录
 
+> 历史快照：本文仅记录所列日期、提交和环境的实现与验收结果，不代表最新代码、当前部署状态或当前部署指南。文内“当前”“本次”“下一阶段”均限于原验收时点；历史命令和路径仅用于追溯。
+
 日期：2026-10-01。本文记录外部 Docker/Compose 更新执行器的六项复核问题、当时的修复要求及后续验收结果。历史未完成状态不代表当前实现，也不构成新的施工指令。
 
-**后续执行结果：F1–F6 及后续三项边界问题已修复并复验，外部更新执行器可以关闭。** 最终产品代码 `07f749aa` 与对应执行器/镜像工作流均已通过，最新证据见 [三项补修与最终复验](external-executor-three-boundary-repairs-acceptance-2026-10-01.md)，六项历史逐项证据见 [六项修复验收](external-executor-six-repairs-acceptance-2026-10-01.md)。下文保留原接手时的事实与要求，不再作为当前未完成状态；**后续一致备份与失败恢复也已完成并通过复验，下一会话从后台更新界面开始，见 [一致备份与失败恢复验收报告](backup-failure-recovery-acceptance-2026-10-01.md)；后台更新界面/Dagu 与 NAS 接入/更新验收与交付尚未实施。**
+**2026-10-01 后续结果：** F1–F6 及三项边界补修已完成，最终产品代码 `07f749aa` 与对应执行器/镜像工作流通过；见[六项修复验收](external-executor-six-repairs-acceptance-2026-10-01.md)和[三项最终复验](external-executor-three-boundary-repairs-acceptance-2026-10-01.md)。同日后续的数据保护与后台工作分别见[一致备份验收](backup-failure-recovery-acceptance-2026-10-01.md)、[后台原验收](admin-update-acceptance-2026-10-01.md)及[后台复核修复](admin-update-review-repairs-acceptance-2026-10-01.md)；这些结果更新了下文的早期未完成状态。
 
 ## 1. 接手结论、基线与范围
 
-**2026-10-01 后续更新：后台更新界面也已完成，下一会话从Dagu 与 NAS 接入开始。** 最终产品代码 `7333cc16` 的本地、独立执行器/镜像验收通过，详见 [后台更新界面验收报告](admin-update-acceptance-2026-10-01.md)。渠道、任务、执行器与数据保护不重做；后台更新界面已接受控安装能力判断，未接入 NAS 时仍不可安装。上文和下文保留历史阶段要求，不再要求新会话从外部更新执行器/一致备份与失败恢复/后台更新界面开工；NAS 引导、脚本/调度安装、实际后台触发更新属于Dagu 与 NAS 接入。
+**同日后续后台结果：** 原后台产品代码 `7333cc16` 已通过本地、独立执行器和镜像验收；独立复核后的最终产品代码为 `4649ac21`。当时后续工作转入 Dagu/NAS 接入，其实际接入及最终现场结果见[更新恢复记录](update-recovery-and-acceptance-2026-10-02.md)，不再作为新会话的启动任务。
 
-**外部更新执行器主体实现已交付，已有测试和镜像工作流成功，但复核未通过，暂不关闭外部更新执行器。先完成本报告六项修复，再进入一致备份与失败恢复。** 渠道发布与版本发现/更新任务与权限不重做，服务端更新全流程分工不调整。
+**原复核时结论（早于上述修复）：** 外部更新执行器主体已交付，已有测试和镜像工作流成功，但六项复核未通过，当时暂不关闭，要求修复后再进入数据保护阶段。渠道发现与任务权限不重做，阶段分工不调整。
 
 | 项目 | 复核时事实 |
 | --- | --- |
@@ -20,23 +22,17 @@
 | 当前产品边界 | 生产 `POST /api/updates/tasks` 返回 501；`Executor.data_protection_available()` 为 false，run 在停旧应用前返回 `u4_backup_unavailable` |
 | 未跟踪旧资料 | `docs/direct-update-feasibility-2026-09-10.md`，保留，不混入修复提交 |
 
-新会话先读取本报告，再读[原服务端更新全流程交接](direct-update-implementation-handoff-2026-09-11.md)的第 0、4.3、8 节、[外部更新执行器完成报告](external-executor-acceptance-2026-10-01.md)及 [执行器说明](../scripts/update/README.md)。原完成报告记录的成功用例仍有效；它未覆盖本次六个触发条件。本报告补充并限制其“完成”结论，不抹掉历史证据。
+当时要求先读取本报告，再读[原服务端更新全流程交接](direct-update-implementation-handoff-2026-09-11.md)的第 0、4.3、8 节、[外部更新执行器完成报告](external-executor-acceptance-2026-10-01.md)及 [执行器说明](../scripts/update/README.md)。原完成报告记录的成功用例仍有效；它未覆盖本次六个触发条件。本报告补充并限制其“完成”结论，不抹掉历史证据。
 
-修复范围以 `scripts/update/executor.py`、`test_executor.py`、`test-docker.py` 及相应说明为主；确有必要才调整 fixture/执行器工作流。本次保持通用 Linux Docker/Compose 接入，不做个人 NAS 专用实现，不接通一致备份与失败恢复备份、不增加后台更新界面前端、不安装Dagu 与 NAS 接入任务计划。产品继续不可安装，不以测试开关或空备份函数绕过保护。
+修复范围以 `scripts/update/executor.py`、`test_executor.py`、`test-docker.py` 及相应说明为主；确有必要才调整 fixture/执行器工作流。本次保持通用 Linux Docker/Compose 接入，不做个人 NAS 专用实现，不接通一致备份与失败恢复备份、不增加后台更新界面前端、不安装后续 NAS 接入阶段的调度任务。产品继续不可安装，不以测试开关或空备份函数绕过保护。
 
 保留固定 ID 1 更新权限、stable-mcp/edge-mcp 两渠道、固定 digest/revision、任务归属、凭据撤销/过期、正常轮换的当前任务补报、`needs_attention` 活动占位、不自动降级/还原业务库。正常提交推送与镜像验证按项目既定要求执行；真实 NAS 容器替换、任务计划安装、业务数据恢复、正式 Release 不在此报告授权范围内。
 
-## 2. 开工路径与已有证据
+## 2. 历史环境路径与已有证据
 
-实际仓库 `D:/ChatGPT/app/projects/echo-noise`；私有环境 `D:/ChatGPT/app/environments/echo-noise`。旧的不含 `app` 的路径已失效；加载环境后显式切回实际仓库。个人部署资料从环境目录 `deployment/README.md`、`connection.json` 等读取，个人地址、账号、容器名、路径和秘密不得入项目或公开报告。
+当时仓库 `D:/ChatGPT/app/projects/echo-noise`；私有环境 `D:/ChatGPT/app/environments/echo-noise`。旧的不含 `app` 的路径已失效；加载环境后显式切回实际仓库。个人部署资料从环境目录 `deployment/README.md`、`connection.json` 等读取，个人地址、账号、容器名、路径和秘密不得入项目或公开报告。
 
-```powershell
-. 'D:\ChatGPT\app\environments\echo-noise\env.ps1'
-Set-Location 'D:\ChatGPT\app\projects\echo-noise'
-git status --short
-git rev-parse HEAD
-git log -8 --oneline
-```
+当时使用旧环境脚本加载环境、切回上述仓库，再检查 status、HEAD 和最近提交。该启动片段已失效，不再保留为可直接执行的接手命令；原路径仍作为证据定位信息保留，当前环境入口以本机环境 README 为准。
 
 接手时 HEAD 可能包含本报告的后续文档提交，按实际新增代码刷新；不用回退到上述基线，不覆盖其他会话工作。环境脚本的 RepoRoot 仍有旧路径，私有连接字段也可能混用 `/` 与 `\`：读取时解析现存迁移文件，不打印完整配置，不改全局配置来掩盖路径问题。
 
@@ -49,9 +45,9 @@ git log -8 --oneline
 
 用户称测试平台已部署最新版本。本次独立刷新得到 `/api/health/live`、`/api/health/ready` HTTP 200，匿名 `/api/updates`、`/api/updates/executor/runtime` HTTP 401；`/api/version` 仅返回 `installed`，不能据此认定完整提交身份。未进行站长登录页面验收。
 
-含凭据传递的提权 SSH 只读核验被自动审批拒绝，理由仅为 `blocked by policy`；随后 SSH 公钥连接可用，但普通用户不能读 Docker，`sudo -n` 要求密码。因此本次未独立核实测试平台完整运行 revision。原完成报告所写 NAS `7fdb4450` 是之前时点的证据，不与用户后续部署声明混为一谈。新会话可按实际可用的已授权只读方式刷新；若仍受阻，如实列未核验，不修改权限/安装执行器来凑证明。
+含凭据传递的提权 SSH 只读核验被自动审批拒绝，理由仅为 `blocked by policy`；随后 SSH 公钥连接可用，但普通用户不能读 Docker，`sudo -n` 要求密码。因此本次未独立核实测试平台完整运行 revision。原完成报告所写 NAS `7fdb4450` 是之前时点的证据，不与用户后续部署声明混为一谈。该次未核验的范围如实保留，不据此推定后续部署状态。
 
-## 3. 六项修复要求
+## 3. 当时的六项修复要求
 
 下面行号以复核代码基线为准，接手后按函数名定位。六项检查缺陷已通过调用实际 Python 函数的隔离复现确认；Docker/API 响应、Linux stat 元数据使用 mock，未在业务宿主实际制造双写、网络丢失或权限利用。真实引擎后果需要按各项要求补验。
 
@@ -138,14 +134,14 @@ $u3Python = 'C:\Users\Jin\.cache\codex-runtimes\codex-primary-runtime\dependenci
 
 修复前将六项行为转成现有 test_executor.py 的正式测试，断言**正确行为**，在当前代码上分别 red；模拟 I/O，但调用真实逻辑。Linux stat 元数据测试在 Windows 可模拟，真实权限/socket/Engine 操作在独立 Linux 环境补验。不要复制私有脚本的“接受即成功”断言当回归测试。对确实需要 Engine 语义的 F1/F3/F5 等扩充 test-docker.py；fixture 只用空数据和隔离协调 API，产品入口不导入 fixture。
 
-## 5. 执行顺序与验收
+## 5. 当时的执行顺序与验收要求
 
 1. 核对 HEAD/工作区/报告，运行已有用例与两个私有复现，保存当前证据；有新改动就先定位差异，不直接覆盖。
 2. 按六项触发写正式 red，确认真实失败；优先 F1/F3 的部署保持，再处理 F4/F5 的中断恢复和 F2/F6 的安全检查。可按共享根因调整顺序，但六项都要有验收对应。
 3. 在共享检查/恢复函数修根因，核对 check/claim/run/report 全部调用方；保留普通部署、完整事件顺序及已修更新任务与权限语义。无需逐函数询问命名或实现细节。
 4. 跑 focused 测试和下面回归，更新 README 及完成报告。说明旧 journal/probe 的恢复行为，避免只修新安装后留旧现场无法处理。
 5. 在独立 Linux 引擎完成新增故障场景与原 Docker/Compose 完整替换。已有 GitHub workflow 可承担环境，优先自动 push 运行，不必为了测试先在个人 NAS 部署。
-6. 提交并推送 origin；核验执行器测试和自动镜像工作流对应**修复代码提交**并成功。只读刷新测试平台时分开记录健康、完整运行身份和是否配置宿主执行器。未部署执行器属于Dagu 与 NAS 接入，不是此次必须补装。
+6. 提交并推送 origin；核验执行器测试和自动镜像工作流对应**修复代码提交**并成功。只读刷新测试平台时分开记录健康、完整运行身份和是否配置宿主执行器。未部署执行器属于后续 Dagu/NAS 接入阶段，不是此次必须补装。
 7. 更新验收结论，六项逐一列“red / 修复 / green / 真实证据 / 未测边界”；满足下面条件才建议关闭外部更新执行器，后续仍按原计划进入一致备份与失败恢复。
 
 本地命令从仓库根执行，每条检查退出码；这里不要求新增测试框架：

@@ -2,13 +2,15 @@
 
 > 2026-10-04 接入范围调整：本文保留历史验收证据；Dagu 专用镜像、任务示例、接入说明及 CI 已从当前开源交付移除。下列旧实现链接固定到历史提交，不能作为当前部署步骤。当前接入使用 [通用 API/钩子和执行器](../scripts/update/README.md)，个人部署维护在私有环境。
 
+后续结果索引：本报告保留首次全链实验的失败和未测项；重建超时的定位与复验见[更新恢复记录第 1 节](update-recovery-and-acceptance-2026-10-02.md#1-dagu-重建超时的确定分歧)，远端实验及用户重启结果见该报告第 10–11 节。以下“待验”和操作方案均属当时快照，不是当前部署指南或继续执行指令。
+
 按 [实施交接第 12 节](direct-update-implementation-handoff-2026-09-11.md#12-验收矩阵与交付) 执行。起始 HEAD `45b7b273e41e83e8f24e222edc27192c52264012`，origin/main 已通过 GitHub API 和 fetch 刷新核对；保留未跟踪的前期评估文档。服务端更新功能与部署接入已交付行为不重做，不重新配对或修改 NAS 业务部署。
 
 ## 结论与边界
 
 本次进行本地全量检查、独立真实 Docker/Compose/Dagu 故障实验、生产构建浏览器回归及 NAS 数据/调度观察。首个验收代码提交 `0ac65c262c023f22c65a195a4b6783a8303de9c7` 已推送 origin/main；其自动 [执行器 CI](https://github.com/ynby233/echo-noise/actions/runs/37011311965) 和 [镜像构建/smoke](https://github.com/ynby233/echo-noise/actions/runs/37011311795) 均成功，包含新增五项故障、daemon restart 和四条 Dagu 链。对应 edge/不可变产物 digest `sha256:414879e4ed061174a9c9e24c3ab8b7222fedbfbb4eb4f4754f9fab127ed71837`；没有自动安装到个人实例。最终 Dagu 测试竞争修订 `4f7a425a01a7217c8a3706004163b818344542a2` 已提交/推送，其自动 [执行器 CI](https://github.com/ynby233/echo-noise/actions/runs/37013124283) 和 [镜像构建/smoke](https://github.com/ynby233/echo-noise/actions/runs/37013124353) 也均成功，headSha 精确匹配，未重复手动 dispatch。
 
-最终 edge 不可变目标 digest `sha256:097c072df3a26a73d016148d3522cf165846914350d8d232a131fa9f700a3d92`；候选和不可变目标 smoke、运行身份缺陷回归、渠道移动步骤均成功。NAS 没有安装此目标，现场镜像证据仍使用下述Dagu 与 NAS 接入固定 digest。
+最终 edge 不可变目标 digest `sha256:097c072df3a26a73d016148d3522cf165846914350d8d232a131fa9f700a3d92`；候选和不可变目标 smoke、运行身份缺陷回归、渠道移动步骤均成功。NAS 没有安装此目标，现场镜像证据仍使用下述首次接入版本的固定 digest。
 
 **不能将本次工程验收称为所有现场/正式发布用例已完成。** 当前 stable 无正式 Release，正式→测试→追上正式的真实发布往返，以及正式发布取消/失败的渠道保留尚无真实产物实验；已有真实 Git 历史策略、发现 API 测试和 edge 工作流证据分别列出。NAS/Docker 真正重启、个人业务库回滚恢复不在本会话授权内，未执行；独立 runner 的 daemon restart 与独立实例备份恢复不能替代个人现场证据。未发布正式 Release、未创建正式标签、未清理其他服务/镜像。
 
@@ -48,7 +50,7 @@
 
 **嵌套引擎 Dagu 重建补报未通过。** 唤醒/并发与漏通知链通过后，重建用例等待终态超过 130 秒；单独再跑重建同样超时。临时有限诊断记录：目标容器 healthy、旧容器 exited/restart=no、同一任务仍 stopping，本地 `replace_intent`、confirmed=stopping、pending=[backing_up,replacing]，没有第二次替换。重建后的 Dagu 没有完成预期补报，暂未确定原因；报错后直接 `check` 对本地旧容器检测到新容器写入者，不能把该诊断错误当作原超时根因。独立 Ubuntu CI 同 SHA 的重建用例成功，两层结论分别保留。临时任务/恢复诊断输出仅在隔离私有证据中，未将未经证实的假设写成产品修复或扩大权限。
 
-嵌套引擎健康失败用例单独通过，应用任务实际停留 needs_attention、目标/备份/数据断言通过。因此该引擎的 wake/missed/verify-failure 三条通过，restart 未通过；最终独立 Ubuntu CI 四条均通过。下一轮先在同种嵌套环境保留失败 journal/日志，核对 Dagu 重建后的执行子进程与宿主 PID 视图，复现补报超时再改；禁止把 `check` 的旧容器诊断或 CI 成功当作已经定位根因。
+嵌套引擎健康失败用例单独通过，应用任务实际停留 needs_attention、目标/备份/数据断言通过。因此该引擎的 wake/missed/verify-failure 三条通过，restart 未通过；最终独立 Ubuntu CI 四条均通过。当时要求下一轮先在同种嵌套环境保留失败 journal/日志，核对 Dagu 重建后的执行子进程与宿主 PID 视图，复现补报超时再改；禁止把 `check` 的旧容器诊断或 CI 成功当作已经定位根因。
 
 ## NAS 刷新证据
 
@@ -56,11 +58,11 @@
 
 现场跟随偏好实测测试→正式→测试，最终恢复原测试偏好；每次 PUT 后查询原任务 ID/状态与 installed revision 均保持。首个新 edge 产物发布后，真实后台从构建中变为“有可更新的后代版本/已构建”，当前应用仍为旧目标且无自动安装。这覆盖同安装只改变跟随后续偏好，不冒充两渠道真实安装往返。
 
-业务数据复核：147 条 messages、34 个 attachment_blobs、50 个 attachment_references、3 个 users；两份备份各 169 成员、CRC 无错误、SQLite integrity_check=ok，messages/attachment_blobs/attachment_references 与现库全行一致；164/164 原配置/附件文件一致。用户账户行因Dagu 与 NAS 接入登录变化未宣称全行一致，仅记录用户数不变。
+业务数据复核：147 条 messages、34 个 attachment_blobs、50 个 attachment_references、3 个 users；两份备份各 169 成员、CRC 无错误、SQLite integrity_check=ok，messages/attachment_blobs/attachment_references 与现库全行一致；164/164 原配置/附件文件一致。用户账户行因首次接入时的登录变化未宣称全行一致，仅记录用户数不变。
 
 现场观察 2026-10-02 21:02:18–21:33:19（北京时间），31 样本、1861.49 秒。业务与 Dagu 相同容器/启动时间保持；全部样本业务 healthy、活动任务为零。31 个不同检查时间，最新检查年龄最大 59.282 秒；首次样本保留前一轮诊断失败状态，下一分钟起 30 个样本检查全部成功，不能将初始失败隐藏为持续成功。观察脚本最初保留 SQLite 文件描述符，执行器真实报检查失败；关闭该脚本、修正连接及时关闭后重新计时，下一分钟检查恢复成功。这是已验证的数据写入者保护，未放宽检查。
 
-Docker stats 实测应用内存 106.6–110.8 MiB、期末 109.3 MiB，25 个进程/线程计数保持；Dagu 99.32–153.0 MiB、期末 119.9 MiB，预检采样出现 CPU 81.4% 和 PIDs 36 的峰值，其他空闲样本多为约 1% CPU、PIDs 14。本轮包含业务诊断、版本查询和并行嵌套测试，不以短期资源峰值或期末数值宣称无长期增长。观察后 NAS 后台实际查询再次确认检查通过、原任务 succeeded、运行仍是Dagu 与 NAS 接入 revision。专属测试引擎已核对更新验收与交付标签、无业务 bind/对外端口后仅停止自身；源码/镜像/日志保留在私有目录，未清理其他实例。
+Docker stats 实测应用内存 106.6–110.8 MiB、期末 109.3 MiB，25 个进程/线程计数保持；Dagu 99.32–153.0 MiB、期末 119.9 MiB，预检采样出现 CPU 81.4% 和 PIDs 36 的峰值，其他空闲样本多为约 1% CPU、PIDs 14。本轮包含业务诊断、版本查询和并行嵌套测试，不以短期资源峰值或期末数值宣称无长期增长。观察后 NAS 后台实际查询再次确认检查通过、原任务 succeeded、运行仍是首次接入版本 `ba4ef8b7`。专属测试引擎已核对原实验标签、无业务 bind/对外端口后仅停止自身；源码/镜像/日志保留在私有目录，未清理其他实例。
 
 ## 运维与剩余现场操作
 
@@ -68,6 +70,6 @@ Docker stats 实测应用内存 106.6–110.8 MiB、期末 109.3 MiB，25 个进
 
 故障先保留任务、原记录、目标/旧 image ID、image 真源和备份。新版曾启动或可能写库时不自动启动旧容器、回滚数据库或重新安装。修复目标后执行原任务 `reconcile --outcome verify`；撤销/过期或记录丢失时，按 README 受权停止写入者、禁用 restart，再执行离线失败结案。正常轮换与撤销/过期不能混同。结案后才能创建下一条更新。
 
-个人 NAS/Docker 真重启须先确认无活动任务、备份可读、Dagu 完整重建配置已持久、旧业务容器 stopped/restart=no、其他服务的停机影响和维护窗口；重启后核对只有一个写入者、相同实例/目标镜像、原挂载/设备/网络、分钟检查恢复及后台连接。不得使用全局 prune 或删除记录解除占位。
+当时提出的个人 NAS/Docker 重启方案要求先确认无活动任务、备份可读、Dagu 完整重建配置已持久、旧业务容器 stopped/restart=no、其他服务的停机影响和维护窗口；重启后核对只有一个写入者、相同实例/目标镜像、原挂载/设备/网络、分钟检查恢复及后台连接。不得使用全局 prune 或删除记录解除占位。
 
-正式 stable 用例需用户另行发布有效正式 Release 后，以真实产物检验正式→测试、正式追上、同提交仅切偏好、旧正式不降级、取消/失败不移动渠道；当前没有发布授权。ARM、MySQL/PostgreSQL、远端附件、桌面/Android及真机不在已验收支持范围。
+当时提出正式 stable 用例需用户另行发布有效正式 Release 后，以真实产物检验正式→测试、正式追上、同提交仅切偏好、旧正式不降级、取消/失败不移动渠道；当前没有发布授权。ARM、MySQL/PostgreSQL、远端附件、桌面/Android及真机不在已验收支持范围。

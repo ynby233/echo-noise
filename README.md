@@ -1,1903 +1,350 @@
-# 说说笔记（自用 尚未完善 请注意！）
+# 说说笔记（echo-noise）
 
-| ![kXN6dnZQIR7lu2B](https://s2.loli.net/2025/12/04/kXN6dnZQIR7lu2B.png) | ![UftWIozH5EC1aQx](https://s2.loli.net/2025/12/04/UftWIozH5EC1aQx.png) |
-| ------------------------------------------------------------ | ------------------------------------------------------------ |
-| ![sR2nh7I1G8MmvCa](https://s2.loli.net/2025/12/04/sR2nh7I1G8MmvCa.png) | ![jlBtEUaZwfDdgqI](https://s2.loli.net/2025/12/04/jlBtEUaZwfDdgqI.png) |
+说说笔记是一套面向个人与小范围分享的笔记系统，基于 [Ech0](https://github.com/lin-snow/Ech0) 持续修改。服务端使用 Go，网页使用 Nuxt/Vue，支持 Markdown、图片与附件、评论留言、站内通知，以及 API 和 MCP 接入。
 
-## 介绍
+本仓库为 [ynby233/echo-noise](https://github.com/ynby233/echo-noise)，与上游 [rcy1314/echo-noise](https://github.com/rcy1314/echo-noise) 的镜像、更新渠道及功能进度可能不同。以下说明以本仓库当前代码为准。历史提交与验收报告用于追溯，不代表现行安装步骤。
 
-基于 [Ech0](https://github.com/lin-snow/Ech0) 初始框架魔改完善的轻量说说笔记系统及memos的开源替代品，轻博客风格可自由切换多栏布局的「说说笔记」。面向个人的高度自定义场景，并提供完善的开放 API 与 MCP 支持，适配自动化平台与一键发布/更新/删除/搜索。通过内置组件与扩展能力，它既可作为内容笔记，也可作为跨平台的发布与中转中心。
+[安装部署](#安装部署) · [配置](#配置) · [备份与恢复](#备份与恢复) · [版本更新](#版本更新) · [API指南](#api指南) · [MCP接入](#mcp接入) · [开发](#开发) · [文档导航](#文档导航)
 
-------
+## 功能概览
 
-## 特征
+- **笔记与阅读**：Markdown 编辑、代码与表格、任务列表、长文折叠、图片画廊、附件预览、搜索、标签和发布日历；可切换单栏、双栏或三栏布局。
+- **内容管理**：公开、登录可见、联系人可见及私密范围，全站置顶与个人置顶，笔记和评论回收站，按权限管理笔记、互动及附件。
+- **账号与权限**：站长、受托管理员与普通用户；后台能力分别授权，注册可关闭或审核，支持本地账号及可选的 VoceChat 联动。
+- **互动与通知**：内置评论、回复、留言、作者新笔记订阅和站内通知；配置后可启用浏览器系统推送，以及 Webhook、Telegram、企业微信、飞书等外部推送。
+- **媒体与个性化**：网易云音乐及本地音乐库、音频与视频附件、媒体嵌入、主题和组件设置、信息流阅读。外部媒体是否可播放仍取决于服务提供方与访问网络。
+- **数据与集成**：SQLite、PostgreSQL、MySQL；本地或 R2/S3 附件、云备份；普通 API Token、专用 AI 凭据、独立 MCP 模块、浏览器扩展和网页组件。
 
-- 统一的前端交互与内置组件体验，支持外部扩展、网页组件、插件
-- 可自由切换多栏风格，支持三栏、双栏、单栏等多种可控风格
-- 内置评论、回复、留言和站内通知；通用 SMTP 继续用于账号与其他独立邮件场景
-- 前端优化宫格图片、长文折叠与灯箱，流畅 Markdown 预览与宫格图卡片渲染
-- 完整开放 API 与 Token 认证，便于第三方接入与自动化工作流
-- 支持 MCP 工具，在 AI 环境中一键发布/更新/删除/搜索
-- 推送增强，支持 webhook、Telegram、企业微信、飞书 等渠道
-- 兼容自动化平台（如 n8n），可构建连续的 API 工作流
-- 多数据库支持：SQLite / PostgreSQL / MySQL
-- 支持多平台部署运行，一键docker运行及fly.io等平台运行
-- 支持R2/S3接入，数据同步自动化上传，支持云端、本地下载备份及恢复
-- 附件支持云端本地切换，后台带有附件管理器，一键管理本地及云端图片视频
-- 个性化显示驱动，内置流媒体解析渲染，支持youtube、bilibili、网易云音乐、github，支持一键生成内容卡片并带有二维码回调，支持多样化工具栏，一键置顶、私密、二次编辑等操作
+当前仅提供内置评论。旧第三方评论、互动邮件通知和邮箱密码找回不属于现行可用功能；互动邮件的封存材料见 [扩展说明](extras/comment-email-notifications/README.md)。桌面与 Android 保留构建入口，其打包、签名和更新能力应按[构建说明](docs/build_and_use.md)分别确认。
 
-## 简单上手
+## 安装部署
 
-[安装部署](#安装部署)🏷️  [开发](#开发)🏷️  [维护指南](docs/maintenance.md)🏷️  [API指南](#API指南)🏷️  [MCP接入](#MCP接入)🏷️  [Skill使用](#skill使用)🏷️  [扩展组件](#扩展组件)🏷️ [云存储使用说明](docs/r2-s3.md) 🏷️ [🟢安全防护](#🟢安全防护)
+### 选择镜像
 
-[TOC]
+| 镜像或构建目标 | 用途 |
+| --- | --- |
+| `ghcr.io/ynby233/echo-noise:edge-mcp` | 本仓库 `main` 的测试渠道；包含可选 MCP 模块，适合愿意跟进变更的用户 |
+| `ghcr.io/ynby233/echo-noise:stable-mcp` | 已发布正式 Release 对应的渠道；尚无有效正式产物时不可用 |
+| Dockerfile 的 `final` | 自行构建，不含 MCP/Node.js，默认安装发行版 FFmpeg |
+| Dockerfile 的 `final-mcp` | 自行构建，增加 Node.js 与独立 MCP 模块 |
+| Dockerfile 的 `final-ffmpeg` | 自行构建，使用源码编译的 FFmpeg，构建时间更长 |
 
-<details>
-<summary><h2>✅ 更新状况【点击查看】</h2></summary>
+`latest-mcp` 已退役；上游 `noise233/echo-noise:latest`、`last-amd64` 等标签不是本仓库的更新目标。当前服务端更新链路的实际验收范围为 **Linux/amd64、SQLite、单实例 Docker/Compose、本地附件**。源码中的其他架构与数据库支持不等于已经通过相同的自动更新验收。
 
+### Docker 快速部署
 
-## 2026更新状态
-
-- 历史版本曾加入互动邮件通知；该功能现已暂时封存，等待后续版本重新设计后再上线。多张图片内容推送到 Telegram 时仍支持相册模式发送
-- 修复了某些情况下用户直接修改资料时如密码或头像立即退出再登录失败的问题，现在只更新实际变更字段，不再把内存里的空密码覆盖回数据库，保留了明文/MD5/bcrypt密码兼容逻辑,调整了youtube视频兜底逻辑，改为文本提示➕点击链接
-- 优化浏览器扩展，增加右键一键识别当前网站信息并写入笔记
-- 重新优化后台入口及配置页面同时增加“配色”主题
-- 新增“说说笔记”独立 skill 包，支持api和mcp两种模式使用
-- 增加信息流页面，支持rss源、Echo源、说说笔记源、memos源
-- 修复自动解封逻辑并验证到期IP会从封禁列表移除
-- 使用SESSION_SECRET增强会话安全、管理员鉴权、增加“上下文+实时查库”校验，并新增 ACCESS_LOG 开关（生产默认不打印访问日志）
-- 图床按钮弹窗增加兰空图床、自定义图床
-- 优化首页卡片暗黑模式下的背景样式，增加通透度
-- 增强使用域名反代时的规则判断处理
-- 新增过期授权后后台页路由已拦截中间件
-- 调整后台页侧边栏分类、稳定运行同步逻辑
-- 重构后台页ui及调整分类布局
-- 增加默认布局的持久化设置
-- 复音乐播放器载入后台页回到前台时被初始化的问题
-- 对YouTube视频的渲染加一版“受限网络友好兜底”，封面失败时自动显示 YouTube 缩略图
-- 增加人生倒计时组件（ui 优化）
-
-
-
-## 2025更新状态
-
-- 调整修复 token 24h 过期后前端未自动退出（401/403 统一处理、状态清理、路由保护）
-
-- 定位并修复 Telegram 推送与 RSS 输出开头 `#` 丢失
-
-- 增强安全性，服务端（Gin）加一个**全局安全中间件**，专门拦截“核心文件/敏感路径扫描”同时新增两个**管理员 API**用于查看/清空这些记录,容量上限：**500 条**，超过会丢弃最早记录（避免被刷爆导致内存增长）。
-
-- **查看攻击记录**
-
-  - `GET /api/security/attacks`
-
-- **清空攻击记录**
-
-  - `DELETE /api/security/attacks`
-
-- 调整云端同步数据首次运行时的逻辑，增加了数据新旧对比及后台确认选项，只有确认后才能开启数据同步
-
-- 修复登录状态失效时仍显示已登录状态的bug
-
-- 优化内容底部图标显示、优化下载为内容图片的卡片样式，优化首页加载速度
-
-- 增加ffmpeg包内置，会增加镜像包大小，但支持媒体附件压缩
-
-- 调整首次运行程序时，不再依赖特定数据库文件，会自动生成文件
-
-- 增加附件上传可选本地或云端存储，云端支持R2/S3，附件管理可直接管理云端上传的图片
-
-- 增强所有视频媒体的显示逻辑为兼容宫格图显示，包含了嵌入式的视频
-
-- 修复作者头像和管理员头像冲突问题，首页作者头像增加后端查询
-
-- 修复普通用户登录后台可见管理员权限的系统模块问题，默认非管理员不可见
-
-- 修复自动数据同步上传云端的逻辑，保存为即时模式是默认上传一次，兼容旧数据启动
-
-- 修复R2/S3云存储接入逻辑，优化首页显示效果，优化GitHub卡片UI与图标
-
-- 后台增加版本更新模块，以docker容器为主，检测到新版本号并点击升级后，自动完成升级
-
-- 后台增加同步静态资源功能，方便本地运行及前后端运行时一键更新页面
-
-- 增加内容区作者头像鼠标悬停弹出卡片效果，包含用户个性签名及笔记数量
-
-- 增加欢迎卡片为非管理员登录用户显示“探索者”徽标
-
-- 优化首页登录状态检测，防止点击后台时界面显示已登录状态
-
-- 优化内容列表渲染细节，切换主题色无感知渲染
-
-- 增强私密功能，工具栏增加私密图标，可随时切换私密或公开状态
-
-- 优化首页组件效果，调整关于页面的布局，优化后台页配色
-
-- 网页组件增强：为分页/搜索/标签接口添加作者筛选展示支持
-
-- 统一端口为1314，前端开发、后端服务与 MCP 三者协同
-
-- 增强密码判定与兼容策略，用户首次登录成功并自动升级
-
-- 调整首页布局及组件效果
-
-- 增加点赞记数及单独的关于、留言页面
-
-- 为多视频添加宫格显示（含HTML嵌入）
-
-- 重构后台界面（包括ui重构、配色可自定义等）
-
-- 建立单独的登录注册页面，增加验证机制
-
-- 增加忘记密码邮件SMTP回复系统
-
-- 增加修改用户信息权限设置，可设置管理权限和删除用户
-
-- 增加音乐设置组件，外挂NeteaseCloudMusicApi
-
-- 内置评论代替远程评论，内置评论调用smtp回复评论
-
-- 增加数据库云存储R2/S3接入，支持备份上次、自动同步
-
-- 增加后台附件管理功能，可以管理已上传的图片和视频
-
-- MCP功能加入，支持ai一键操作搜索、发布、更新等
-
-- 实现 Markdown 连续图片宫格渲染,将图片连续写且中间保留换行即可触发宫格。插入文本或其他元素会取消宫格并按正常预览显示。
-
-- 增加内容置顶功能
-
-- 增加公告栏组件
-
-- 后台增加暗黑模式主题控制开关，前端页面整体统一主题色，优化编辑器主题色效果
-
-- 精简镜像包体积大小（无mcp包时）
-
-- 增加github卡片解析后台开关，优化pwa模式页面加载
-
-- 统一内容卡片颜色模式切换
-
-- 新增公开接口： /api/messages/search 、 /api/messages 、 /api/messages/calendar 、 /api/status 、 /api/version/check
-
-- 增加内容列表的颜色模式开关，默认暗黑模式
-
-- 修复私密发布功能
-
-- 统一站点与PWA图标为/favicon.ico
-
-- 完善前后端分离部署
-
-- 增加用户注册选项开关，可在后台页面网站配置中设置
-
-- 优化首页初始化加载逻辑和速度
-
-- 因私密发布存在逻辑冲突，暂时去除私密内容发布按钮
-
-- 优化图片灯箱效果，去除重复的灯箱代码，优化点击上一页/下一页时的加载逻辑和速度
-
-- 调整github卡片渲染时文本和头像的容器大小，优化卡片显示效果
-
-- 增加github链接的预览卡片渲染功能
-
-- 增加图床组件，支持图片上传至github 并可设置cdn 加速
-
-- 增加了视频附件的上传路由及控制图标，调整了附件图片、视频上传时的逻辑（直接添加到编辑器中）修复了登录后刷新页面无法存储登录状态的bug
-
-  此次调整的附件上传依旧为本地存储，推荐NAS 玩家使用，其它用户不推荐，会占用带宽
-
-- 修复rss指向前端地址bug，修复消息内容id指向链接不能定位的bug
-
-- 增加完善web组件，可以在任意网站内嵌入该组件
-
-- 增加浏览器扩展插件，位于chromeExpand文件夹内
-
-- 修复标签不能被点击的bug，调整点击发送按钮后提示为一个提示，增加未登陆时点发表的登陆提示
-
-- 增加一键部署无服务器平台-fly.io、zeabur、railway
-
-- 增加扩展-快捷指令及popclip一键发布内容到站点
-
-- 增加推送渠道（webhook、tg、企业微信、飞书）及实现一键推送-编辑器组件
-
-- 添加支持双格式认证
-
-  - Authorization: Bearer your_token_here
-  - Authorization: your_token_here
-
-
-
-- 增加了标签系统和图片api 路由
-
-- 增加后台系统版本检测
-
-- 增加远程数据库PostgreSQL、MySQL的连接支持，默认SQLite
-
-- 除了session 认证外增加Token认证，后台可设置更改，方便使用api发布信息
-
-- 增加搜索功能组件
-
-- 增加内容发布日历-热力图组件，默认不显示，点击日历图标后显示
-
-- 添加每条笔记条目的评论功能（属于外挂评论，因为容易集成和省事）
-
-- 增加md格式图片下Fancybox灯箱模式（包括编辑器及笔记列表中），引入medium-zoom、fancybox组件
-
-- 增加笔记内容显示高度的显示，超过700px时会折叠显示
-
-- 内容条目上方添加一键复制功能
-
-- 增加笔记内容二次编辑修改功能（管理员或原发布者权限）
-
-- 优化编辑器预览及修改内容的预览样式
-
-- 增加生成内容卡片的功能
-
-- 添加了笔记内容发布者名称的显示（时间状态右侧）
-
-- 修改删除逻辑，允许发布者删除自己的信息
-
-- 将管理员判断逻辑移到了 services 层
-
-- 调整后台界面
-
-- 优化载入速度及调整背景图片载入逻辑
-
-- 优化生成卡片图片效果
-
-- 增加后台数据配置，包括评论、底部页脚、rss设置等
-
-- 增加数据库文件的备份、上传
-
-  
-
-  </details>
-
-  
-
-------
-
-## 🚀安装部署
-
-> 💡 部署完成后访问 ip:1314 即可使用，已添加默认测试数据，登录后可删除修改
->
-> ​    默认用户名：admin
->
-> ​    默认用户密码：admin
-
-## [docker部署](https://hub.docker.com/repository/docker/noise233/echo-noise)
-
-一键部署
-
-如果你使用 `docker buildx build --push` 发布镜像（不使用 `docker-compose.yml`），
-运行时请在 `docker run` 显式添加日志与安全参数（尤其是 `SESSION_SECRET`、`ACCESS_LOG`、`--log-opt`）。
-
-无任何数据库挂载时默认：
-
-```
-docker run -d \
-  --name Ech0-Noise \
-  --platform linux/amd64 \
-  --log-opt max-size=10m \
-  --log-opt max-file=3 \
-  -p 1314:1314 \
-  -e ACCESS_LOG=false \
-  -e SESSION_SECRET=请替换为至少32位随机字符串 \
-noise233/echo-noise:latest
-```
-
-本 fork 的更新渠道和当前安装限制见下方“运行带 MCP 镜像包”；以上上游镜像示例不代表本 fork 的更新目标。
-
-有原数据库文件挂载时默认：
-
-```
-docker run -d \
-  --name Ech0-Noise \
-  --platform linux/amd64 \
-  --log-opt max-size=10m \
-  --log-opt max-file=3 \
-  -v /opt/data:/app/data \
-  -p 1314:1314 \
-  -e TZ=Asia/Shanghai \
-  -e ACCESS_LOG=false \
-  -e SESSION_SECRET=请替换为至少32位随机字符串 \
-noise233/echo-noise:latest
-```
-
---可选
-
-```
-docker run -d \
-  --name Ech0-Noise \
-  --platform linux/amd64 \
-  --restart unless-stopped \
-  --log-opt max-size=10m \
-  --log-opt max-file=3 \
-  -v /opt/data:/app/data \
-  -p 1314:1314 \
-  -e TZ=Asia/Shanghai \
-  -e HTTP_PORT=1314 \
-  -e ACCESS_LOG=false \
-  -e SESSION_SECRET=请替换为至少32位随机字符串 \
-  noise233/echo-noise:latest
-```
-
-> 说明：
->
-> 旧版“应用容器直接控制 Docker 并替换自身”的更新方式已停用，不要把宿主机 Docker socket 挂入应用容器。当前版本可以检查 `stable-mcp` / `edge-mcp` 渠道，但在外部执行器接入前不会从网页安装更新。
->
-> 可选但推荐： --restart unless-stopped 提升容器自恢复；不影响升级是否成功。
->
-> 环境变量：
-> - HTTP_PORT 指定容器内服务端口映射到宿主机。
-> - ACCESS_LOG 默认生产建议 false，避免高频请求刷满容器日志。
-> - SESSION_SECRET 强烈建议显式设置，长度建议至少 32 位（6 位可用但不安全，不建议）。
-> - 若未设置 SESSION_SECRET，程序会在启动时自动生成临时随机密钥；该方式在容器重启后会导致会话失效，不建议用于生产。
->
-> `SESSION_SECRET` 生成示例（推荐先生成再写入 `-e SESSION_SECRET=...`）：
->
-> - Linux/macOS：`SESSION_SECRET=$(head -c 32 /dev/urandom | xxd -p -c 64)`
-> - OpenSSL：`SESSION_SECRET=$(openssl rand -hex 32)`
->
-> 如果使用图形化 Docker 面板、不方便长期维护 `-e` 环境变量，可将宿主机配置目录挂载到 `/app/config`。容器会在该目录中保留 `runtime.env.example` 模板；复制为 `runtime.env` 后即可文件化维护环境变量。容器启动时会自动读取 `/app/config/runtime.env` 并导出变量，写法与 shell `.env` 一致，例如：
->
-> ```
-> TZ=Asia/Shanghai
-> ACCESS_LOG=false
-> SESSION_SECRET=请替换为至少32位随机字符串
-> # 仅在明确经过反向代理时填写代理 IP/CIDR，多个值用逗号分隔
-> # TRUSTED_PROXIES=172.18.0.1/32
-> DB_TYPE=sqlite
-> DB_PATH=/app/data/noise.db
-> NOTE_HOST=http://localhost:1314
-> MCP_ENABLED=true
-> MCP_TRANSPORT=stdio
-> ```
->
-> `TRUSTED_PROXIES` 默认留空，此时不会信任客户端提供的 `X-Forwarded-For`/`X-Real-IP`。只有确认请求经过反向代理时才填写该代理的 IP 或 CIDR；不要配置 `0.0.0.0/0` 或 `::/0`。
->
-> PWA 安装本身无需额外密钥；若要让用户在网页关闭、后台或锁屏时收到系统推送，需要配置一对长期不变的 VAPID 密钥。首次部署时在源码目录运行 `go run ./cmd/vapid-keygen`，会在终端输出公钥和私钥；若不希望私钥出现在终端记录中，可运行 `go run ./cmd/vapid-keygen -private-key-file /path/to/new-private-key`，它只显示公钥和私钥文件路径，并将私钥写入一个拒绝覆盖的权限受限新文件。公钥可写入 `WEB_PUSH_VAPID_PUBLIC_KEY`；私钥不要提交到 Git，生产环境建议写入权限受限的文件并只读挂载到容器，再用 `WEB_PUSH_VAPID_PRIVATE_KEY_FILE` 指向该文件；同时设置 `WEB_PUSH_VAPID_SUBJECT`。示例：
->
-> ```
-> WEB_PUSH_VAPID_PUBLIC_KEY=生成的公钥
-> WEB_PUSH_VAPID_PRIVATE_KEY_FILE=/run/secrets/echo-noise-vapid-private-key
-> WEB_PUSH_VAPID_SUBJECT=mailto:owner@example.com
-> ```
->
-> `WEB_PUSH_VAPID_SUBJECT` 是推送服务用于识别发送方的联系 URI，不参与通知收取，也不要求必须填写邮箱。它可以使用有效的 `mailto:` 地址，也可以直接使用站点的公开 HTTPS 地址，例如 `WEB_PUSH_VAPID_SUBJECT=https://example.com/`；不想提供邮箱时推荐使用后者。
->
-> fnOS、Portainer、群晖 Container Manager 等图形面板如果只方便填写环境变量，可以改用 `WEB_PUSH_VAPID_PRIVATE_KEY=生成的私钥`，不必挂载私钥文件。此时必须删除或留空 `WEB_PUSH_VAPID_PRIVATE_KEY_FILE`；私钥文件配置优先级更高，错误或不存在的文件路径会使推送配置失效。图形面板中的私钥应长期保留，不要截图分享，也不要在更新容器时重新生成。
->
-> 密钥必须跨容器重启保持不变；轮换公钥后，已授权的浏览器会在下次打开站点时自动重新订阅。站点必须通过 HTTPS 对外访问（本机 `localhost` 调试除外），反向代理需保留原始 `Host`，否则推送设置的同源保护会拒绝修改请求。用户需登录后在“通知”页面主动开启系统推送；点赞推送默认关闭，锁屏正文预览默认关闭。
->
-> `runtime.env` 只能固定环境变量，不能固定数据卷映射；数据卷仍需在 `docker run`、docker-compose 或图形化容器面板中配置。环境变量优先级上，`runtime.env` 会覆盖镜像默认 ENV 与面板中同名变量。`runtime.env.example` 只是模板，不会被自动加载；已有 `runtime.env` 和 `config.yaml` 不会被覆盖。若 `/app/config` 是空挂载目录，容器会在首次启动时自动写入默认 `config.yaml` 与 `runtime.env.example`。
->
-> - 时区可选： -e TZ=Asia/Shanghai
-> - 使用 -v /opt/data:/app/data \ 可挂载你原有的数据，请确保/opt/data文件夹中包含原数据库文件，如有图片请一起放在data文件夹下images 文件夹中，如果没有原数据库文件还使用该命令，进入页面会无任何可用数据显示 
-> - 使用 --platform linux/amd64 命令可选择不同架构运行部署
-
-------
-
-运行带MCP 镜像包：
-
-本 fork 的 `final-mcp` 镜像分为两个渠道：`ghcr.io/ynby233/echo-noise:stable-mcp` 对应已发布的正式 Release，`ghcr.io/ynby233/echo-noise:edge-mcp` 对应 main 的测试构建。尚无正式 Release 时 `stable-mcp` 不可用。首期渠道产物仅验收 `linux/amd64`；运行前应解析并固定实际 digest。旧 `latest-mcp` 不再发布，也不参与版本检查。
-
-默认打包模块但不监听 MCP 端口；AI 客户端通过 `docker exec -i` 按需启动 stdio 进程：
+以下命令用于 Linux/macOS Shell。数据和配置分别保存在当前目录的 `data/`、`config/`，容器删除后仍保留。执行前应确认目录位于计划长期保存的位置。
 
 ```sh
+mkdir -p data config
+export SESSION_SECRET="$(openssl rand -hex 32)"
+docker pull ghcr.io/ynby233/echo-noise:edge-mcp
+export NOISE_IMAGE="$(docker image inspect ghcr.io/ynby233/echo-noise:edge-mcp --format '{{index .RepoDigests 0}}')"
+test -n "$NOISE_IMAGE" || exit 1
+
 docker run -d \
-  --name Ech0-Noise \
+  --name echo-noise \
+  --platform linux/amd64 \
+  --restart unless-stopped \
+  --log-driver json-file \
   --log-opt max-size=10m \
   --log-opt max-file=3 \
   -p 1314:1314 \
+  --mount type=bind,source="$(pwd)/data",target=/app/data \
+  --mount type=bind,source="$(pwd)/config",target=/app/config \
+  -e TZ=Asia/Shanghai \
   -e ACCESS_LOG=false \
-  -e SESSION_SECRET=请替换为至少32位随机字符串 \
-  ghcr.io/ynby233/echo-noise:edge-mcp
+  -e DB_TYPE=sqlite \
+  -e DB_PATH=/app/data/noise.db \
+  -e SESSION_SECRET \
+  "$NOISE_IMAGE"
 ```
 
-在个人配置中创建专用 AI 凭据后，将其作为客户端进程的 `NOTE_TOKEN`，运行 `docker exec -i -e MCP_TRANSPORT=stdio -e NOTE_HOST=http://127.0.0.1:1314 -e NOTE_TOKEN Ech0-Noise node /app/mcp/server.js`。不同账号使用不同凭据。
+这里先拉取渠道镜像，再固定到本次实际 digest，避免重建时无意跟随移动标签；若未取得 digest，应先查明原因再运行。`--platform linux/amd64` 需要兼容主机；ARM 主机不应把模拟运行当作原生支持。会话密钥在现有容器重启时保持，但后续重建应复用同一值，可保存到受保护的 `config/runtime.env`；不要每次重建都重新生成。没有 OpenSSL 时，可在容器面板中填写自行生成并长期保存的随机会话密钥。
 
-HTTP 按需设置 `MCP_TRANSPORT=http`，使用标准 Streamable HTTP `/mcp`；每个请求携带客户端自己的 AI 凭据。停用模块用 `MCP_ENABLED=false`。完整配置见 [MCP 操作说明](mcp/README.md)。
+访问 `http://服务器地址:1314`。查看运行状态可使用 `docker logs echo-noise`、`docker inspect echo-noise --format '{{.State.Health.Status}}'`，以及 `GET /api/health/live`、`GET /api/health/ready` 探针。首次初始化可能需要等待 readiness 与健康检查完成。
 
-------
+**首次登录**：普通服务端在空用户库中创建 `admin` / `admin` 账号。首次登录后立即修改密码，再对外开放访问；恢复已有数据库时使用原账号。Android 嵌入模式通过首次设置页面创建站长，不使用此默认账号。
 
-## 🎉已发布Docker镜像版本
+不要将宿主机 Docker socket 挂入应用容器。若要接入网页更新，按[版本更新](#版本更新)配置外部执行器。
 
-- 稳定双架构镜像版：latest 标签镜像  同时支持linux/amd64,linux/arm64，拉取时会系统会自动选择 默认带ffmpeg
+### Compose 与其他平台
 
+- 从源码构建：根目录 [docker-compose.yml](docker-compose.yml) 是开发用配置，需要先从 `.env.prod.example` 准备 `.env` 并加入长期保存的 `SESSION_SECRET`，再运行 `docker compose up -d --build`。它默认构建 `final-mcp`；`APP_BUILD_TARGET=final` 可选择不打包 MCP。该示例只挂载 `data/`，不持久化容器内 `/app/config`；需要长期保存配置时另行增加配置目录挂载。其 `environment` 还显式设置 SQLite，使用外部数据库须同步调整 Compose，不能只改 `.env`。
+- 使用预构建镜像并接入外部更新：参考 [Compose 示例](scripts/update/compose.example.yml)及[执行器说明](scripts/update/README.md)。其中的宿主路径、配置文件、固定镜像输入须由部署者填写，不能直接当作一键安装脚本。
+- Fly.io、Railway、Zeabur 等平台需要自行适配持久卷、端口、数据库、健康检查及平台配置格式。`noise/` 中保留了旧部署素材和迁移脚本，不作为当前平台已验证的部署模板，也不保证免费额度。
 
-- 带 MCP 镜像版：`stable-mcp` 为正式渠道，`edge-mcp` 为测试渠道；首期均只验收 `linux/amd64`，默认带 ffmpeg
+## 配置
 
+### 数据与配置目录
 
-- 精简单架构镜像版：last-amd64 标签镜像  仅支持linux/amd64默认不带ffmpeg
+| 容器路径 | 内容与维护方式 |
+| --- | --- |
+| `/app/data` | 默认 SQLite 数据库及本地附件、图片、视频、音频等运行数据，必须持久化 |
+| `/app/config` | `config.yaml`、可选 `runtime.env` 等配置；空目录首次启动时会初始化默认配置和环境变量模板 |
+| 自定义附件目录 | 使用 `ATTACHMENT_BLOB_ROOT` 等自定义路径时，须另行持久化，并纳入备份与恢复计划 |
 
+Docker 入口先加载 `/app/config/runtime.env`（如果存在），再启动程序。该文件采用 Shell 的 `KEY=value` 写法，**会覆盖容器环境中同名变量**；只编辑可信配置文件。`runtime.env.example` 仅作模板，不会自动加载。直接运行 Go 二进制时不会经过此 Docker 加载步骤，应由启动环境提供变量。
 
-### docker-componse构建部署
+常用配置如下；完整模板见 [config/runtime.env.example](config/runtime.env.example) 与 [.env.prod.example](.env.prod.example)。
 
-在该目录下执行以下命令启动服务（不修改环境变量时默认使用本地数据库.db 文件）：
+| 变量 | 说明 |
+| --- | --- |
+| `HTTP_PORT` | 容器健康检查使用的端口提示，不会修改 Go 监听端口；应留空或与 `config.yaml` 的 `server.port` 一致 |
+| `DB_TYPE` | `sqlite`、`postgres` 或 `mysql` |
+| `DB_PATH` | SQLite 文件路径；容器建议 `/app/data/noise.db`，本地运行建议 `./data/noise.db` |
+| `SESSION_SECRET` | 长期保存的随机会话密钥，建议至少 32 个字符；未配置时生成临时密钥，重启会使现有会话失效 |
+| `TZ` | 时区，例如 `Asia/Shanghai` |
+| `ACCESS_LOG` | 控制服务端访问日志输出；生产示例设为 `false`，不等于关闭全部审计与安全记录 |
+| `TRUSTED_PROXIES` | 允许提供转发 IP 的代理 IP/CIDR，逗号分隔；直连时留空 |
+| `CORS_ORIGINS` | 跨域访问的明确来源列表；同域部署通常无需填写 |
+| `MCP_ENABLED` | 对已打包 MCP 的镜像启用或停用模块，默认启用 |
+| `MCP_TRANSPORT` | 默认 `stdio`，由客户端按需启动；显式设置 `http` 才启动 MCP HTTP 服务 |
 
-```shell
-docker-compose up -d
+Go 服务监听地址由 `config/config.yaml` 的 `server.host`、`server.port` 决定，默认 `0.0.0.0:1314`。只改宿主访问端口时，可将映射改为 `-p 8080:1314`；需要改容器内监听端口时，再同步修改 YAML、健康检查和反向代理配置。
+
+公网使用建议通过 HTTPS 反向代理，并保留原始 `Host`。`TRUSTED_PROXIES` 只填写实际代理，不使用任意来源网段。网页和 `/api` 使用同一域名最便于会话、附件和系统推送工作。
+
+### 外部数据库
+
+PostgreSQL/MySQL 使用 `DB_HOST`、`DB_PORT`、`DB_USER`、`DB_PASSWORD`、`DB_NAME`；SQLite 忽略这些连接字段。
+
+PostgreSQL 例子：
+
+```dotenv
+DB_TYPE=postgres
+DB_HOST=database.example.com
+DB_PORT=5432
+DB_USER=noise
+DB_PASSWORD=替换为数据库密码
+DB_NAME=noise
+DB_SSL_MODE=require
+DB_TIMEZONE=Asia/Shanghai
 ```
 
-无缓存构建
+MySQL 改为 `DB_TYPE=mysql`、相应端口（通常为 `3306`），并可设置 `DB_CHARSET=utf8mb4`。外部数据库也需要保留本地附件和配置目录。数据库服务商的备份、TLS 与恢复要求应单独核对；当前网页自动安装不支持 PostgreSQL/MySQL。
 
-```
-docker compose build --no-cache my-app && docker compose up -d 
-```
+### 账号与后台
 
+固定用户 ID 1 为站长。受托管理员按具体能力进入和操作后台模块，普通用户保留自己内容与个人配置的管理能力。“可以查看隐藏内容”不会自动授予编辑、删除或互动权限。
 
+注册受开关、验证码与审核规则控制，不是提交用户名密码就必然立即获得可登录账号。账号登录期限、普通 API Token 与专用 AI 凭据的有效性也须分别区分；到期提示与续期方式见 [API指南](#api指南) 和 [MCP接入](#mcp接入)。后台入口和权限说明见 [后台界面文档](docs/admin-ui.md)。
 
-#### 镜像构建目标说明
+普通用户与受托管理员的登录期限分别配置，默认均为 3 天；设为 0 天 0 小时表示永久，固定 ID 1 的站长不受此期限限制。普通 API Token 与 AI 凭据使用同账号共用的最近登录时间；成功网页登录或 AI `login` 可刷新该账号的 Bearer 登录期限。Cookie 会话按各自签发时间检查，不随其他客户端续期自动延长。
 
-- `final`（不带 MCP）：仅包含后端与前端静态资源，无 Node.js 运行时。
-  - 默认包含 `ffmpeg`（用于视频处理/压缩）。
-  - 手动构建示例：`docker build --target final -t ech0-noise:nomcp .`
-- `final-ffmpeg`（不带 MCP，显式标记“带 ffmpeg”）：与 `final` 内容一致，仅用于构建命令中更直观地表达“该镜像需要 ffmpeg”。
-  - 手动构建示例：`docker build --target final-ffmpeg -t ech0-noise:nomcp .`
-- `final-mcp`（带 MCP）：基于 `final`，包含 Node.js 与独立 `/app/mcp/` 模块。stdio 按需启动，HTTP 显式启用；MCP 子进程故障不影响 Go 主服务和健康检查。
-  - 手动构建示例：`docker build --target final-mcp -t ech0-noise:mcp .`
-- `docker-compose.yml` 默认使用 `final-mcp`，无需独立 MCP 镜像。`.env` 中设置 `APP_BUILD_TARGET=final` 可不打包模块；运行时 `MCP_ENABLED=false` 可停用已打包模块。
+### PWA 与系统推送
 
-## 无服务器平台+postgres免费数据库部署
+PWA 安装和系统推送是两项独立能力。系统推送需要 HTTPS（`localhost` 调试除外）、浏览器支持、用户主动授权，以及服务端长期不变的 VAPID 密钥。
 
-数据库使用 [Neon PostgreSQL](https://console.neon.tech/) 云数据库服务，其它也支持
+在源码环境生成密钥：
 
-请先前往官网https://console.neon.tech 部署好你的基础数据库
-
-以下部署文件已放入根目录下的noise文件夹内
-
-部署成功示例：
-
-![SDOAt8BsdIiCzXF](https://s2.loli.net/2025/04/12/SDOAt8BsdIiCzXF.png)
-
-<details>
-<summary><h2>✅ Fly.io部署【点击查看】</h2></summary>
-
-### Fly.io部署
-
-fly.toml
-
-```
-app = 'ech0-noise'    # 修改为你的自定义容器名
-primary_region = 'hkg'
-
-[experimental]
-  auto_rollback = true
-
-[build]
-  image = 'noise233/echo-noise'
-  dockerfile = 'Dockerfile'
-
-[env]
-  CGO_ENABLED = '1'
-  DB_HOST = 'example.aws.neon.tech' # 修改为数据库的HOST地址
-  DB_NAME = 'noise'        # 修改为数据库的名称
-  DB_PASSWORD = 'example'  # 修改为数据库的密码
-  DB_PORT = '5432'
-  DB_SSL_MODE = 'require'
-  DB_TYPE = 'postgres'
-  DB_USER = 'noise_owner'  # 修改为数据库的用户名
-  TZ = 'Asia/Shanghai'
-
-[http_service]
-  internal_port = 1314
-  force_https = true
-  auto_stop_machines = 'stop'
-  auto_start_machines = true
-  min_machines_running = 0
-
-[[services]]
-  protocol = 'tcp'
-  internal_port = 1314
-
-  [[services.ports]]
-    port = 1314
-
-[[vm]]
-  memory = '512mb'
-  cpu_kind = 'shared'
-  cpus = 1
+```sh
+go run ./cmd/vapid-keygen -private-key-file /path/to/new-private-key
 ```
 
-部署命令
-在准备好 fly.toml 文件后，你可以使用以下命令来部署你的应用到 Fly.io：
+该命令拒绝覆盖已有文件，只显示公钥及私钥文件路径。将私钥只读挂载到容器后配置：
 
-#### 初始化 Fly.io 应用（如果尚未初始化）
-`fly launch`
-
-#### 部署应用
-`fly deploy`
-
-确保你已经安装并配置好了 Fly.io 的 CLI 工具，并且已经登录到你的 Fly.io 账号。如果你还没有安装 Fly.io CLI，可以通过以下命令安装：
-
-```
-curl -L https://fly.io/install.sh | sh
+```dotenv
+WEB_PUSH_VAPID_PUBLIC_KEY=生成的公钥
+WEB_PUSH_VAPID_PRIVATE_KEY_FILE=/run/secrets/echo-noise-vapid-private-key
+WEB_PUSH_VAPID_SUBJECT=https://note.example.com/
 ```
 
-安装完成后，使用 `fly auth login` 登录到你的 Fly.io 账号。
+也可使用 `WEB_PUSH_VAPID_SUBJECT=mailto:owner@example.com`。图形面板不便挂载文件时，可设置 `WEB_PUSH_VAPID_PRIVATE_KEY`，此时清除 `WEB_PUSH_VAPID_PRIVATE_KEY_FILE`；文件配置优先，错误文件路径会使配置失效。密钥不要提交到 Git，也不要在每次容器更新时重新生成。
 
-</details>
+用户登录后在通知页面开启系统推送；点赞推送和锁屏正文预览默认关闭。作者订阅、站内通知、系统推送及外部推送分别按配置和权限生效。
 
-<details>
-<summary><h2>✅ Zeabur部署【点击查看】</h2></summary>
-新版zeabur部署
+## 备份与恢复
 
-直接输入镜像包名称及端口号即可
+### SQLite
 
-![aZU81x6DXFCbQcO](https://s2.loli.net/2025/11/25/aZU81x6DXFCbQcO.jpg)
+优先使用后台的备份功能。下载结果是 **ZIP**，其中的 `database.db` 为一致性快照，归档还会包含实际存在的本地附件 Blob、图片、视频、音频和通用附件目录。数据库运行文件可能叫 `noise.db`，不需要把下载包内部文件改成同名。
 
-![RhTzuBgmpt3diVQ](https://s2.loli.net/2025/11/25/RhTzuBgmpt3diVQ.jpg)![qyOCxBEon8AmGJ4](https://s2.loli.net/2025/11/25/qyOCxBEon8AmGJ4.jpg)
+本地上传与云端下载恢复都先校验 ZIP，再暂存为待恢复包。HTTP `202` 表示已接受、**尚未应用**；需重启服务，启动流程会在数据库连接和后台任务启动前应用恢复。启动或恢复失败时保留失败信息与回退材料。旧的仅含数据库归档可能可以读取，但会显示附件不完整警告，不能作为完整迁移备份。
 
-zeabur.toml
+不要在服务运行时直接覆盖 SQLite 主文件，也不要只复制主文件而遗漏 WAL 中尚未合并的数据。迁移时还需保留独立配置、密钥及外置数据。普通后台 ZIP 不等于整机或所有配置的备份；外部执行器的停机备份另含受保护配置，详见[执行器说明](scripts/update/README.md)。
 
-```
-app = "ech0-noise"
+### PostgreSQL、MySQL 与对象存储
 
-[build]
-  dockerfile = "Dockerfile"
-  image = "noise233/echo-noise"
+外部数据库备份恢复依赖对应数据库命令行工具、连接参数和权限，不能仅凭程序支持连接就认为当前镜像具备完整导入导出环境。优先采用数据库服务商或管理员验证过的备份方案。
 
-[env]
-  DB_TYPE = "postgres"
-  DB_HOST = 'example.aws.neon.tech' # 修改为数据库的HOST地址
-  DB_PORT = "5432"
-  DB_USER = 'noise_owner'  # 修改为数据库的用户名
-  DB_PASSWORD = 'example'  # 修改为数据库的密码
-  DB_NAME = 'noise'        # 修改为数据库的名称
-  DB_SSL_MODE = "require"
-  CGO_ENABLED = "1"
-  TZ = "Asia/Shanghai"
+R2/S3 用于对象存储与 ZIP 备份，不是在线数据库。附件存储与数据库云备份分别配置。SQLite 的即时、定时及“立即同步”会比较本地与云端状态，可能上传、无变化或下载并暂存恢复，不是单向上传按钮；首次启用应先确认已有云端数据。非 SQLite 自动同步不导出数据库，不能作为数据库备份。云端附件对象仍需另行保留，数据库备份不能代替其对象备份。配置、冲突处理和实际同步方向见 [R2/S3 使用说明](docs/r2-s3.md)。
 
-[http_service]
-  internal_port = 1314
-  force_https = true
+## 版本更新
 
-[[services]]
-  protocol = "tcp"
-  internal_port = 1314
+后台“版本与更新”分别显示正式版和测试版。检查渠道、切换跟随偏好或构建新镜像都不会自动安装；纯文档提交也可能不产生新镜像。
 
-  [[services.ports]]
-    port = 1314
+网页安装需要站长配置**应用容器之外的更新执行器**，由它领取固定任务、下载目标、停机备份、替换容器并核验新服务。执行器、配置、凭据、恢复记录和备份必须持久化。安装前还会核对近期部署检查、同一实例、平台、数据库和数据保护条件。
 
-[[vm]]
-  memory = "512mb"
-  cpu_kind = "shared"
-  cpus = 1
-```
+目前的通用入口为 [scripts/update/README.md](scripts/update/README.md)，支持登记的 Docker 容器或 Compose 服务，可接部署者选择的调度工具与受认证唤醒钩子。开源仓库不再提供 Dagu 专用镜像或任务模板；旧 Dagu/NAS 报告只保留历史证据。
 
-#### 部署命令：
+- 无执行器或部署检查不满足时，网页可以检查版本，但不能安装。
+- 目标必须满足提交关系和渠道规则；较旧渠道只改变跟随偏好，不自动降级。
+- 更新成功后，Docker 模式只清理本任务已确认停止的旧容器，保留备份、配置及旧镜像。
+- 新版已经启动、可能迁移数据或结果未知时，不自动还原旧数据库；`needs_attention` 须先核对并人工结案。
+- 应用镜像更新不会自动替换宿主执行器脚本。脚本也需按说明维护。
 
-```
-zeabur deploy
-```
-
-</details>
-
-<details>
-<summary><h2>✅ Railway部署【点击查看】</h2></summary>
-
-railway.toml
-
-```
-app = "ech0-noise"
-
-[build]
-  dockerfile = "Dockerfile"
-  image = "noise233/echo-noise"
-
-[env]
-  DB_TYPE = "postgres"
-  DB_HOST = 'example.aws.neon.tech' # 修改为数据库的HOST地址
-  DB_PORT = "5432"
-  DB_USER = 'noise_owner'  # 修改为数据库的用户名
-  DB_PASSWORD = 'example'  # 修改为数据库的密码
-  DB_NAME = 'noise'        # 修改为数据库的名称
-  DB_SSL_MODE = "require"
-  CGO_ENABLED = "1"
-  TZ = "Asia/Shanghai"
-
-[service]
-  internal_port = 1314
-  protocol = "tcp"
-
-[service.ports]
-  port = 1314
-
-[vm]
-  memory = "512mb"
-  cpu_kind = "shared"
-  cpus = 1
-
-```
-
-#### 部署命令：
-
-```
-railway up
-```
-
-![预览](https://s2.loli.net/2025/03/25/7gyEspef1ZhOtrH.png)
-
-</details>
-
-注意⚠️
-
-如果你是直接在平台拉取项目部署而不是通过命令部署，你需要拷贝fork本项目并将fly.toml、railway.toml、zeabur.toml文件放入根目录下才能一键部署
-
-## 数据库连接
-
-本地数据库直接docker部署即可
-
-远程数据库服务则可以通过环境变量连接
-
-连接远程 PostgreSQL：
-```bash
-docker run -d \
-  --name Ech0-Noise \
-  --platform linux/amd64 \
-  -p 1314:1314 \
-  -e DB_TYPE=postgres \
-  -e DB_HOST=your.postgres.host \
-  -e DB_PORT=5432 \
-  -e DB_USER=your_username \
-  -e DB_PASSWORD=your_password \
-  -e DB_NAME=noise \
-  -v /opt/data/images:/app/data/images \
-  noise233/echo-noise
-```
-
-连接远程 MySQL：
-```bash
-docker run -d \
-  --name Ech0-Noise \
-  --platform linux/amd64 \
-  -p 1314:1314 \
-  -e DB_TYPE=mysql \
-  -e DB_HOST=your.mysql.host \
-  -e DB_PORT=3306 \
-  -e DB_USER=your_username \
-  -e DB_PASSWORD=your_password \
-  -e DB_NAME=noise \
-  -v /opt/data/images:/app/data/images \
-  noise233/echo-noise
-```
-
-注意事项：
-1. 确保远程数据库允许外部连接
-2. 检查防火墙设置
-3. 使用正确的数据库连接信息
-4. 建议使用加密连接
-5. 注意数据库的字符集设置
-
-对于 [Neon PostgreSQL](https://console.neon.tech/) 这样的云数据库服务，需要使用特定的连接参数。以下是连接命令：
-
-```bash
-docker run -d \
-  --name Ech0-Noise \
-  --platform linux/amd64 \
-  -p 1314:1314 \
-  -e DB_TYPE=postgres \
-  -e DB_HOST=your.host \
-  -e DB_PORT=5432 \
-  -e DB_USER=user_owner \
-  -e DB_PASSWORD=password \
-  -e DB_NAME=yourname \
-  -e DB_SSL_MODE=require \
-  -v /opt/data/images:/app/data/images \
-  noise233/echo-noise
-```
-
-注意事项：
-1. 添加了 `DB_SSL_MODE=require` 环境变量，因为 Neon 要求 SSL 连接
-2. 使用了连接 URL 中提供的主机名、用户名、密码和数据库名
-4. 保持图片目录的挂载
-
-## 数据的备份恢复
-
-对于所有数据库类型（SQLite/PostgreSQL/MySQL），点击后台数据库下载按钮后，都会先备份数据库文件
-
-- 然后会将包含数据库备份和图片打包成 zip 文件
-- zip 文件中会包含：
-  - 数据库备份文件（.db/.sql）
-  - images 目录下的所有图片
-
-```plaintext
-备份过程：
-本地 -> 执行备份命令 -> 生成备份文件 -> 打包下载
-
-恢复过程：
-上传备份文件 -> 解压缩 -> 执行恢复命令 -> 导入到云数据库
-```
-
-恢复要求：
-
-- SQLite本地数据库备份和上传时默认使用的文件名是一致为noise.db
-- 非本地数据库PostgreSQL/MySQL请命名为database.sql并放入database.zip来恢复
-- 如果备份时zip中有图片文件夹则同时会恢复 images 目录下的所有图片
-
-⚠️ ：因PostgreSQL/MySQL云服务会有SSL连接、兼容版本号、数据表格式等要求，后台一键备份恢复不一定能满足你需要连接的远程数据库，请尽量前往服务商处下载备份
-
-### 云存储功能概览
-
-- 云存储自动同步开关与模式已加入“云存储接入（R2/S3）”模块，包含：
-  - 自动同步开关： 自动同步至云端
-  - 模式选择： 即时 或 定时
-  - 定时间隔：分钟数
-  - 状态显示： 上次同步时间
-  - 操作按钮： 立即同步
-  - 位置： web/components/index/StatusPanel.vue:695-715 ；数据加载与保存在 web/components/index/StatusPanel.vue:2663-2690、2699-2706、2681-2694 中
-    后端实现
-- 站点配置新增字段：
-  - StorageAutoSyncEnabled 、 StorageSyncMode 、 StorageSyncIntervalMinute 、 StorageLastSyncTime
-  - 位置： internal/models/models.go:120-144 附近
-- 配置读写支持上述字段：
-  - 返回前端：`internal/services/frontend_config_read_service.go` 的 `storageConfig` 增加了 `autoSyncEnabled`、`syncMode`、`syncIntervalMinute`、`lastSyncTime`
-  - 保存更新：`internal/services/frontend_config_write_service.go` 完成解析与赋值
-- 同步管理器：
-  - 包路径： internal/syncmanager/auto_sync.go:1-135
-  - 即时模式：防抖 15 秒触发云端备份上传
-  - 定时模式：按 StorageSyncIntervalMinute 启动 goroutine 周期任务
-  - 同步逻辑：打包 backup.zip （含 database.db 、 images/ 、 video/ ），用后端预签名上传至 R2/S3，并记录 StorageLastSyncTime
-  - 配置变更后自动重新应用：`internal/services/frontend_config_write_service.go` 调用 `syncmanager.Configure`
-- 立即同步接口与路由：
-  - 控制器： internal/controllers/backup.go:379-401 新增 HandleBackupSyncNow
-  - 路由： internal/routers/routers.go:156-158 增加 POST /api/backup/storage/sync-now
-- 即时模式触发点：
-  - 发布与更新消息后触发同步防抖： `internal/controllers/message_mutation_controller.go`
-- 前端操作：
-  - 打开“云存储接入（R2/S3）”
-  - 启用“云存储接入”开关并填写 provider/endpoint/region/bucket/accessKey/secretKey/publicBaseURL
-  - 开启“自动同步至云端”，选择模式：
-    - 即时：对消息发布/更新自动触发，防抖合并 15 秒内的变更
-    - 定时：设置间隔分钟数，后台按间隔自动备份上传
-  - 随时点击“立即同步”执行一次上传；“上次同步”显示最近成功时间
-- 后端约束：
-  - R2 强制路径风格；S3 可选路径风格： web/components/index/StatusPanel.vue:682-685、2699-2706
-  - 自动同步依赖云存储启用与必要字段完整，否则不会启动
-    注意事项
-- R2/S3 是对象存储，仅用于备份与资源存储；不适合作为在线事务数据库。若希望“数据在云端即时可读写”，建议把 DB_TYPE 切换至云数据库（Postgres/MySQL）。
-
-## 开发
-
-<details>
-<summary>✅ 本地前后端分离【点击展开】</summary>
-
-本地启动示例
-
-- 修改为本地开发配置：
-  - config/config.yaml:2-8 设置为：
-    - port: 1314
-    - host: "127.0.0.1"
-    - database.path: "./data/noise.db"
-
-快速指引
-
-1. 生成前端静态文件
-
-```
-cd web
-npm run generate
-```
-
-生成产物输出到 `web/.output/public`。
-
-1. 同步静态文件到后端 `./public`
-
-```
-rsync -a --delete .output/public/ ../public/
-# 或者
-cp -r .output/public ../
-```
-
-后端静态服务读取 `./public` 目录，见 `internal/routers/routers.go:62`。
-
-1. 一键执行
-
-```
-bash scripts/build.sh
-```
-
-完成后访问 `http://localhost:1314/`，接口位于同域的 `/api/*`。
-
-前后端详细说明
-
-- 同域部署（推荐）
-  - 构建前端：在仓库根目录执行 `bash scripts/build.sh`
-  - 构建产物输出到根目录 `./public`，后端静态服务读取该目录，映射见 `internal/routers/routers.go:62`
-  - 构建后端：`go build -o server ./cmd/server/main.go`
-  - 启动后端：`./server`
-  - 服务地址由配置决定：`config/config.yaml:1-4`（`host`、`port`、`mode`），后端监听设置见 `cmd/server/main.go:70-76`
-  - 验证：
-    - 页面：`curl http://localhost:1314/ | head -n 20` 应返回 HTML
-    - 接口：`curl http://localhost:1314/api/status`、`curl http://localhost:1314/api/messages/page`
-    - 前端脚本内的 `baseApi` 为 `"/api"`：可在首页 HTML 中看到 `window.__NUXT__.config.public.baseApi`
-- 真正前后端分离（跨域/反向代理）
-  - 前端：按上文生成的 `./public` 部署到前端域（例如 `https://note.example.com`）或由反向代理托管
-  - 后端：在独立主机或容器构建并运行 `./server`，提供接口域（例如 `https://api.example.com`）
-  - 后端跨域：设置环境变量 `CORS_ORIGINS="https://note.example.com"`（支持逗号分隔多个来源），来源解析与应用见 `internal/routers/routers.go:37-55`
-  - 前端与接口对接：保持前端 `baseApi` 为 `"/api"`，通过前端服务器或反向代理将 `"/api"` 路径转发到后端接口域
-
-说明
-
-- 生产静态模式访问地址：`http://localhost:1314/`
-- 前端静态资源目录：`./public`（构建产物）
-- 后端接口：同域下的 `/api/*`，例如：
-  - 配置：`/api/frontend/config`
-  - 列表分页：`/api/messages/page`
-  - 状态：`/api/status`
-
-`.env.prod.example`模版环境变量说明
-
-- 当 `DB_TYPE=sqlite` 时，后端只使用 `DB_PATH` 指向 `noise.db` 文件；环境变量中的 `DB_USER`、`DB_PASSWORD`、`DB_HOST` 等不会用于连接。
-- `DB_USER` / `DB_PASSWORD` 等仅在 `postgres` 或 `mysql` 作为数据库类型时用于构建连接串。
-
-- 基础
-  - `LOG_LEVEL` 控制日志级别
-  - `TZ` 设置时区
-- 数据库
-  - `DB_TYPE` 支持 `sqlite`、`postgres`、`mysql`
-  - `DB_PATH` 仅在 `sqlite` 时生效；仓库默认配置文件为 `/app/data/noise.db`（`config/config.yaml:6-9`），本地二进制运行建议设置为 `./data/noise.db`
-  - `DB_HOST`、`DB_PORT`、`DB_USER`、`DB_PASSWORD`、`DB_NAME` 对应远程数据库连接
-  - `DB_SSL_MODE`（PostgreSQL）：常用 `disable` 或云服务要求的 `require`
-  - `DB_TIMEZONE`（PostgreSQL）：建议 `Asia/Shanghai`
-  - `DB_CHARSET`（MySQL）：建议 `utf8mb4`
-- 跨域
-  - `CORS_ORIGINS` 留空表示使用默认同源；如需分离前后端或反向代理到不同域，设置逗号分隔来源列表，例如 `http://note.example.com`
-
-### 后端依赖
-
-- 运行依赖升级：`go get -u ./...`
-- 整理模块文件：`go mod tidy`
-
-</details>
+不接入执行器时，可在备份并确认数据兼容后，由管理员手动拉取新镜像、固定 digest 并按原挂载和配置重建容器。
 
 ## API指南
 
-先到后台获取api token,然后可以参考下面的命令运行或使用其它服务（记得将https://your.localhost.com 更改为你自己的服务地址）
+API 基础路径为站点下的 `/api`。读取结果遵守内容可见范围，管理动作遵守账号能力；公开接口不是绕过身份检查的入口。
 
-```
-# 发送纯文本信息
-curl -X POST 'https://your.localhost.com/api/token/messages' \
--H 'Content-Type: application/json' \
--H 'Authorization: Bearer c721249bd66e1133fba430ea9e3c32f1' \
--d '{
-  "content": "测试信息",
-  "type": "text"
-}'
-```
+### 认证与响应
 
-```
-# 方式1：使用 Markdown 语法发送文本
-curl -X POST 'https://your.localhost.com/api/token/messages' \
--H 'Content-Type: application/json' \
--H 'Authorization: c721249bd66e1133fba430ea9e3c32f1' \
--d '{
-  "content": "# 标题\n这是一段文字\n![图片描述](https://example.com/image.jpg)",
-  "type": "text"
-}'
+| 使用场景 | 认证方式 |
+| --- | --- |
+| 网页及会话接口 | `POST /api/login` 登录后保存 Cookie，后续请求发送该 Cookie |
+| 普通脚本和浏览器扩展 | 在个人配置取得普通 API Token，通过 `Authorization: Bearer <API_TOKEN>` 调用相应接口 |
+| AI/MCP 客户端 | 在有效网页会话中创建专用 AI 凭据；MCP 只接受这种凭据 |
 
-# 方式2：使用 type: image 发送图片消息
-curl -X POST 'https://your.localhost.com/api/token/messages' \
--H 'Content-Type: application/json' \
--H 'Authorization: c721249bd66e1133fba430ea9e3c32f1' \
--d '{
-  "content": "图片描述文字",
-  "type": "image",
-  "image": "https://example.com/image.jpg"
-}'
+`/api/token/...` 为明确的 Token 写入路由，不应假设普通 Bearer 可以替代每一个会话接口。AI 凭据的权限与账号一致，不会额外获得管理权限。创建与撤销 AI 凭据需要网页会话。
+
+常见 JSON 响应使用 `code`、`msg`、`data`，`code: 1` 表示业务成功；部分业务失败仍使用 HTTP `200`，因此不能只检查 HTTP 状态。备份下载等接口返回文件，恢复暂存使用 `202`。
+
+账号登录期限过期后，受保护请求及携带过期身份的公开读取返回 HTTP `401`、`error: "login_expired"` 和续期提示。重新登录站点，或按 AI 登录流程续期后重试。无效或撤销凭据使用 `invalid_credentials`；重新登录不会恢复已撤销凭据。未携带身份的访客仍可读取公开内容。
+
+### 常用读取
+
+```sh
+curl 'http://localhost:1314/api/status'
+curl 'http://localhost:1314/api/messages/page?page=1&pageSize=10'
+curl --get 'http://localhost:1314/api/messages/search' \
+  --data-urlencode 'keyword=笔记' \
+  --data-urlencode 'page=1' \
+  --data-urlencode 'pageSize=10'
 ```
 
-如果你想使用session 认证方式
+| 接口 | 用途 |
+| --- | --- |
+| `GET /api/frontend/config` | 当前访问者可读取的前端配置 |
+| `GET /api/messages/page` | 分页列表，支持 `page`、`pageSize` 等参数 |
+| `GET /api/messages/:id` | 指定笔记详情 |
+| `GET /api/messages/search?keyword=...` | 搜索当前身份可见的笔记 |
+| `GET /api/messages/calendar` | 发布日历，可按 `authorId` 筛选 |
+| `GET /rss` | RSS 输出；站点未启用时返回不可用状态 |
 
-```
-curl -v -X POST 'https://your.localhost.com/api/messages' \
--H 'Content-Type: application/json' \
---cookie "your_session_cookie" \
--d '{
-  "content": "测试信息",
-  "type": "text"
-}'
-```
+### 发布与更新
 
-对于图文混合消息，可以这样发送：
+以下命令中的 `NOTE_API_TOKEN` 由调用环境提供，替换为自己的普通 API Token，不把真实值写入共享脚本。部署到公网后使用站点的 HTTPS 地址。
 
-```bash
-curl -X POST 'https://your.localhost.com/api/token/messages' \
--H 'Content-Type: application/json' \
--H 'Authorization: c721249bd66e1133fba430ea9e3c32f1' \
--d '{
-  "content": "# 这是标题\n\n这是一段文字说明\n\n![图片描述](https://example.com/image.jpg)\n\n继续写文字内容",
-  "type": "text"
-}'
+```sh
+curl -X POST 'https://note.example.com/api/token/messages' \
+  -H "Authorization: Bearer $NOTE_API_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"content":"# 一条笔记\n\n正文与 ![图片](https://example.com/image.jpg)","visibility":"public","notify":false}'
 ```
 
-```
-或者使用 multipart 类型：
+`content` 为 Markdown；可见范围使用 `public`、`users`、`contacts` 或 `private`，分别表示公开、登录用户、VoceChat 联系人和私密，并受站点规则约束。`notify:false` 表示不主动触发外部渠道推送。图片可写入 Markdown 或通过 `image_url` 保存；多图与视频应写入正文，例如 `[video](https://example.com/video.mp4)`。`video_url` 当前仅参与发布通知处理，不会单独保存为笔记视频字段。
 
-curl -X POST 'https://your.localhost.com/api/token/messages' \
--H 'Content-Type: application/json' \
--H 'Authorization: c721249bd66e1133fba430ea9e3c32f1' \
--d '{
-  "content": "# 这是标题\n\n这是一段文字说明",
-  "type": "multipart",
-  "image": "https://example.com/image.jpg"
-}
+```sh
+curl -X PUT 'https://note.example.com/api/token/messages/123' \
+  -H "Authorization: Bearer $NOTE_API_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"content":"更新后的正文"}'
 ```
 
-<details>
-<summary><h2>✅ API详情【点击查看】</h2></summary>
+删除使用 `DELETE /api/token/messages/:id`，将明确目标移入回收站，不是立即永久删除。全站置顶与个人置顶分别为 `PUT /api/token/messages/:id/pin/global` 和 `/pin/personal`，具体权限与参数见[集成使用说明](skill/USAGE.md)。
 
-# API 文档（待增加）
+### 会话、上传与备份
 
-## 公共接口
+登录时保存 Cookie：
 
-### 1. 获取前端配置
-- **路径**: `/api/frontend/config`
-- **方法**: GET
-- **描述**: 获取前端配置信息
-- **示例请求**:
-```bash
-curl http://localhost:8080/api/frontend/config
+```sh
+curl -c cookies.txt -X POST 'https://note.example.com/api/login' \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"你的用户名","password":"你的密码"}'
+curl -b cookies.txt 'https://note.example.com/api/user'
 ```
 
-### 2. 用户登录
-- **路径**: `/api/login`
-- **方法**: POST
-- **描述**: 用户登录接口
-- **请求体**:
-```json
-{
-    "username": "admin",
-    "password": "password"
-}
-```
-- **示例请求**:
-```bash
-curl -X POST http://localhost:8080/api/login \
-     -H "Content-Type: application/json" \
-     -d '{"username":"admin","password":"password"}'
+示例中的密码仅为占位；真实自动化应通过受保护的输入或配置传递凭据。Cookie 文件包含登录状态，需妥善保存。注册还需验证码，并受审核规则控制，建议先使用网页流程。
+
+使用有相应权限的会话备份或恢复：
+
+```sh
+curl -b cookies.txt 'https://note.example.com/api/backup/download' --output backup.zip
+curl -b cookies.txt -X POST 'https://note.example.com/api/backup/restore' -F 'database=@backup.zip'
 ```
 
-### 3. 用户注册
-- **路径**: `/api/register`
-- **方法**: POST
-- **描述**: 用户注册接口
-- **请求体**:
-```json
-{
-    "username": "newuser",
-    "password": "password",
-    "email": "user@example.com"
-}
-```
-- **示例请求**:
-```bash
-curl -X POST http://localhost:8080/api/register \
-     -H "Content-Type: application/json" \
-     -d '{"username":"newuser","password":"password","email":"user@example.com"}'
-```
-
-### 4. 获取系统状态
-- **路径**: `/api/status`
-- **方法**: GET
-- **描述**: 获取系统运行状态
-- **示例请求**:
-```bash
-curl http://localhost:8080/api/status
-```
-
-### 5. 消息相关公共接口
-
-#### 5.1 获取所有消息
-- **路径**: `/api/messages`
-- **方法**: GET
-- **描述**: 获取所有公开消息
-- **示例请求**:
-```bash
-curl http://localhost:8080/api/messages
-```
-
-#### 5.2 获取单条消息
-- **路径**: `/api/messages/:id`
-- **方法**: GET
-- **描述**: 获取指定ID的消息
-- **示例请求**:
-```bash
-curl http://localhost:8080/api/messages/1
-```
-
-#### 5.3 分页获取消息
-- **路径**: `/api/messages/page`
-- **方法**: POST或GET
-- **描述**: 分页获取消息列表
-- **请求体**:
-```json
-{
-    "page": 1,
-    "pageSize": 10
-}
-```
-- **示例请求**:
-```bash
-curl -X POST http://localhost:8080/api/messages/page \
-     -H "Content-Type: application/json" \
-     -d '{"page":1,"pageSize":10}'
-```
-
-#### 5.4 获取消息日历数据
-- **路径**: `/api/messages/calendar`
-- **方法**: GET
-- **描述**: 获取消息发布热力图数据
-- **示例请求**:
-```bash
-curl http://localhost:8080/api/messages/calendar
-```
-
-#### 5.5 搜索消息
-- **路径**: `/api/messages/search`
-- **方法**: GET
-- **参数**: 
-  - keyword: 搜索关键词
-  - page: 页码
-  - pageSize: 每页数量
-- **示例请求**:
-```bash
-curl "http://localhost:8080/api/messages/search?keyword=测试&page=1&pageSize=10"
-```
-
-### 6. RSS 相关接口
-
-#### 6.1 获取 RSS 订阅
-- **路径**: `/rss`
-- **方法**: GET
-- **描述**: 获取 RSS 订阅内容
-- **示例请求**:
-```bash
-curl http://localhost:1314/rss
-```
-
-## 需要认证的接口
-
-### 1. 消息操作接口
-
-#### 1.1 发布消息
-- **路径**: `/api/messages`
-- **方法**: POST
-- **描述**: 发布新消息
-- **请求体**:
-```json
-{
-    "content": "消息内容",
-    "private": false,
-    "imageURL": ""
-}
-```
-- **示例请求**:
-```bash
-curl -X POST http://localhost:8080/api/messages \
-     -H "Content-Type: application/json" \
-     -H "Cookie: session=xxx" \
-     -d '{"content":"测试消息","private":false}'
-```
-
-#### 1.2 更新消息
-- **路径**: `/api/messages/:id`
-- **方法**: PUT
-- **描述**: 更新指定消息
-- **请求体**:
-```json
-{
-    "content": "更新后的内容"
-}
-```
-- **示例请求**:
-```bash
-curl -X PUT http://localhost:8080/api/messages/1 \
-     -H "Content-Type: application/json" \
-     -H "Cookie: session=xxx" \
-     -d '{"content":"更新后的内容"}'
-```
-
-#### 1.3 删除消息
-- **路径**: `/api/messages/:id`
-- **方法**: DELETE
-- **描述**: 删除指定消息
-- **示例请求**:
-```bash
-curl -X DELETE http://localhost:8080/api/messages/1 \
-     -H "Cookie: session=xxx"
-```
-
-### 2. 用户相关接口
-
-#### 2.1 获取用户信息
-- **路径**: `/api/user`
-- **方法**: GET
-- **描述**: 获取当前登录用户信息
-- **示例请求**:
-```bash
-curl http://localhost:8080/api/user \
-     -H "Cookie: session=xxx"
-```
-
-#### 2.2 修改密码
-- **路径**: `/api/user/change_password`
-- **方法**: PUT
-- **请求体**:
-```json
-{
-    "oldPassword": "旧密码",
-    "newPassword": "新密码"
-}
-```
-- **示例请求**:
-```bash
-curl -X PUT http://localhost:8080/api/user/change_password \
-     -H "Content-Type: application/json" \
-     -H "Cookie: session=xxx" \
-     -d '{"oldPassword":"old","newPassword":"new"}'
-```
-
-#### 2.3 更新用户信息
-- **路径**: `/api/user/update`
-- **方法**: PUT
-- **示例请求**:
-```bash
-curl -X PUT http://localhost:8080/api/user/update \
-     -H "Content-Type: application/json" \
-     -H "Cookie: session=xxx" \
-     -d '{"username":"newname"}'
-```
-
-#### 2.4 退出登录
-- **路径**: `/api/user/logout`
-- **方法**: POST
-- **示例请求**:
-```bash
-curl -X POST http://localhost:8080/api/user/logout \
-     -H "Cookie: session=xxx"
-```
-
-### 3. Token 相关接口
-
-#### 3.1 获取用户 Token
-- **路径**: `/api/user/token`
-- **方法**: GET
-- **示例请求**:
-```bash
-curl http://localhost:8080/api/user/token \
-     -H "Cookie: session=xxx"
-```
-
-#### 3.2 重新生成 Token
-- **路径**: `/api/user/token/regenerate`
-- **方法**: POST
-- **示例请求**:
-```bash
-curl -X POST http://localhost:8080/api/user/token/regenerate \
-     -H "Cookie: session=xxx"
-```
-
-### 4. 系统设置接口
-
-#### 4.1 更新系统设置
-- **路径**: `/api/settings`
-- **方法**: PUT
-- **请求体**:
-```json
-{
-    "allowRegistration": true,
-    "frontendSettings": {
-        "siteTitle": "网站标题",
-        "subtitleText": "副标题",
-        "avatarURL": "头像URL",
-        "username": "显示用户名",
-        "description": "描述",
-        "backgrounds": ["背景图URL"],
-        "cardFooterTitle": "页脚标题",
-        "cardFooterLink": "页脚链接",
-        "pageFooterHTML": "页脚HTML",
-        "rssTitle": "RSS标题",
-        "rssDescription": "RSS描述",
-        "rssAuthorName": "RSS作者",
-        "rssFaviconURL": "RSS图标URL"
-    }
-}
-```
-- **示例请求**:
-```bash
-curl -X PUT http://localhost:8080/api/settings \
-     -H "Content-Type: application/json" \
-     -H "Cookie: session=xxx" \
-     -d '{"allowRegistration":true,"frontendSettings":{"siteTitle":"我的网站"}}'
-```
-
-评论系统说明：项目仅支持内置评论，不加载也不提供任何第三方评论服务。评论、回复、留言和站内通知继续可用；原“互动邮件通知”配置与投递功能暂时封存，不进入服务端、桌面端或移动端构建，后期完成安全模板、独立权限、异步投递和测试后再上线。封存参考代码见 [`extras/comment-email-notifications/`](extras/comment-email-notifications/README.md)。
-
-### 5. 备份相关接口
-
-#### 5.1 下载备份
-- **路径**: `/api/backup/download`
-- **方法**: GET
-- **示例请求**:
-```bash
-curl http://localhost:8080/api/backup/download \
-     -H "Cookie: session=xxx" \
-     --output backup.sql
-```
-
-#### 5.2 恢复备份
-- **路径**: `/api/backup/restore`
-- **方法**: POST
-- **描述**: 从备份文件恢复数据
-- **示例请求**:
-```bash
-curl -X POST http://localhost:8080/api/backup/restore \
-     -H "Cookie: session=xxx" \
-     -F "file=@backup.sql"
-```
-
-### 6. 图片上传接口
-
-#### 6.1 上传图片
-- **路径**: `/api/images/upload`
-- **方法**: POST
-- **描述**: 上传图片文件
-- **示例请求**:
-```bash
-curl -X POST http://localhost:8080/api/images/upload \
-     -H "Cookie: session=xxx" \
-     -F "file=@image.jpg"
-```
-
-### 7.推送配置路由使用说明
-
-#### 获取推送配置
-
-- **路径**: `/api/notify/config`  
-- **方法**: GET  
-- **描述**: 获取当前推送渠道配置  
-- **示例请求**:
-
-```bash
-curl -X GET http://localhost:8080/api/notify/config \
-     -H "Cookie: session=xxx"
-```
-
-#### 保存推送配置
-
-- **路径**: `/api/notify/config`  
-- **方法**: PUT  
-- **描述**: 更新推送渠道配置  
-- **请求体示例**:
-
-```json
-{
-  "webhookEnabled": true,
-  "webhookURL": "https://webhook.example.com",
-  "telegramEnabled": true,
-  "telegramToken": "bot123:ABC",
-  "telegramChatID": "-100123456",
-  "weworkEnabled": false,
-  "weworkKey": "",
-  "feishuEnabled": true,
-  "feishuWebhook": "https://open.feishu.cn/xxx",
-  "feishuSecret": "signature_key"
-}
-```
-
-- **示例请求**:
-
-```bash
-curl -X PUT http://localhost:8080/api/notify/config \
-     -H "Cookie: session=xxx" \
-     -H "Content-Type: application/json" \
-     -d '{
-           "webhookEnabled": true,
-           "webhookURL": "https://webhook.example.com"
-         }'
-```
-
-#### 测试推送
-
-- **路径**: `/api/notify/test`  
-- **方法**: POST  
-- **描述**: 测试指定推送渠道  
-- **请求体示例**:
-
-```json
-{
-  "type": "telegram"
-}
-```
-
-- **示例请求**:
-
-```bash
-curl -X POST http://localhost:8080/api/notify/test \
-     -H "Cookie: session=xxx" \
-     -H "Content-Type: application/json" \
-     -d '{"type": "telegram"}'
-```
-
-#### 发送推送
-
-- **路径**: `/api/notify/send`  
-- **方法**: POST  
-- **描述**: 手动触发推送（需已配置推送渠道）  
-- **请求体示例**:
-
-```json
-{
-  "content": "测试消息内容",
-  "images": ["https://example.com/image.jpg"],
-  "format": "markdown"
-}
-```
-
-- **示例请求**:
-
-```bash
-curl -X POST http://localhost:8080/api/notify/send \
-     -H "Cookie: session=xxx" \
-     -H "Content-Type: application/json" \
-     -d '{"content": "紧急通知！"}'
-```
-
-注意事项：
-1. 所有需要认证的接口都需要在请求头中携带有效的 session cookie
-2. 部分接口可能需要管理员权限
-3. 所有请求示例中的域名和端口号需要根据实际部署情况调整
-4. 文件上传接口需要使用 multipart/form-data 格式
-5. Token 认证接口可以使用 Token 替代 session 进行认证
-
-</details>
+图片、视频、音频和通用附件分别使用 `POST /api/images/upload`、`/api/video/upload`、`/api/audio/upload`、`/api/attachments/upload`，以 `multipart/form-data` 提交 `file`。管理配置、推送、备份与恢复需要各自能力，不能只凭“已登录”判断权限。更多示例见 [skill/USAGE.md](skill/USAGE.md) 与 [skill/EXAMPLES.md](skill/EXAMPLES.md)；路由实现以 [internal/routers](internal/routers/) 为准。
 
 ## MCP接入
 
-MCP 为独立代码模块，可选打包；`stable-mcp` / `edge-mcp` 默认内置。主服务不依赖 MCP 运行，模块停止、配置错误或崩溃不影响主站。
+MCP 是独立的 Node.js 模块。`stable-mcp` / `edge-mcp` 默认打包模块，但默认不监听 MCP HTTP 端口。主服务不依赖 MCP 正常运行，停用或子进程失败不影响主站健康检查。
 
-1. 使用有效网页会话在个人配置中创建专用 AI 凭据；普通用户与受托管理员都可创建，权限及登录期限沿用所属账号。
-2. 客户端用本地 `node mcp/server.js` 或内置模块的 `docker exec -i` 接入 stdio，配置 `NOTE_HOST` 和 `NOTE_TOKEN`（AI 凭据）。
-3. 调用 `identity` 验证来源为 `ai_token`，再使用搜索、发布、更新等工具。账号登录期限过期可在站点重新登录，或通过 `login` 使用当前 AI 凭据及同账号密码续期。
+1. 登录网页，在个人配置中创建专用 AI 凭据。
+2. 为客户端配置 `NOTE_HOST` 与 `NOTE_TOKEN`。本地源码使用 `node mcp/server.js`；容器内可由客户端通过 `docker exec -i` 按需启动 stdio。
+3. 调用 `identity`，确认 `auth_via` 为 `ai_token`，再验证 `page` 或 `search`。
 
-远程接入采用标准 Streamable HTTP `/mcp`，必须由每个客户端提供自己的 AI Bearer 凭据。旧 `/mcp/tools`、`/mcp/tool/*` 和自定义 `/mcp/sse` 已移除；普通 API Token 和旧 Cookie 模式不能替代专用 AI 凭据。
+客户端主机已安全设置 `NOTE_TOKEN` 时，容器内 stdio 命令为：
 
-删除操作仅接受明确 ID 并移入回收站，没有关键词删除、改写正文或永久删除兜底。审计来源由服务端验证：AI 专用凭据、网页会话、普通 API、未知；来源不等于对真实人类或 AI 的证明。
+```sh
+docker exec -i \
+  -e MCP_TRANSPORT=stdio \
+  -e NOTE_HOST=http://127.0.0.1:1314 \
+  -e NOTE_TOKEN \
+  echo-noise node /app/mcp/server.js
+```
 
-客户端配置、镜像运行开关、权限和迁移说明见 [MCP 操作说明](mcp/README.md)。
+远程接入使用标准 Streamable HTTP `/mcp`，显式配置监听地址、允许的 Host/Origin 和反向代理。每个客户端请求必须携带自己的 AI Bearer 凭据；HTTP 服务不借用服务器的 `NOTE_TOKEN`。旧 `/mcp/tools`、`/mcp/tool/*`、自定义 `/mcp/sse` 及 Cookie 模式已移除。
+
+账号登录期限到期可重新登录网页，或使用 `login` 工具以当前未撤销的 AI 凭据和同账号密码续期。删除工具只按明确 ID 移入回收站，没有关键词删除或永久删除兜底。完整配置与迁移方法见 [MCP 操作说明](mcp/README.md)。
 
 ## Skill使用
 
-仓库已新增“说说笔记”独立 skill 包，位于：
+[skill/](skill/) 包含供 AI 客户端安装的综合技能，支持 API 与 MCP 两种模式。将目录复制到客户端对应的技能目录后，按客户端方式刷新索引；未验证 MCP 握手与身份前，使用 API 模式。
 
-- `/skill`
-
-该 skill 采用单一综合 skill 方案，默认区分两种模式：
-
-- `API 模式`：默认模式，未确认 MCP 已启用时优先使用
-- `MCP 模式`：仅在已明确启用 MCP 时使用
-
-适用能力包括：
-
-- 发布、搜索、分页、详情、更新、删除、置顶
-- 登录期限续期；凭据创建与撤销在个人配置中管理
-- 查询状态、配置、日历、RSS
-- 排查当前环境应走 API 还是 MCP
-
-目录结构：
-
-```text
-skill/
-    SKILL.md
-    USAGE.md
-    EXAMPLES.md
-```
-
-文件说明：
-
-- `SKILL.md`：主 skill 文件，定义能力范围、模式选择、调用策略
-- `USAGE.md`：完整使用说明，包含快速开始、认证方式、操作流程、排障指南
-- `EXAMPLES.md`：可直接复制使用的 API / MCP 调用示例与响应模板
-
-推荐阅读顺序：
-
-1. 先看 `USAGE.md`
-2. 再看 `SKILL.md`
-3. 需要复制命令或模板时再看 `EXAMPLES.md`
-
-相关文件：
-
-- [SKILL.md](skill/SKILL.md)
-- [USAGE.md](skill/USAGE.md)
-- [EXAMPLES.md](skill/EXAMPLES.md)
-
-快速安装：
-
-1. 将 `skill` 整个目录复制到本地 AI 客户端的技能目录
-2. 保持文件名不变：`SKILL.md`、`USAGE.md`、`EXAMPLES.md`
-3. 重启或刷新客户端技能索引
-4. 未确认 MCP 时，先按 API 模式使用
-
-最小使用示例：
-
-默认部署建议先验证 API：
-
-```bash
-curl http://localhost:1314/api/status
-curl "http://localhost:1314/api/messages/page?page=1&pageSize=5"
-curl http://localhost:1314/rss
-```
-
-若以上接口正常，说明可以直接通过 API 模式使用这份 skill。
-
-如已配置 MCP 客户端，调用其 `identity` 工具，确认 `auth_via` 为 `ai_token`，再验证 `page` 或 `search`。仅 HTTP 端口可达不代表 MCP 已正确认证或工具可用。
-
-使用建议：
-
-- 普通默认部署先走 API，不要默认假设 MCP 已启用
-- MCP 必须由实际协议握手、AI 凭据身份和工具调用验证后使用
-- 删除、更新、置顶等危险操作，先确认目标内容再执行
-
-补充说明：
-
-- 本仓库 Compose 默认打包 MCP，stdio 按需启动；打包模块并不等于已配置客户端或开启 HTTP
-- 如需结合 MCP 使用，请同时参考本节上方的 `MCP接入` 说明与 `mcp/README.md`
-
-------
-
-## 🎁发布说明
-
-如果你需要构建自己的镜像发布-示例：
-
-\# 清理Docker构建缓存 
-
-```
-docker builder prune -f 
-
-docker system prune -f
-```
-
-删除现有的 `mybuilder` 实例，然后重新创建一个新的实例（如没有现有实例可忽略）
-
-```
-docker buildx rm mybuilder
-docker buildx create --use --name mybuilder
-```
-
-然后发布
-
-常规主镜像（不含 MCP且包含ffmpeg）
-
-```
-docker buildx build \
-  --platform linux/amd64,linux/arm64 \
-  --target final \
-  --build-arg VERSION=v3.4 \
-  -t noise233/echo-noise:v3.4 \
-  -t noise233/echo-noise:latest \
-  --push .
-```
-
-本 fork 的 MCP 渠道由 `.github/workflows/docker-publish.yml` 发布；本节其余上游镜像构建示例不用于 `stable-mcp` / `edge-mcp` 发布。
-
-精简主镜像单架构 amd64（不带 MCP 且不包含 ffmpeg）：
-
-```
-docker buildx build \
-  --platform linux/amd64 \
-  --target final \
-  --build-arg VERSION=v3.4 \
-  --build-arg INSTALL_FFMPEG=0 \
-  -t noise233/echo-noise:v3.4-amd64 \
-  -t noise233/echo-noise:last-amd64 \
-  --push .
-```
-
-- 容器内 APP_VERSION=v2.0 ，后台版本接口会显示 v2.0
-  
-  同时把同一构建产物推成 v2.0 与 latest 两个标签，方便用户使用 :latest 拉到 v2.0
-
-同时推送版本时间标签与 latest ：
-
-```
-docker buildx build --platform linux/amd64,linux/arm64 --target final-ffmpeg --build-arg VERSION=2025.12.04 -t noise233/echo-noise:2025.12.04 -t noise233/echo-noise:latest --push --no-cache .
-```
-
-开启 UPX 压缩以确保镜像更小（不含 MCP）：
-
-```
-docker buildx build --platform linux/amd64,linux/arm64 --target final-ffmpeg --build-arg USE_UPX=1 -t noise233/echo-noise:latest --push --no-cache .
-```
-
-关闭 UPX 压缩
-
-```
-docker buildx build \
-  --platform linux/amd64,linux/arm64 \
-  --target final-ffmpeg \
-  --build-arg VERSION=v2.5 \
-  --build-arg USE_UPX=0 \
-  -t noise233/echo-noise:v2.5 \
-  -t noise233/echo-noise:latest \
-  --push --no-cache .
-```
-
-Podman（替代Docker）
-
-```
-podman build --manifest docker.io/noise233/echo-noise:latest --platform linux/amd64,linux/arm64 --no-cache .
-```
-
-```
-podman manifest push --all docker.io/noise233/echo-noise:latest docker://docker.io/noise233/echo-noise:latest
-```
-
-- 增量构建与缓存推送（适合频繁迭代）：
-  - ```
-    docker buildx build --builder multi --platform linux/amd64,linux/arm64 --target final-ffmpeg --pull --build-arg VERSION=$(date +%Y.%m.%d) -t noise233/echo-noise:$(date +%Y.%m.%d) -t noise233/echo-noise:latest --cache-from=type=registry,ref=noise233/echo-noise:buildcache --cache-to=type=registry,ref=noise233/echo-noise:buildcache,mode=max --provenance=false --sbom=false --push --progress=plain .
-    ```
-  
-    
-  
-- 固化版本（手动设定版本，不用日期）：
-  - ```
-    docker buildx build --builder multi --platform linux/amd64,linux/arm64 --target final-ffmpeg --pull --build-arg VERSION=2025.12.04 -t noise233/echo-noise:2025.12.04 -t noise233/echo-noise:latest --cache-from=type=registry,ref=noise233/echo-noise:buildcache --cache-to=type=registry,ref=noise233/echo-noise:buildcache,mode=max --provenance=false --sbom=false --push --progress=plain .
-    ```
-  
-- --pull ：确保基础镜像最新，减少后续推送差异。
-
-- 双标签 -t ...:版本 -t ...:latest ：一次性产出版本与 latest ，避免额外重指向。
-
-- --cache-from/--cache-to ：利用远端缓存缩短后续构建时间；缓存存到注册表 noise233/echo-noise:buildcache 。
-
-- --provenance=false --sbom=false ：关闭证明与 SBOM 生成，缩短“导出镜像”阶段开销。
-
-- --progress=plain ：得到更清晰的输出，定位网络瓶颈更方便。
-
-- 移除 --no-cache ：允许复用 BuildKit 缓存（你在 Dockerfile 的 Node/Go 步骤已开启缓存挂载，效果显著）。
-前置准备
-
-- 使用支持多平台的构建器并初始化：
-  - ```
-    docker buildx create --name multi --driver docker-container --use
-    docker buildx inspect --bootstrap
-    ```
-  
-- 登录注册表减少限流与认证交互失败：
-  - ```
-    docker login
-    ```
-
-## 云存储接入使用说明
-
-[云存储接入（R2/S3）使用说明](docs/r2-s3.md)
-
-![1765295342559](https://s2.loli.net/2025/12/09/hj7pRrgdUM4tzVe.png)
-
-# Memos数据库迁移示例
-
-其中，你需要设置设置源数据库和目标数据库的路径，源数据库为memos_prod.db（memos数据）目标数据库为database.db（本站数据库），你还需要修改构建插入的数据中的用户名为你自己的用户名，分别迁移了原文本内容、发布时间，可以在noise/memos迁移文件夹中找到该脚本
-
-，运行python3 main.py即可，
-
-![1744202949838](https://s2.loli.net/2025/04/09/3yq8aMoOmJHIvlT.png)
-
-迁移结束后将你的数据库文件和原图片文件夹（有的话）打包为zip格式，进入站点后台选择恢复数据上传即可。
+- [USAGE.md](skill/USAGE.md)：模式、认证、操作流程与排障。
+- [EXAMPLES.md](skill/EXAMPLES.md)：请求示例。
+- [SKILL.md](skill/SKILL.md)：技能规则与能力边界。
 
 ## 扩展组件
 
-<details>
-<summary><h2>✅ Popclip发送扩展【点击查看】</h2></summary>
+| 扩展 | 使用说明 |
+| --- | --- |
+| Chromium 浏览器扩展 | [chromeExpand/README.md](chromeExpand/README.md)，在扩展管理页加载已解压的目录，并配置站点与普通 API Token |
+| 网页组件 | [htmlwidgets/note.html](htmlwidgets/note.html)，设置 `window.note.host` 和挂载容器；可用 `authorId` 或 `username` 筛选公开笔记 |
+| PopClip、快捷指令与自动化平台 | 通过上述普通 API 发布 Markdown；需自行适配当前请求字段并检查业务响应，旧外部分享链接不作为当前已验证客户端 |
 
-选中后自动识别安装，发送时会自动添加一个popclip开头的标签，token可在后台找到
+网页组件只展示公开内容，不应在公开页面嵌入管理 Token。跨域嵌入还需按实际前端来源配置 CORS。
 
-```
-// #popclip extension for Send to Shuo
-// name: 说说笔记
-// icon: square filled 说
-// language: javascript
-// module: true
-// entitlements: [network]
-// options: [{
-//   identifier: "siteUrl",
-//   label: "服务端地址",
-//   type: "string",
-//   defaultValue: "https://your-domain.example",
-//   description: "请确保地址正确，不要带末尾斜杠"
-// }, {
-//   identifier: "token",
-//   label: "API Token",
-//   type: "string",
-//   description: "从设置页面获取最新Token"
-// }]
+## 开发
 
-async function sendToShuo(input, options) {
-    try {
-        // 参数预处理
-        const siteUrl = (options.siteUrl || "").replace(/\/+$/g, "");
-        const token = (options.token || "").trim();
-        const content = (input.text || "").trim();
-        
-        // 验证参数
-        if (!/^https:\/\/[\w.-]+(:\d+)?$/.test(siteUrl)) {
-            throw new Error("地址格式错误，示例: https://your-domain.example");
-        }
-        if (!token) throw new Error("Token不能为空");
-        if (!content) throw new Error("选中文本不能为空");
+工具版本以 [go.mod](go.mod)、[web/package.json](web/package.json)、[Dockerfile](Dockerfile) 和各平台锁文件为准。服务端使用 Go 1.24.1，前端构建镜像使用 Node.js 22；独立 MCP 模块需要 Node.js 20 或更新版本，安装方法见 [mcp/README.md](mcp/README.md)。
 
-        // 发送请求
-        await sendRequestWithXMLHttpRequest(siteUrl, token, content);
-        PopClip.showText("✓ 发送成功");
-    } catch (error) {
-        handleRequestError(error);
-    }
-}
+推荐先验证同域静态部署，避免开发端口与代理互相冲突：
 
-// 使用 XMLHttpRequest 实现网络请求
-function sendRequestWithXMLHttpRequest(siteUrl, token, content) {
-    return new Promise((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        const url = `${siteUrl}/api/token/messages`;
-
-        xhr.open("POST", url, true);
-        xhr.setRequestHeader("Content-Type", "application/json");
-        xhr.setRequestHeader("Authorization", `Bearer ${token}`);
-
-        xhr.timeout = 10000; // 设置超时时间（10秒）
-        
-        // 设置回调函数
-        xhr.onreadystatechange = () => {
-            if (xhr.readyState === XMLHttpRequest.DONE) {
-                if (xhr.status >= 200 && xhr.status < 300) {
-                    resolve(xhr.responseText);
-                } else {
-                    let errorMsg = `请求失败 (${xhr.status})`;
-                    try {
-                        const data = JSON.parse(xhr.responseText);
-                        errorMsg = data.message || errorMsg;
-                    } catch {}
-                    reject(new Error(errorMsg));
-                }
-            }
-        };
-
-        // 处理网络错误
-        xhr.onerror = () => reject(new Error("网络错误"));
-        
-        // 处理超时错误
-        xhr.ontimeout = () => reject(new Error("请求超时"));
-
-        try {
-            // 发送请求
-            const payload = JSON.stringify({
-                content: `#Popclip\n${content}`,
-                type: "text"
-            });
-            xhr.send(payload);
-        } catch (error) {
-            reject(new Error("请求发送失败: " + error.message));
-        }
-    });
-}
-
-// 错误处理
-function handleRequestError(error) {
-    console.error("请求错误:", error);
-    
-    const errorMap = {
-        "Failed to fetch": "无法连接到服务器",
-        "aborted": "请求超时",
-        "网络错误": "网络错误",
-        "401": "认证失败，请检查Token",
-        "404": "API地址不存在"
-    };
-
-    const message = Object.entries(errorMap).find(([key]) => 
-        error.message.includes(key)
-    )?.[1] || `请求错误: ${error.message.split('\n')[0].slice(0, 50)}`;
-
-    PopClip.showText(`❌ ${message}`);
-}
-
-exports.actions = [{
-    title: "发送至说说笔记",
-    code: sendToShuo,
-    icon: "square filled 说"
-}];
-
+```sh
+git clone https://github.com/ynby233/echo-noise.git
+cd echo-noise
+cd web
+npm ci
+cd ..
+# 需要 Bash 和 rsync；生成前端并同步到根目录 public/
+bash scripts/build.sh
+go build -o server ./cmd/server
+DB_TYPE=sqlite DB_PATH=./data/noise.db SESSION_SECRET=替换为长期随机密钥 ./server
 ```
 
-</details>
+前端生成目录为 `web/.output/public`，Go 服务从仓库根目录的 `public/` 托管静态资源。`bash scripts/build.sh` 会生成并同步前端；只需生成静态文件时，可在 `web/` 执行 `npm run generate`。
 
-<details>
-<summary><h2>✅ 浏览器扩展</h2></summary>
+`npm run dev` 与后端默认都使用 `1314`。需要热更新时，将 Nuxt 开发端口改为不同端口，并核对其 `/api` 等代理指向后端；不要让代理指回开发服务器自身。生产前端默认使用同域 `/api`；其他反向代理布局见 [web/README.md](web/README.md)。
 
-前往[chromeExpand](https://github.com/rcy1314/echo-noise/tree/main/chromeExpand)查看说明，安装请在浏览器扩展页面点击加载已解压缩文件夹安装
+验证命令与模块地图见 [维护指南](docs/maintenance.md)。依赖更新应针对明确需求，日常构建无需执行 `go get -u ./...`。桌面、Android 与 sidecar 构建见 [docs/build_and_use.md](docs/build_and_use.md)。
 
-</details>
+## 文档导航
 
-<details>
-<summary><h2>✅ Web组件示例【点击查看】</h2></summary>
+| 想了解什么 | 文档 |
+| --- | --- |
+| 后台模块与权限 | [后台界面](docs/admin-ui.md) |
+| 源码入口、数据流、测试与维护 | [维护指南](docs/maintenance.md)、[领域词汇](CONTEXT.md) |
+| 前端开发 | [web/README.md](web/README.md) |
+| 桌面与 Android 构建 | [构建与使用](docs/build_and_use.md) |
+| MCP 客户端及远程接入 | [mcp/README.md](mcp/README.md)、[MCP 接入概览](docs/mcp.md) |
+| R2/S3 与云备份 | [对象存储说明](docs/r2-s3.md) |
+| 宿主更新、备份和故障恢复 | [执行器说明](scripts/update/README.md) |
+| 历史设计与验收证据 | [docs/](docs/) 中带日期的报告；其结论只适用于记录的提交和环境 |
 
+问题排查时，请提供实际构建版本、部署方式、错误信息和可复现步骤，并移除 Token、Cookie、密码与业务数据。部署更新、镜像构建成功和真实设备验收是不同结果，应分别核对。
 
-![](https://s2.loli.net/2025/04/16/uoHIvbq8FXMJSa2.png)
-
-配置(htmlwidgets内)
-
-修改前端html即可
-
-```
-<script>
-        window.note = {
-            host: '', // 必填：填写你的服务器地址，例如 https://your-domain.example
-            limit: '10',
-            domId: '#note',
-            authorId: '1',         // 或者 username: 'Noise'
-            username: '',          // 二选一即可
-            sourceName: '「公开笔记流」'
-        };
-```
-
-`host` 未配置时，组件不会发送任何请求，并会显示配置提示。填写 `host` 后，不填写 authorId、username 时，小组件会请求不带作者筛选的接口，展示“全部公开消息”（按分页/搜索/标签的当前逻辑）。
-
-字段说明
-
-- host ：站点根地址，形如 https://域名 （不要加末尾 / ）。
-
-- limit ：每页加载条数。
-
-- domId ：小组件挂载容器选择器，需要与页面中的容器匹配。
-
-- sourceName ：卡片底部“来源”文案。
-
-- authorId / username ：作者筛选参数，二选一；两者同时填写时以 authorId 为准。
-
-  
-
-</details>
-
-<details>
-<summary><h2>✅ ios快捷指令【点击查看】</h2></summary>
-
-使用快捷指令发布内容到站内，[点击获取](https://www.icloud.com/shortcuts/8ba1240ab39d4bf2b4a02b69a5cc12bf)
-
-![idpz8Ea9DQMfyex](https://s2.loli.net/2025/04/12/idpz8Ea9DQMfyex.png)
-
-</details>
-
-## 🟢安全防护
-
-- 服务端（Gin）加入一个**全局安全中间件**，专门拦截“核心文件/敏感路径扫描”同时新增两个**管理员 API**用于查看/清空这些记录,容量上限：**500 条**，超过会丢弃最早记录（避免被刷爆导致内存增长）。
-
-- **查看攻击记录**
-  - `GET /api/security/attacks`
-- **清空攻击记录**
-  - `DELETE /api/security/attacks`
-
-后台页“安全防护”里的**攻击 IP 记录**，是在后端 SecurityMiddleware() 满足下面条件时写入 SecurityAttackLog
-
-### 什么时候会记录
-
-### 1) 访问路径被判定为“敏感扫描”（命中规则）
-
-请求的 `URL.Path` 只要命中 
-
-isSuspiciousPath() 里的任意一条规则，就会：
-
-- 直接返回 `403`
-- **写一条攻击记录**（IP/Method/Path/UA）
-
-命中规则包括（举例）：
-
-- **敏感文件/目录**：`/.env`、`/.git`、`/.svn`、`/.hg`
-- **源码/配置目录**：`/internal`、`/config`、`/cmd`、`/pkg`、`/scripts`、`/vendor`、`/node_modules`
-- **容器/Go 依赖文件**：`/docker-compose.yml`、`/Dockerfile`、`/go.mod`、`/go.sum`
-- **常见 Web 扫描入口**：`/wp-admin`、`/wp-login.php`、`/xmlrpc.php`
-- **脚本后缀**：以 `.php/.asp/.aspx/.jsp` 结尾或带查询参数
-- **探测/文档接口**：`/actuator`、`/swagger`、`/swagger-ui`、`/v2/api-docs`
-
-### 2) 不在“白名单前缀”里（避免误伤正常功能）
-
-下面这些前缀会被快速放行，不会被当成扫描、也就不会记录：
-
-- `/api`
-- `/_nuxt/`
-- `/assets/`
-- `/favicon`、`/manifest*`、`/sw.js`
-- `/rss`、`/m/`、`/video/`、`/api/images`、`/api/video`
-
-### 什么时候不会记录
-
-- **IP 已被封禁**：请求一开始就被 
-
-  isBannedIP()
-
-   拦截并 
-
-  ```
-  403
-  ```
-
-  不会写攻击记录，因为它直接返回了
-
-  
-
-- **数据库未初始化**：`models.GetDB() == nil` 时不会落库记录（仍会 `403`）。
-
-- **访问的是正常页面/API/静态资源**：不命中敏感扫描规则就不会记录。
-
-#### 和“自动封禁策略”的关系
-
-- **记录攻击**：只要命中敏感扫描规则就会记录（和自动封禁开关无关）。
-- **自动封禁**：在记录后会按你配置的阈值计数，达到阈值再把 IP 写入封禁表。
-
-## 问题🙋
-
-数据库可以直接迁移吗
-
-1、直接上传至部署时挂载的路径中，重新启用，或者在容器文件夹/app/data/noise.db直接替换即可
-
-2、使用后台数据库管理备份功能，支持一键下载、上传
-
-​    数据库文件下载为zip格式，上传也必须为zip，本地数据库恢复包中必须有noise.db文件
-
-## 关于魔改指南🌈
-
-👉如何自定义化前端数据后添加到数据库？
-
-需要在 `setting.go`、`migrate.go`、`models.go`、`setting_controller.go` 同时写入前端参数的后端定义，并修改前端参数信息为后端可读取的参数，其中 `setting_controller.go` 为设置控制器。
-
-- database.go 用于数据库连接管理
-- migrate.go 用于数据库迁移和数据初始化
-
-👉前端基本在web目录下，目前模版文件为components目录文件，pages下index.vue为父级模版
-
-👉建议：不要和我一样在同一个文件里修改添加，造成一个文件上千行代码...请尽量使用父子层级来添加代码
-
-## To do
-
-> 想要的不一定实现，但万一做成了呢！
-
-- [x] 卡片生成的美化
-- [x] 优化编辑器
-- [x] 增加发布热力图组件
-- [x] 加入搜索功能
-- [x] post请求发布内容到站内
-- [x] 后台和前端数据的匹配完善
-- [x] 加入标签路由及组件
-- [x] 加入一键推送
-- [x] 内容区域切换亮暗模式
-- [x] 精简镜像包体积大小
-- [x] 内容置顶功能
-- [x] 增加公告栏组件
-- [x] 实现 Markdown 连续图片宫格渲染
-- [x] MCP模式（搜索、写入等）AI发布写入
-- [x] 页面加载过渡优化
-- [x] 后台增加音乐板块配置并集成到前端
-- [x] 内置评论系统并可选远程评论系统
-- [x] 增加点赞组件（接入SMTP反馈）
-- [x] 增加用户头像预览卡片
-- [x] 增加友情链接组件（底部或侧栏）
-- [x] 增加时间日历组件
-- [x] 增加广告组件（悬浮或固定）
-- [x] 跨平台桌面端
-- [x] SQL数据库文件支持一键接入R2或S3实现备份和恢复
-- [x] 登录注册优化
-- [x] 后台界面的ui优化定制
-- [x] docker环境下的一键升级功能
-- [x] 前端可定制化主题
-- [x] 数据库备份优化
-- [x] 增加RSS阅读组件（前端展示，后台控制）
-- [x] 媒体附件增加分离式存储，提供云端和本地两种方式
-- [x] 增加人生倒计时组件（ui 优化）
-- [x] 增加skill
-- [ ] 增加ai协作或聊天组件
-- [x] 扩展支持一键识别当前网站信息并写入笔记
-- [ ] 其它组件的添加
-
----
-
-> [!CAUTION]
->
-> 本项目为个人定制化使用，如有其它需求可自行修改，项目已完全重构
+本项目持续按个人需求维护，功能以当前实现为准。源自 Ech0 及上游项目，许可证见 [LICENSE](LICENSE)。

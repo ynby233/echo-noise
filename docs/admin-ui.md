@@ -1,6 +1,22 @@
-# 后台界面样式
+# 后台使用与界面约定
 
-后台使用 `web/assets/css/admin.css` 和 `AdminModuleHeader.vue` 统一展示。样式作用于后台根节点及后台弹窗，不改变首页、登录页的字体和布局。
+后台从首页进入，也可访问同源 `/status` 网页入口；它不是健康检查 API。实际板块由 `web/components/index/StatusPanel.vue` 编排，按当前账户能力显示。站长固定为用户 ID 1，受托管理员仅能进入已授权模块。后台样式由 `web/assets/css/admin.css`、`admin-sections.css` 和 `web/components/admin/AdminModuleHeader.vue` 提供，作用于后台根节点及后台弹窗。
+
+## 访问、配置与运维
+
+登录后的能力上下文来自 `GET /api/admin/authorization/me`。板块入口规则见 `web/config/admin-section-capabilities.json` 和 `web/utils/admin-section-access.ts`；异步组件映射见 `web/components/admin/sections/registry.ts`。入口可见不代表拥有所有写操作：子能力还依赖父能力，后端按具体动作和内容保护独立授权。共享设置接口也会按能力省略受保护字段，不能靠前端隐藏字段代替后端判断。
+
+| 场景 | 当前入口与边界 |
+| --- | --- |
+| 存储配置 | `storage.view` 控制读取入口，`storage.manage` 控制管理动作；附件存储和数据库云备份是两套独立配置。详见 [R2/S3](r2-s3.md)。 |
+| 数据备份与恢复 | `database.view` 控制数据库模块入口，下载和恢复分别需要 `database.backup`、`database.restore`。SQLite 恢复返回 202 和 `pendingRestart`，需重启后应用；“暂存成功”不等于已恢复。 |
+| 版本与更新 | `version.view` 控制查看；创建执行器凭据、部署检查、渠道变更和安装还受固定 ID 1 站长约束。切渠道不会自动安装，安装前须核对固定 revision/digest 和近期部署检查。详见 [更新执行器](../scripts/update/README.md)。 |
+| 权限与审计 | 授权中心使用 `authorization.manage`，审计查看使用 `audit.view`；受托管理员不能越过站长内容与账号保护。 |
+
+设置写入使用 `PUT /api/settings`，各字段还在服务层按对应能力检查；不要把路由上的通用设置管理能力理解为可修改所有配置。已配置密钥通常只显示配置状态，输入留空保持旧值，显式清除才删除。切换板块会保留普通表单草稿，切换账号会隔离草稿和迟到请求；看到草稿不代表已经保存。
+
+`needs_attention` 更新任务仍占用活动槽，应保留宿主 journal、备份和日志，按执行器说明人工结案。浏览器断线、清缓存或换浏览器后从服务端查询原任务，不能据此重复发起安装。
+
 
 ## 页面与控件
 
@@ -28,4 +44,4 @@
 
 窄屏标题与操作区分行，操作允许换行。`admin-settings-toolbar` 用于配置子卡片的标题和按钮组合。大型数据表保留局部横向滚动，避免整页被表格撑宽；个人内容保留响应式卡片列表。
 
-这次调整覆盖后台全部 35 个导航模块，包括个人内容、站点展示、互动管理、权限审计、存储维护及各自弹窗。权限判断、API、数据修改与删除确认流程仍由原组件负责。
+后台板块按 `registry.ts` 的稳定 key 按需加载；多个个人内容或管理视图可复用同一组件，因此组件文件数不等于导航数量。权限判断、API、数据修改与删除确认由各板块及后端共同负责。切换失败时通过板块加载错误提示重试，避免因重新挂载丢失未保存表单。

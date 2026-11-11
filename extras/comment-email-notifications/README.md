@@ -1,6 +1,6 @@
 # 互动邮件通知（封存外挂）
 
-状态：**封存，未上线，不受支持**。
+状态：**当前版本已封存，不装载、不受支持**；历史快照不能用来判断旧版本是否曾发送邮件。
 
 这里保存的是原项目“评论、回复、留言邮件通知”模块的历史实现快照，便于未来重新设计时参考。目录位于运行时源码树之外，源码使用 `.disabled` 后缀：
 
@@ -9,9 +9,11 @@
 - 不注册路由、不创建数据库字段、不显示管理面板，也不会发送互动邮件；
 - 不能通过改名或复制回运行时目录直接启用。
 
-封存内容包括原 `CommentsSettings.vue` 配置与预览组件、原 `PostComment` 邮件投递源码片段，以及对历史字段和行为的说明。它们保留原实现仅供审计和重新设计参考，不是可直接启用的插件。
+封存内容包括 [原配置与预览组件](frontend/CommentsSettings.vue.disabled)、[原 PostComment 邮件投递片段](backend/post_comment_email_delivery.fragment.go.disabled) 和 [历史配置与行为说明](backend/comment_email_notifications.go.disabled)。它们仅供审计和重新设计参考，不是可直接启用的插件。
 
 当前仍继续可用的是内置评论、回复、留言、互动回收站、站内通知以及其他独立的 SMTP 用途。站内通知不依赖本封存模块。
+
+运行边界可对照 [当前路由](../../internal/routers/routers.go)、[评论控制器](../../internal/controllers/comment_controller.go)、[数据模型](../../internal/models/models.go) 和 [Docker 构建文件](../../Dockerfile)。当前没有本模块的专用运行路由，也没有恢复这些互动邮件字段的设置入口；历史组件中的 `PUT /api/settings` 是通用设置接口，不能据此认为封存字段仍可启用。源码快照可能随完整仓库进入 Docker 构建上下文，但最终镜像按 Dockerfile 的显式复制规则组装，不包含此目录。
 
 ## 封存原因
 

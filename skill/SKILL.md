@@ -168,22 +168,25 @@ MCP 不提供中文工具别名或 token 轮换工具。
 - `会话认证`：`/api/login` 成功后，调用 `/api/messages/*`、`/api/settings`、`/api/user/token*`
 - `Token 认证`：调用 `/api/token/messages*`、`/api/token/settings`
 
-建议：
-
-- `publish`、`delete` 可优先使用 token 路由
-- `update`、`pin`、`settings` 更稳妥的方式是先登录，使用会话路由
-- `读取 token` 与 `重建 token` 必须先登录
+按既有 API 配置选择会话或普通 token；更新、删除、置顶和设置均有对应 token 路由。`/pin` 是全局置顶兼容入口，全局置顶用 `/pin/global`，个人置顶用 `/pin/personal`；均有会话与 token 路径。全局置顶需相应管理能力，个人置顶只允许本人笔记。获取/重建普通 token 的示例使用有效登录会话。
 
 原有 API 会话与普通 token 调用保持兼容。AI 使用普通 API token 仍记为普通 API 来源，不能据此标记可信 AI；需要 AI 归因时使用专用 AI 凭据，业务 token 路由支持该凭据并由后端判定权限。
 
 ### MCP 模式认证
 
 - 在后台“个人配置”创建专用 AI 凭据（管理接口 `/api/user/ai-credentials`）；创建返回的 token 只展示一次，存入 MCP 客户端私有配置，不写入共享 `skill/config.json`
-- 每次工具操作都以同一 Bearer 请求 `GET /api/auth/identity` 并验证 `data.auth_via=ai_token`；读取工具同样需要认证
+- 除 `login` 续期前的特殊流程外，每次工具操作都以同一 Bearer 请求 `GET /api/auth/identity` 并验证 `data.auth_via=ai_token`；读取工具同样需要认证
 - stdio 使用该进程的 `NOTE_TOKEN`；HTTP 每次请求携带客户端自己的 AI Bearer，完全忽略服务端 `NOTE_TOKEN`，不接受 Cookie 或全局会话
 - 缺失、普通 token、过期或撤销凭据均为工具错误，不降级匿名读取
-- `login` 使用当前 AI Bearer 请求 `POST /api/ai/login`，提交同账号 `username`、`password` 后再验证身份；未撤销凭据可在账号登录期限过期时续期，不设置 Cookie、不生成普通 token、不切换用户
+- `login` 使用当前 AI Bearer 请求 `POST /api/ai/login`，提交同账号 `username`、`password` 后再验证身份；未撤销凭据可在账号登录期限过期时续期，不设置 Cookie、不返回或轮换普通 token、不切换用户
 - 密码不得写入提示词、日志或共享配置，可优先在后台完成账号登录
+
+### 凭据隔离与登录期限
+
+普通 API token 与 AI 凭据分别生成、管理和撤销，重建普通 token 不会更换 AI 凭据。两种 Bearer 均按账号数据库中的最近登录时间检查期限，不按密钥创建时间分别计时。普通用户和授权管理员各有期限配置，默认均为 3 天；0 天 0 小时表示永久，主站长（用户 ID 1）不受期限限制。
+
+成功网页登录或 AI `login` 会刷新同账号全部 Bearer 的登录期限；创建或重建密钥本身不续期。Cookie 会话按各自签发时间检查，不会随其他客户端续期自动延长。期限已过返回 HTTP 401、`error: "login_expired"`，携带过期凭据的公开读取也被拒绝。应登录同账号，MCP 也可用当前未撤销凭据调用 `login`；撤销凭据须重新创建，登录不能恢复它。
+
 
 ## 推荐执行流程
 
@@ -209,7 +212,7 @@ MCP 不提供中文工具别名或 token 轮换工具。
 3. 写入前确认认证方式
 4. 发布后返回成功结果与内容标识
 
-内容类型建议：
+以下 `type` 仅为 MCP 发布工具的参数；直接 API 发布字段见下方速查：
 
 - 文本：`type: "text"`
 - Markdown：`type: "markdown"`
@@ -237,8 +240,8 @@ GET /api/messages/search?keyword=欢迎&page=1&pageSize=10
 
 说明：
 
-- 也可使用 `query` 作为关键词字段
-- 关键词以 `#` 开头时，可按标签语义理解
+- 直接 API 搜索只读取 `keyword`，`query` 别名仅属于 MCP
+- 标签内容使用 `/api/messages/tags/:tag`；标签需 URL 编码，不把 `#` 原样拼进 URL（会成为片段）
 - 未提供关键词时更适合改用分页接口
 
 ### 分页
@@ -249,7 +252,7 @@ GET /api/messages/page?page=1&pageSize=10
 
 或：
 
-```json
+```http
 POST /api/messages/page
 {
   "page": 1,
@@ -265,52 +268,45 @@ GET /api/messages/123
 
 ### 发布文本
 
-```json
+```http
 POST /api/token/messages
 {
-  "type": "text",
   "content": "今天完成了 skill 配置"
 }
 ```
 
 ### 发布 Markdown
 
-```json
+```http
 POST /api/token/messages
 {
-  "type": "markdown",
   "content": "# 标题\n正文内容"
 }
 ```
 
 ### 发布单图
 
-```json
+```http
 POST /api/token/messages
 {
-  "type": "image",
-  "image": "https://example.com/a.jpg",
+  "image_url": "https://example.com/a.jpg",
   "content": "图片配文"
 }
 ```
 
 ### 发布多图
 
-```json
+```http
 POST /api/token/messages
 {
-  "type": "multipart",
-  "images": [
-    "https://example.com/a.jpg",
-    "https://example.com/b.jpg"
-  ],
-  "content": "多图说明"
+  "content": "多图说明\n\n![图片一](https://example.com/a.jpg)\n![图片二](https://example.com/b.jpg)",
+  "image_url": "https://example.com/a.jpg"
 }
 ```
 
 ### 更新
 
-```json
+```http
 PUT /api/messages/123
 {
   "content": "更新后的内容"
@@ -325,16 +321,18 @@ DELETE /api/messages/123
 
 ### 置顶
 
-```json
-PUT /api/messages/123/pin
+```http
+PUT /api/messages/123/pin/personal
 {
   "pinned": true
 }
 ```
 
+上例是本人笔记的个人置顶；全局置顶使用 `/pin/global`，需相应权限。上述会话路径也有 `/api/token/messages/...` 对应路径。API 发布不识别 MCP 的 `type`、`image`、`images` 参数：Markdown 直接写入 `content`，单图使用 `image_url`，多图在正文中写 Markdown。当前 `video_url` 用于通知处理；需要保存视频链接时也应写入 `content`。
+
 ### 登录
 
-```json
+```http
 POST /api/login
 {
   "username": "admin",
@@ -416,7 +414,8 @@ POST /api/user/token/regenerate
 ```json
 {
   "id": "123",
-  "pinned": true
+  "pinned": true,
+  "scope": "personal"
 }
 ```
 
@@ -439,6 +438,8 @@ POST /api/user/token/regenerate
 skill/
     SKILL.md
     USAGE.md
+    EXAMPLES.md
+    config.json
 ```
 
 安装步骤：
@@ -507,7 +508,7 @@ npm ci
 
 ### 同镜像内 stdio
 
-`stable-mcp`、`edge-mcp` 使用 `final-mcp` 目标，包含 Node.js 与 `/app/mcp/`；尚无正式 Release 时 stable 渠道仍不可用。源码 Compose 默认打包；设置 `APP_BUILD_TARGET=final` 后重新构建可排除，运行时 `MCP_ENABLED=false` 可停用已打包模块。
+`stable-mcp`、`edge-mcp` 使用 `final-mcp` 目标，包含 Node.js 与 `/app/mcp/`；stable 标签是否可拉取取决于正式 Release 的发布情况。源码 Compose 默认打包；设置 `APP_BUILD_TARGET=final` 后重新构建可排除，运行时 `MCP_ENABLED=false` 可停用已打包模块。
 
 ```json
 {
@@ -581,12 +582,13 @@ HTTP 忽略服务端 `NOTE_TOKEN`，每请求隔离客户端，不共享凭据�
 
 ## 参考位置
 
-- 项目说明：`README.md`
-- MCP 说明：`mcp/README.md`
-- API 路由：`internal/routers/routers.go`
-- MCP 服务入口：`mcp/server.js`
-# 可见范围约定
+- 项目说明：[README.md](../README.md)
+- MCP 说明：[mcp/README.md](../mcp/README.md)
+- API 路由：[internal/routers/routers.go](../internal/routers/routers.go)
+- MCP 服务入口：[mcp/server.js](../mcp/server.js)
 
-发布或更新内容时优先显式传入 `visibility`：`public`（公开）、`users`（登录用户）、`contacts`（VoceChat 联系人）、`private`（仅自己）。API 调用同时发送兼容字段 `private = visibility !== "public"`。MCP 显式 `visibility` 优先，兼容 `private: true` → `private`、`private: false` → `public`；发布未指定可见性仍默认公开，更新未传可见性字段保留原值。浏览器扩展默认公开，网页发布器默认登录用户可见。
+## 可见范围约定
+
+发布或更新优先显式传入 `visibility`：`public`（公开）、`users`（登录用户）、`contacts`（联系关系范围）、`private`（仅自己）。API 可同时发送兼容字段 `private = visibility !== "public"`，以后端 `visibility` 为准。MCP 显式 `visibility` 优先，即使与 `private` 冲突也不报错；缺少新字段时兼容 `private: true` → `private`、`private: false` → `public`。发布未指定可见性默认公开，更新未传可见性字段保留原值。
 
 读取消息、分页、搜索、标签、日历、状态和配置时，如果已有 Token 或 Session，必须携带认证信息，不能以匿名身份读取后误判内容不存在。

@@ -2,9 +2,9 @@
 
 > 2026-10-04 接入范围调整：本文保留历史验收证据；Dagu 专用镜像、任务示例、接入说明及 CI 已从当前开源交付移除。下列旧实现链接固定到历史提交，不能作为当前部署步骤。当前接入使用 [通用 API/钩子和执行器](../scripts/update/README.md)，个人部署维护在私有环境。
 
-日期：2026-10-02。本文记录更新恢复超时的调查范围、历史证据与后续验收要求；实际补修结果见下方链接，不作为当前执行指令。
+日期：2026-10-02。本文记录当时更新恢复超时的调查范围、历史证据与后续验收要求；第 1–8 节为补修前快照，不代表最新代码、当前部署状态或当前部署指南，也不作为当前执行指令。
 
-2026-10-03 后续结果见 [更新验收与交付补修与验收](update-recovery-and-acceptance-2026-10-02.md)：首要重建超时已在同种 NAS 环境定位并三次复验，真实备份恢复产品问题已最小修复，真实渠道/发布 shell 矩阵及精确提交自动 CI 通过；用户已明确授权个人业务升级，69535120 现场同实例更新及数据/浏览器核验通过。本文保留开工时的要求与授权边界；继续时先读补修结果，不重做已完成实验，也不把剩余现场/远端项记为已验。
+2026-10-03 后续结果见 [更新验收与交付补修与验收](update-recovery-and-acceptance-2026-10-02.md)：首要重建超时已在同种 NAS 环境定位并三次复验，真实备份恢复产品问题已最小修复，真实渠道/发布 shell 矩阵及精确提交自动 CI 通过；用户已明确授权个人业务升级，69535120 现场同实例更新及数据/浏览器核验通过。本文保留开工时的要求与授权边界。补修报告第 9–11 节又补齐个人脚本交付、真实远端实验/清理及用户 NAS 重启后的现场核验；独立个人 Docker daemon 重启仍未测，用户已要求不再追加重启。
 
 ## 1. 接手结论与任务范围
 
@@ -12,7 +12,7 @@
 
 接手顺序：先复现并定位恢复超时，再补两渠道真实产物/发布故障实验、真实备份的隔离恢复和重启证据，最后延长运行观察、收口报告。无需重做服务端更新功能与部署接入、重新配对个人实例或扩展新平台。
 
-本文件是下一轮推进要求；[上一轮验收报告](end-to-end-acceptance-2026-10-02.md)保留历史结果，不将其中失败改写为通过。原总交接的产品决策与保护继续有效；对“关闭更新验收与交付必须回滚个人运行库、必须在正式项目制造 Release”的理解，按本文第 5–6 节澄清。
+本文件记录当时的下一轮推进要求；[上一轮验收报告](end-to-end-acceptance-2026-10-02.md)保留历史结果，不将其中失败改写为通过。原总交接的产品决策与保护继续有效；对“关闭更新验收与交付必须回滚个人运行库、必须在正式项目制造 Release”的理解，按本文第 5–6 节澄清。
 
 ## 2. 已核实的起点
 
@@ -38,7 +38,7 @@
 
 本轮独立复核重新执行：52 项 Python 测试、updates/controllers Go 测试、fixture vet、diff 检查，通过。上一轮全量 Go、118 个前端测试文件、typecheck、generate、五项生产浏览器脚本结果见历史报告；本次复核未重新执行全部，不混写证据层。
 
-## 3. 必读文件与私有证据
+## 3. 当时的阅读入口与私有证据
 
 先读本文，再按问题读取下列文件，不要求从头重跑全部历史验收：
 
@@ -48,7 +48,7 @@
 | 原产品决策和矩阵 | [总实施交接](direct-update-implementation-handoff-2026-09-11.md)，重点第 0、1、11、12 节。 |
 | 真实执行及恢复规则 | [执行器说明](../scripts/update/README.md)、[Dagu 说明](https://github.com/ynby233/echo-noise/blob/fc0a89aadd94bd6c8bf178092dd381c48b017913/scripts/update/dagu.md)。 |
 | 恢复状态与按序补报 | `scripts/update/executor.py`：`run`、`flush`、`load_record`、`target_running`、`reconcile` 及调用链。 |
-| 重建实验与停顿注入 | `scripts/update/test-dagu.py`、`scripts/update/fixture/container-executor.py`。 |
+| 重建实验与停顿注入 | [历史 test-dagu.py](https://github.com/ynby233/echo-noise/blob/fc0a89aadd94bd6c8bf178092dd381c48b017913/scripts/update/test-dagu.py)、`scripts/update/fixture/container-executor.py`；Dagu 专用脚本已从当前交付移除。 |
 | 真实引擎/registry/数据实验 | `scripts/update/test-docker.py`、`scripts/update/fixture/main.go`。 |
 | 发布与发现 | `.github/workflows/docker-publish.yml`、`scripts/release/`、`internal/updates/` 及现有相关测试。 |
 | 回归命令和保护 | `.github/workflows/update-executor.yml`、[维护说明](maintenance.md)。 |
@@ -69,7 +69,7 @@ Ubuntu CI 对应提交的 restart 实验成功。NAS 嵌套环境的 wake、miss
 
 以下均是待验证方向，不能写成根因：重建后的子进程未执行恢复、遗留子进程占锁、Dagu 运行/调度状态抑制新执行、嵌套宿主 PID 视图差异、配置/环境差异、事件 HTTP 补报失败、测试停顿注入影响。
 
-### 4.2 可直接开始的步骤
+### 4.2 当时拟定的定位步骤
 
 1. 刷新 Git、origin/main、工作区和实际 NAS 状态。检查原业务无活动任务、配对和 Dagu 配置保持；本步骤不触发业务更新。
 2. 读取已保存的两次失败日志，与同 SHA Ubuntu 成功日志比较。明确首个分歧发生在重建、调度、执行器启动、取锁、加载记录、HTTP 补报还是后续核验。
@@ -157,7 +157,7 @@ P1 修复后建议做至少数小时、条件允许跨夜的低干扰观察：�
 
 ## 8. 检查入口及交付要求
 
-Windows 环境加载后显式回到实际仓库；`env.ps1` 可能切到旧目录。以下命令逐条执行、检查退出码：
+以下为当时的复核命令，旧环境、Python 绝对路径及 Dagu 测试入口仅供追溯，不是当前接手命令；当前入口按本机环境 README 和执行器说明核对：
 
 ```powershell
 . D:\ChatGPT\app\environments\echo-noise\env.ps1
@@ -178,7 +178,7 @@ Python 路径使用前检查存在；Windows 系统别名不可用时沿用已�
 
 非文档代码推送后，核对 origin 上对应完整 SHA 的自动镜像构建/smoke 和执行器 CI，不重复手动 dispatch，除非自动运行确实不存在、跳过或失败。`gh` 指定 `--repo ynby233/echo-noise`，避免默认查询 upstream。文档提交未触发产品构建属正常，不伪造新镜像证据。
 
-下一轮提交独立补修/验收报告，至少包括：
+当时要求后续补修/验收报告至少包括以下内容；实际结果已记录在上述补修报告中：
 
 1. 首个确定分歧、根因证据、修复层及为何不需放宽原保护。
 2. 原失败场景复测次数、调度条件、任务/事件/目标 ID/数据结果；NAS 嵌套与 Ubuntu 分别记录。

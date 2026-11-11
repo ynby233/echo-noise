@@ -6,11 +6,13 @@ MCP 是代码独立的 Node.js 模块，通过主服务 API 操作笔记。`stab
 
 需要支持 AI 凭据契约的后端版本。在后台使用有效登录会话创建专用 AI 凭据；凭据管理接口为 `/api/user/ai-credentials`，创建返回的 `token` 只展示一次，应保存在 MCP 客户端的私有配置中。普通用户 token 不能替代 AI 凭据。
 
-每次工具操作先以同一 Bearer 凭据请求 `GET /api/auth/identity`，并验证 `data.auth_via` 为 `ai_token`。缺少凭据、普通 token、撤销或过期均返回工具错误，不会降级为匿名读取或网页会话。MCP 不自行给普通 token 标记 AI 身份，实际业务权限和可见范围由后端决定。
+除 `login` 续期前的特殊流程外，每次工具操作先以同一 Bearer 凭据请求 `GET /api/auth/identity`，并验证 `data.auth_via` 为 `ai_token`。缺少凭据、普通 token、撤销或账号登录期限已过均返回工具错误，不会降级为匿名读取或网页会话。MCP 不自行给普通 token 标记 AI 身份，实际业务权限和可见范围由后端决定。初始化与 `tools/list` 不向后端验证身份，不能单凭工具列表判断凭据有效。
 
-`login` 是账号登录期限续期工具：使用当前 AI 凭据请求 `POST /api/ai/login`，提交同账号的 `username` 与 `password`，再验证身份。此端点允许未撤销的 AI 凭据在账号登录期限已过时续期。不会设置 Cookie、生成普通 token 或切换到另一用户。密码不应写进提示词、日志或共享配置；可优先在后台完成账号登录。
+`login` 是账号登录期限续期工具：使用当前 AI 凭据请求 `POST /api/ai/login`，提交同账号的 `username` 与 `password`，再验证身份。此端点允许未撤销的 AI 凭据在账号登录期限过期后续期。不会设置 Cookie、返回或轮换普通 token，也不切换用户。密码不应写进提示词、日志或共享配置；可优先在后台完成账号登录。
 
-账号登录期限已过时，API 返回 HTTP 401、`error: "login_expired"` 和“登录已过期，请重新登录站点或通过登录接口续期后重试。”；MCP 显示“登录已过期，请重新登录站点，或使用 login 工具以同账号密码续期后重试。”。携带过期凭据的公开读取请求也会明确拒绝，不再静默按访客返回。未携带凭据的访客访问保持可用。无效或撤销的凭据与过期分别提示，重新登录不能恢复已撤销凭据。
+账号登录期限过期后，API 返回 HTTP 401、`error: "login_expired"` 和“登录已过期，请重新登录站点或通过登录接口续期后重试。”；MCP 显示“登录已过期，请重新登录站点，或使用 login 工具以同账号密码续期后重试。”。携带过期凭据的公开读取请求也会明确拒绝，不再静默按访客返回。未携带凭据的访客访问保持可用。无效或撤销的凭据与过期分别提示，重新登录不能恢复已撤销凭据。
+
+普通 API token 与专用 AI 凭据分别生成、管理和撤销；重建普通 token 不会轮换 AI 凭据。两种 Bearer 都使用账号数据库中的 `LoginIssuedAt` 与实时登录策略，不按各密钥创建时间独立计时。普通用户和授权管理员分别配置期限，默认均为 3 天；0 天 0 小时表示永久，主站长（用户 ID 1）始终不受此期限限制。成功网页登录或 AI `login` 会刷新同账号所有 Bearer 凭据共用的登录期限，创建/重建密钥本身不会续期。Cookie 会话使用各自签发时间，不会随其他客户端续期自动延长。
 
 AI 凭据的创建、撤销和续期在单主服务进程内按账号串行执行；当前保证包括 SQLite 单实例部署。多个主服务实例共享数据库时，撤销与续期的并发顺序不具备分布式锁保证。密钥撤销后不再用于新请求，已经执行中的业务请求不回滚。
 
@@ -44,7 +46,7 @@ npm ci
 
 ## 镜像内置模块
 
-`final-mcp` 构建目标包含 Node.js 和 `/app/mcp/` 模块，`final` 不包含。发布渠道 `ghcr.io/ynby233/echo-noise:edge-mcp` 和 `stable-mcp` 使用 `final-mcp`；尚无正式 Release 时 stable 渠道仍不可用。
+`final-mcp` 构建目标包含 Node.js 和 `/app/mcp/` 模块，`final` 不包含。发布渠道 `ghcr.io/ynby233/echo-noise:edge-mcp` 和 `stable-mcp` 使用 `final-mcp`；stable 标签是否可拉取取决于正式 Release 的发布情况。
 
 源码 Compose 默认打包模块：
 
@@ -124,8 +126,8 @@ Host/Origin 拒绝返回 403，缺少请求 Bearer 返回 401，过大请求体�
 | `publish` | 内容与可见性；支持文字、Markdown、图片与混合内容 |
 | `update` | `id`，以及 `content`、`visibility` 或旧 `private` 字段 |
 | `delete` | 必须明确 `id`；调用后端 DELETE 将该消息移入回收站 |
-| `pin` | `id`、`pinned`；走后端 token 路由，按后端权限允许或拒绝 |
-| `settings` | `allowRegistration`、`frontendSettings`；走 token 设置路由，仅后端允许的管理员权限可执行 |
+| `pin` | `id`、`pinned`、可选 `scope: global\|personal`（默认 `global`）；全局置顶需 `notes.pin_global` 能力并满足内容权限，个人置顶只允许本人笔记 |
+| `settings` | `allowRegistration`、`autoApproveRegistration`、`frontendSettings`；至少提供一项，走 token 设置路由，需 `site_settings.manage` 能力 |
 | `status` | 查询系统状态 |
 | `calendar` | 查询发布日历 |
 | `config` | 查询前端公开配置 |
@@ -136,7 +138,7 @@ Host/Origin 拒绝返回 403，缺少请求 Bearer 返回 401，过大请求体�
 
 `publish` 兼容 `type: text|markdown|md|image|multipart` 和 `image/images/imageURL`，同时支持 `image_url/video_url`。单图使用后端图片字段，多图与视频链接写入 Markdown 正文以确保保存；不会上传本地附件。搜索和分页默认返回 JSON，`format=text` 返回可读列表。
 
-发布可见性为 `public`（公开）、`users`（登录用户）、`contacts`（联系关系范围）、`private`（仅自己）。**发布未指定可见性时仍默认公开**，以保持原行为。兼容 `private: true` → `private`、`private: false` → `public`；显式 `visibility` 优先。更新不传可见性字段时保留原可见性。
+发布可见性为 `public`（公开）、`users`（登录用户）、`contacts`（联系关系范围）、`private`（仅自己）。**发布未指定可见性时仍默认公开**，以保持原行为。兼容 `private: true` → `private`、`private: false` → `public`；同时传入时显式 `visibility` 优先，不会因两者冲突报错。更新不传可见性字段时保留原可见性。`publish` / `update` 还支持 `created_at`，指定发布时间由后端检查相应管理能力；`publish` 支持 `notify`，发送发布通知仍受后端权限限制。
 
 ```json
 {"content":"本周记录","type":"markdown","visibility":"contacts"}

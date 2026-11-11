@@ -18,12 +18,15 @@
 | --- | --- |
 | `POST /api/updates/executor/credential`，`{"name":"宿主执行器"}` | HTTP 201，`{"code":1,"data":{"credential":{...},"token":"仅显示一次"}}` |
 | `GET /api/updates` | `data.instance_id` 是管理员人工确认的固定实例 ID |
+| `PUT /api/updates/channel`，`{"channel":"stable"}` 或 `{"channel":"edge"}` | 仅保存跟随偏好，不创建安装任务；JSON 渠道名不是镜像标签 `stable-mcp` / `edge-mcp` |
+| `POST /api/updates/tasks`，`{"channel":"edge","revision":"<完整提交>","digest":"sha256:<摘要>"}` | 固定 ID 1 站长确认发现结果；新建 201，已有活动任务返回 200 和原任务；条件不足 412，目标变化或不可安装 409 |
 | `POST /api/updates/prepare`，`{}` | 固定 ID 1 站长认证；已可安装 HTTP 200，检查请求持久化/合并 HTTP 202；`data.credential_id/requested_at/installation/wake_status`，只准备部署检查，不创建任务、不查询 registry |
 | `GET /api/updates/executor/runtime` | executor Bearer；`data.instance_id/revision/build_identity` 用于核对 |
 | `GET /api/updates/executor/work` | executor Bearer；HTTP 200、`code:1`、`data.instance_id/check_requested/task_available`，两个标志为 bool；只查询待办，不领取或更新部署检查，`Cache-Control: no-store` |
 | `POST /api/updates/executor/check` | executor Bearer；`instance_id/version/platform/revision/ok`，记录本脚本实际部署/SQLite 备份检查，不接受路径、秘密或自由文本 |
 | `POST /api/updates/executor/claim` | executor Bearer；无任务 204；有任务 `code:1`，`data.id/status/channel/target_image/target_digest/target_revision` |
 | `POST /api/updates/executor/tasks/ID/events`，`{"status":"downloading"}` | executor Bearer；成功 HTTP 200、`code:1`；非法转换 409；自由文本不保存 |
+| `POST /api/updates/executor/tasks/ID/prepare`，`{}` 或 `{"cancel":true}` | 原任务 executor Bearer；准备或取消停机保护，与站长 `/api/updates/prepare` 的部署检查请求不同 |
 
 将明文 token 通过静默标准输入保存为独立文件，禁止 shell trace、命令历史、截图或工单记录明文。脚本只通过 stdin 给 curl 传 Authorization，不转发 HTTP 原响应、Docker inspect 或 env。轮换时新 token 用新文件名并修改配置引用，旧文件保留到原任务结案，不能覆盖旧文件。
 
@@ -32,12 +35,19 @@
 脚本安装目录、配置、token、image/env、状态和备份目录均在应用挂载之外，由 root/执行用户持有；建议目录 0700、脚本 0700、配置与密钥 0600。控制文件及所有父目录检查 owner/mode，拒绝父目录符号链接、其他 UID 所有的目录和可写父目录；root 所有的 sticky 临时目录允许，但其子目录仍须可信。不要将脚本安装到其他用户可替换的位置。执行用户需 Docker 管理权限和状态/备份目录写权限，NAS 管理员身份不自动证明有 Docker 权限。
 
 ```sh
-install -d -m 700 /etc/echo-noise-update /var/lib/echo-noise-update/state /var/lib/echo-noise-update/backups
+install -d -m 700 /etc/echo-noise-update /var/lib/echo-noise-update /var/lib/echo-noise-update/state /var/lib/echo-noise-update/backups
 install -m 700 scripts/update/executor.py /etc/echo-noise-update/executor.py
 install -m 600 scripts/update/docker.example.json /etc/echo-noise-update/executor.json
+install -m 600 scripts/update/app.example.env /etc/echo-noise-update/app.env
+install -m 600 scripts/update/image.example.env /etc/echo-noise-update/image.env
 # 编辑 JSON/app.env/image.env、安全保存 token 后：
 python3 /etc/echo-noise-update/executor.py check /etc/echo-noise-update/executor.json
 ```
+
+上述安装命令从仓库根目录以 root 执行；只安装控制文件，不创建或替换业务容器。Compose 模式改用 `compose.example.json`，并将 `compose.example.yml` 安装到 JSON 登记的 `/etc/echo-noise-update/compose.yml`，权限设为 0600。配置目录和备份目录不得放进 `/srv/echo-noise/config` 或 `/srv/echo-noise/data` 等业务挂载内。
+
+检查前填写实际 instance ID、token 文件、digest 和全部部署参数，并准备真实业务配置/数据目录。`app.example.env` 中的 `HTTP_PORT` 当前不被 Go 主服务读取；监听地址来自挂载的 `config.yaml` 的 `server.host` / `server.port`。示例及桌面启动器使用 1314；变更端口必须同时核对执行器 URL、健康检查和部署网络配置。Docker 示例依赖宿主 `/dev/fuse`，只有实际设备及参数一致时才照用。
+
 
 `check` 核对配对、依赖、架构、实际容器、登记挂载、权限和最低磁盘余量。Docker 模式创建**不启动**的临时容器，用旧 image ID 比较固定启动参数，然后删除它；不执行迁移。无法表示的高级参数、额外网络、自定义配置会拒绝，可改用管理员 Compose，不能假装克隆任意 inspect。支持 Docker network、restart、env_file、devices、ports、log_driver/options、entrypoint、command、user；挂载支持显式 bind/现存 named volume，非默认传播/卷驱动不支持。`min_free_bytes` 默认 1 GiB，检查状态/备份及 Docker 根目录；另以旧镜像 plan 测量全部归档源的字节量，备份目录至少需三倍源大小加 64 MiB 和配置最低余量中的较大值；失败在停机前拒绝。
 
@@ -81,6 +91,9 @@ python3 executor.py run /absolute/executor.json     # 先恢复，再检查/上�
 python3 executor.py poll /absolute/executor.json    # 先恢复；无待办只查询，有待办沿原 run
 ```
 
+部署后由管理员选定的调度器周期调用绝对路径，例如 `python3 /etc/echo-noise-update/executor.py poll /etc/echo-noise-update/executor.json`；调度器应提供同一执行用户、Docker CLI 环境及持久目录。手工 `claim` 只领取，不执行替换，不能用它代替调度 `run` / `poll`。定时 `poll`、可选唤醒和手工入口必须共用同一配置与 state_dir。
+
+
 每次 CLI 独占登记 state_dir 的 flock；仅 `poll` 锁忙输出 `busy` 并 exit 0，表示已有执行器承担工作，其他入口锁忙仍输出 `executor_already_running` 并非零退出，不删除锁文件“恢复”。`active.json` 原子替换/fsync、0600，保存任务/实例、目标 digest/revision、旧容器/image ID、配置位置、备份位置、token **文件引用**、确认/待报阶段和动作意图/结果；无 token 明文或原 env。日志只输出任务 ID、阶段和有限错误码。保留宿主/scheduler stderr；服务起不来时网页无法查询是实际限制。
 
 状态按 `claimed → downloading → stopping → backing_up → replacing → verifying → succeeded` 回报。停机期间继续确认后的宿主操作，事件落盘后在新服务恢复时串行补报。ACK 丢失重发当前未确认事件；409 保留记录并退出，不能忽略/跳过。实例或配置不一致、原任务无本地证据时停止，不领取第二条任务。下载/停机前检查失败记录 failed；停止/备份中断结果不明进入 `needs_attention`；替换意图存在且实际目标已运行时只核验/补报，不再次替换。
@@ -100,6 +113,9 @@ Docker 模式在新版镜像/挂载/健康/runtime 验证通过、原任务 succ
 异常 step、有限错误码与待报 needs_attention 同一次原子写入。旧版 attention/pending=[] 记录在 run/report 通过原 token、原任务事件接口补报；需本地旧容器/image 证据及合法 downloading/stopping/backing_up/replacing/verifying 状态。服务端仍校验任务归属和状态转换，409/401/传输失败保留记录；无法证明合法来源返回 `attention_evidence_requires_reconciliation`，无本地证据的 claim 保持 `manual_reconciliation_required`。补报不会 stop/replace，不解除活动占位。
 
 ## 一致备份、停机与人工结案
+
+下面是维护者在隔离环境使用的验证命令，不是安装前要求在业务宿主执行的操作；命令说明不代表本次文档核检已运行它们。
+
 
 ```sh
 python3 -m unittest discover -s scripts/update -p 'test_*.py' -v

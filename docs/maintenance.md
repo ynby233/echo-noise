@@ -1,18 +1,21 @@
 # 维护指南
 
-本文说明当前源码的运行入口、职责边界、关键数据流和验证方式。部署使用见根目录 `README.md`，R2/S3 配置见 `docs/r2-s3.md`；本文件不重复产品功能或历史交接。
+本文说明当前源码的运行入口、职责边界、关键数据流和验证方式。部署使用见 [根 README](../README.md)，构建见 [构建与运行](build_and_use.md)，云存储见 [R2/S3](r2-s3.md)。历史验收只证明当时的版本和环境，不能代替当前源码的构建或现场验证。
 
 ## 1. 运行入口
 
 | 场景 | 入口 | 说明 |
 | --- | --- | --- |
 | 后端服务 | `go run ./cmd/server` | `cmd/server/main.go` 依次加载配置、应用待恢复包、初始化数据库、启动 worker、注册路由并监听 HTTP。 |
-| 前端开发 | `cd web && npm run dev` | Nuxt CSR 开发服务默认监听 1314，API 使用同源 `/api`。需要后端时由本地代理或同源环境提供。 |
+| 前端开发 | `cd web && npm run dev -- --port 3000` | Nuxt 默认配置为 1314，与后端冲突；同时开发时显式改为 3000。`/api`、`/rss` 和 manifest 由 Vite/Nitro 代理到 `http://localhost:1314`。 |
 | 前端静态产物 | `cd web && npm run generate` | 产物位于 `web/.output/public`。 |
 | 同域构建 | `bash scripts/build.sh` | 生成前端并同步至根目录 `public`，供 Go 服务静态托管。脚本需要 Bash 和 `rsync`。 |
 | 容器启动 | `docker-entrypoint.sh` | 加载运行配置并启动镜像内服务；卷映射、环境变量和发布方式仍以 `README.md` 为准。 |
 
-Windows 开发前先加载本机项目工具链与环境配置，并保持当前工作树为工作目录。任何会写数据的本地复现都应显式设置独立的 `DB_PATH`、`ATTACHMENT_BLOB_ROOT` 和工作目录，不得指向 NAS 或共享实例。
+开发前准备符合 `go.mod` 和前端锁文件要求的工具链，并在仓库根目录执行命令。Go 模块声明为 1.24.1，容器前端构建使用 Node 22.14.0；实际本机环境按维护者配置核对。任何会写数据的本地复现都应显式设置独立的 `DB_PATH`、`ATTACHMENT_BLOB_ROOT` 和工作目录，避免连接生产或共享实例。已有密码库配置应保留，测试不得读取、输出或覆盖真实密码库。
+
+服务端监听地址直接取自 `config/config.yaml` 的 `server.host` / `server.port`；当前 Go 启动入口没有读取 `HTTP_PORT`。`config/runtime.env` 由容器 entrypoint 加载，直接执行 `go run ./cmd/server` 不会自动加载它。健康探针是 `GET /api/health/live` 和 `GET /api/health/ready`；`GET /api/status` 是站点状态，`/status` 返回后台 SPA 网页，不能用后者判断数据库 readiness。
+
 
 ## 2. 模块地图
 
@@ -100,7 +103,7 @@ Windows 开发前先加载本机项目工具链与环境配置，并保持当前
 
 ### 更新任务与执行器接口
 
-`GET /api/updates`、`GET /api/updates/state` 和 `GET /api/updates/tasks/:id` 是只读查询；受托管理员即使持有 `version.view`，也不会得到完整 revision、digest、执行器信息或宿主错误摘要。`PUT /api/updates/channel` 只修改后续跟随偏好，不创建任务。生产 `POST /api/updates/tasks` 仅接受固定 ID 1 站长选择的、服务端发现的 `stable`/`edge` 后代目标；要求近期同实例、执行器版本 `u6-1`、Linux amd64、SQLite 的实际部署检查，否则 412。`u6-1` 是沿用历史命名的协议兼容值，以 `internal/updates/capability.go` 的 `ExecutorVersion` 为准，不是维护阶段名称；旧值 `u5-1` 不满足当前能力检查。目标 digest/revision 在创建时固定，连续提交返回同一条活动任务；确认目标变化返回 409。旧 `POST /api/version/update` 保持 501，历史 `GET /api/version/update/stream` 已退役且无副作用。
+`GET /api/updates`、`GET /api/updates/state` 和 `GET /api/updates/tasks/:id` 是只读查询；受托管理员即使持有 `version.view`，也不会得到完整 revision、digest、执行器信息或宿主错误摘要。`PUT /api/updates/channel` 的 JSON 使用 `stable` / `edge`，只修改后续跟随偏好；`POST /api/updates/prepare` 只请求部署检查。生产 `POST /api/updates/tasks` 使用 `channel/revision/digest`，仅允许固定 ID 1 站长选择服务端发现的后代目标；新任务要求三分钟内同实例、匹配已安装 revision、执行器版本 `u6-1`、Linux amd64、SQLite 的实际部署检查，否则 412。`u6-1` 以 `internal/updates/capability.go` 的 `ExecutorVersion` 为准，旧值 `u5-1` 不满足当前能力检查。新建返回 201，已有活动任务返回 200 和原任务；传入非空 revision/digest 与发现结果不同则返回 409，调用者应始终提交确认过的完整目标。旧 `POST /api/version/update` 保持 501，历史 `GET /api/version/update/stream` 返回 410。
 
 执行器凭据由站长在 `/api/updates/executor/credential` 创建、查看状态或撤销，明文只在创建响应中出现一次，数据库只存验证值。创建时生成持久的实例 ID；站长在 `/api/updates` 可见，宿主需在首次配对时人工核对，并从受限 `/api/updates/executor/runtime` 再次核对。执行器必须以 `Authorization: Bearer ...` 调用 `/api/updates/executor/claim`、`/api/updates/executor/tasks/:id/events` 和 `/api/updates/executor/runtime`；用户登录、普通管理员 token 与执行器 token 不互通。轮换后旧凭据只可完成已领取任务；任务结束后仅可重试该任务的最终回报，不能领取新任务或读取运行身份，过期或明确撤销仍立即失效。claim 响应丢失后，同一执行器再次领取会得到原任务；任务不会因心跳超时分配给另一执行器，状态只能按真实阶段前进或进入 `failed`/`needs_attention`。`needs_attention` 保留活动占位并可由原执行器取回；宿主核对本地记录和实际运行状态后只能继续 `verifying` 或确认 `failed`，不能退回替换阶段，结果明确前禁止创建第二个任务。空白及未知回报状态被拒绝。服务端不保存执行器回报的自由文本，避免将宿主路径或凭据写入任务/审计；详情查宿主日志。
 
@@ -141,7 +144,7 @@ go test ./cmd/server -run TestServerStartupReadiness -count=1 -v
 ```powershell
 Set-Location web
 npm test
-npx nuxi typecheck
+npx --no-install nuxi typecheck
 npm run generate
 ```
 
@@ -168,7 +171,7 @@ node scripts/module-recovery.browser.cjs
 node scripts/update-panel.browser.cjs
 ```
 
-表格脚本默认读取 `web/.output/public`，可用 `TEST_OUTPUT_ROOT` 指定本次构建目录。它使用本地静态服务、合成 API 和隔离草稿，检查长名称、相同缩略名、同名不同 URL、多附件顺序、换行、重复展开及主动删除不复活；断言最终自动保存的完整 Markdown，失败返回非零退出码。其他三项覆盖首页懒加载、草稿与失败恢复、模块恢复语义；各脚本前置条件仍以脚本中的环境变量为准。
+表格脚本默认读取 `web/.output/public`，可用 `TEST_OUTPUT_ROOT` 指定本次构建目录。它使用本地静态服务、合成 API 和隔离草稿，检查长名称、相同缩略名、同名不同 URL、多附件顺序、换行、重复展开及主动删除不复活；断言最终自动保存的完整 Markdown，失败返回非零退出码。其余四项分别覆盖首页懒加载、功能加载失败恢复、模块恢复和更新面板行为；各脚本前置条件以脚本中的环境变量为准。
 
 日常修改先跑相关测试；涉及运行行为的交付候选执行完整自动化及上述浏览器检查。源码文本断言保留结构约束，已出现的行为缺陷补真实调用或浏览器回归，不通过删除断言凑绿。纯注释变更核对准确性和相关检查即可，不重复整套长测。
 
@@ -182,7 +185,7 @@ node scripts/update-panel.browser.cjs
 
 更新面板浏览器入口 `node scripts/update-panel.browser.cjs` 使用真实生产 Vue 组件、隔离状态 API 和 Chromium，覆盖两渠道空态/失败、安装条件、一次显示凭据、草稿确认、连点、创建响应丢失、停机重连、清缓存换浏览器任务恢复、人工处理占位、成功/失败、委派权限及 320/390/768/1440 明暗主题。它验证前端实际行为；真实容器替换由独立执行器 workflow 验证，NAS 接入需另做现场验证。
 
-2026-10-02 的历史验收复用了用户现有 Dagu 2.18.1，执行器的可重建环境、宿主路径/磁盘/进程视图、固定认证唤醒和分钟检查/领取/恢复通过了隔离及 NAS 后台完整更新。该实现保留 claim/events、flock、active.json 和三分钟能力窗口；业务与 Engine 根只读挂载，独立控制目录持久化。[历史 Dagu 说明](https://github.com/ynby233/echo-noise/blob/fc0a89aadd94bd6c8bf178092dd381c48b017913/scripts/update/dagu.md) 记录了当时的容器验收入口和构建前提；Dagu 专用实现及 CI 已于 2026-10-04 移除。实测 NAS 默认 AppArmor、私有文件及固定主机名差异和处理边界见 [Dagu 与 NAS 验收报告](dagu-nas-acceptance-2026-10-02.md)。
+2026-10-02 的历史验收复用了当时已有的 Dagu 2.18.1，记录了可重建执行器环境、宿主路径/磁盘/进程视图、固定认证唤醒和分钟检查/领取/恢复的隔离及 NAS 更新结果。Dagu 专用实现及 CI 已于 2026-10-04 移除，当前开源接入使用通用执行器和可选唤醒，不应按该历史环境重建部署。[历史 Dagu 说明](https://github.com/ynby233/echo-noise/blob/fc0a89aadd94bd6c8bf178092dd381c48b017913/scripts/update/dagu.md) 及 [Dagu 与 NAS 验收报告](dagu-nas-acceptance-2026-10-02.md) 仅供追溯当时的 AppArmor、私有文件和固定主机名处理。
 
 全链矩阵、故障注入、实际运行证据和未验现场项见 [端到端验收报告](end-to-end-acceptance-2026-10-02.md)。现有 `test-docker.py` 增加真实 registry 超时、新版启动退出、迁移部分写入后失败、运行提交/实例不匹配，断言保留备份与人工处理占位、旧容器不自动重启、修复后同目标显式结案；历史 `test-dagu.py` 覆盖了分钟/唤醒/漏通知/重建全链。发布策略运行检查为 `sh scripts/release/test-release-policy.sh`，已加入执行器 workflow；缓存镜像的 `RepoDigests` 顺序不能当作刚推送标签的身份。上述引擎脚本含容器替换和故障操作，只在独立 Engine/runner 运行，禁止将它们直接对准个人业务 Engine。
 

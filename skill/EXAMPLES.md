@@ -53,6 +53,10 @@ skill/config.json
 
 以下原有会话与 token 调用保持兼容。AI 使用普通 API token 仍记为普通 API 来源；需要可信 AI 归因时使用专用 AI 凭据，业务 token 路由支持该凭据，权限由后端判定。
 
+普通 API token 与 AI 凭据分别生成、管理和撤销，重建普通 token 不影响 AI 凭据。两种 Bearer 都按账号最近登录时间检查期限：普通用户与授权管理员分别配置，默认均为 3 天，0 天 0 小时表示永久；主站长（用户 ID 1）不受此期限限制。成功网页登录或 AI `login` 刷新同账号所有 Bearer 的期限，创建/重建密钥本身不续期。Cookie 会话仍按各自签发时间检查，不随其他客户端续期延长。期限已过返回 HTTP 401、`error: "login_expired"`；已撤销凭据需重新创建，登录无法恢复。
+
+以下公开读取示例未带认证；读取受限内容时加上当前账号 Cookie 或 `Authorization: Bearer <普通 API token>`，避免误判记录不存在。API JSON 成功还需检查 `code: 1`，登录失败也可能返回 HTTP 200。
+
 ### 1. 查询状态
 
 ```bash
@@ -68,8 +72,14 @@ curl "$BASE_URL/api/messages/page?page=1&pageSize=10"
 ### 3. 搜索关键词
 
 ```bash
-curl "$BASE_URL/api/messages/search?keyword=部署&page=1&pageSize=10"
+curl -G "$BASE_URL/api/messages/search" \
+  --data-urlencode "keyword=部署" \
+  --data-urlencode "page=1" \
+  --data-urlencode "pageSize=10"
 ```
+
+
+直接 API 不支持 MCP 的 `query` 别名或自动 `#标签` 路由。标签查询示例：`curl "$BASE_URL/api/messages/tags/%E9%83%A8%E7%BD%B2"`；不要将 `#` 原样拼进 URL。
 
 ### 4. 查看详情
 
@@ -110,8 +120,10 @@ curl -X POST "$BASE_URL/api/login" \
 curl -X POST "$BASE_URL/api/token/messages" \
   -H "Authorization: Bearer <你的Token>" \
   -H "Content-Type: application/json" \
-  -d '{"type":"text","content":"今天修好了双模式 skill"}'
+  -d '{"content":"今天修好了双模式 skill","visibility":"public"}'
 ```
+
+直接 API 不读取 MCP 的 `type`、`image`、`images` 参数。单图示例请求体为 `{"content":"配文","image_url":"https://example.com/a.jpg"}`；多图用 Markdown 正文，例如 `{"content":"![图片一](https://example.com/a.jpg)\n![图片二](https://example.com/b.jpg)"}`。当前 `video_url` 用于通知处理，需持久保存的视频链接也应写入 `content`。
 
 ### 10. 使用会话更新内容
 
@@ -129,14 +141,16 @@ curl -X DELETE "$BASE_URL/api/token/messages/123" \
   -H "Authorization: Bearer <你的Token>"
 ```
 
-### 12. 使用会话置顶内容
+### 12. 使用会话个人置顶本人笔记
 
 ```bash
-curl -X PUT "$BASE_URL/api/messages/123/pin" \
+curl -X PUT "$BASE_URL/api/messages/123/pin/personal" \
   -H "Content-Type: application/json" \
   -b cookie.txt \
   -d '{"pinned":true}'
 ```
+
+全局置顶使用 `/pin/global`，需 `notes.pin_global` 能力并满足内容权限；旧 `/pin` 也表示全局置顶。两种范围都有 `/api/token/messages/:id/pin/...` 对应路径。
 
 ### 13. 获取当前用户 token
 
@@ -154,7 +168,7 @@ curl -X POST "$BASE_URL/api/user/token/regenerate" -b cookie.txt
 
 MCP 使用专用 AI 凭据，由用户在后台“个人配置”创建（管理接口 `/api/user/ai-credentials`），创建返回的 token 仅展示一次，应保存在客户端私有配置。普通用户 token 不能替代它。stdio 通过进程私有环境变量 `NOTE_HOST`、`NOTE_TOKEN` 配置；HTTP 在**每个请求**中携带该客户端的 `Authorization: Bearer <专用 AI 凭据>`，包括初始化、通知、工具列表和只读调用。HTTP 忽略服务端 `NOTE_TOKEN`，不接受 Cookie 登录，也不继承其他客户端的身份。
 
-工具使用英文名称。以下调用统一为 JSON-RPC 2.0 `tools/call`，工具名放在 `params.name`，参数放在 `params.arguments`。每次工具操作先用同一 Bearer 请求 `GET /api/auth/identity` 并验证 `data.auth_via=ai_token`，实际权限由后端决定；缺少、普通 token、撤销或过期的凭据都不能降级为匿名读取。
+工具使用英文名称。以下调用统一为 JSON-RPC 2.0 `tools/call`，工具名放在 `params.name`，参数放在 `params.arguments`。除 `login` 续期前的特殊流程外，每次工具操作先用同一 Bearer 请求 `GET /api/auth/identity` 并验证 `data.auth_via=ai_token`，权限由后端决定；缺少、普通 token、撤销或账号期限已过都不能降级匿名读取。
 
 ### 1. 标准 Streamable HTTP 连接与身份验证
 
@@ -324,15 +338,18 @@ curl -sS -X POST "$MCP_URL" \
     "name": "pin",
     "arguments": {
       "id": "123",
-      "pinned": true
+      "pinned": true,
+      "scope": "personal"
     }
   }
 }
 ```
 
+此处显式选择本人笔记的个人置顶；省略 `scope` 时默认 `global`，需全局置顶权限。
+
 ### 9. 续期同一账号登录期限
 
-`login` 使用当前 AI 凭据调用 `POST /api/ai/login`，只允许凭据所属的同一账号续期登录期限，随后重新验证身份；不会设置 Cookie、生成普通 token 或切换账号。账号登录期限已过时，未撤销的 AI 凭据仍可用于此续期流程。
+`login` 使用当前 AI 凭据调用 `POST /api/ai/login`，只允许凭据所属的同一账号续期，随后重新验证身份；不会设置 Cookie、返回或轮换普通 token，也不切换账号。账号登录期限过期后，未撤销的 AI 凭据仍可用于此续期流程。
 
 以下用户名和密码均为占位符。密码仅通过客户端私密输入注入实际请求，不写进提示词、日志或共享配置；可优先在后台完成账号登录。
 
@@ -394,7 +411,7 @@ MCP 已移除 `token` / `令牌` 轮换工具；创建或撤销专用 AI 凭据�
 
 ```text
 已使用 API 模式发布成功。
-类型：text
+正文格式：Markdown
 返回 id：123
 内容摘要：今天修好了双模式 skill
 ```
