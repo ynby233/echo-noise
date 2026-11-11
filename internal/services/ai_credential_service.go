@@ -128,14 +128,26 @@ func ResolveBearerIdentity(header string, allowExpired bool) (*models.User, *mod
 		}
 		credential = &models.AICredential{}
 		if err := db.Where("token_hash = ?", hashAICredentialToken(token)).First(credential).Error; err != nil {
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, nil, "", err
+			}
 			return nil, nil, "", ErrInvalidBearerIdentity
 		}
-		if credential.UserID == 0 || db.First(&user, credential.UserID).Error != nil {
+		if credential.UserID == 0 {
+			return nil, nil, "", ErrInvalidBearerIdentity
+		}
+		if err := db.First(&user, credential.UserID).Error; err != nil {
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, nil, "", err
+			}
 			return nil, nil, "", ErrInvalidBearerIdentity
 		}
 		via = "ai_token"
 	} else {
 		if err := db.Where("token = ?", token).First(&user).Error; err != nil {
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, nil, "", err
+			}
 			return nil, nil, "", ErrInvalidBearerIdentity
 		}
 		// SQL collations may be case-insensitive; bearer secrets never are.

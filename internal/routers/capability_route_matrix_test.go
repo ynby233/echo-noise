@@ -180,7 +180,13 @@ func TestStatusVoceChatFieldVisibilityHTTPMatrix(t *testing.T) {
 	assertFields(t, statusBody(t, seedSession(delegatedWithoutUsersView), ""), selfFields(delegatedWithoutUsersView), selfFields(delegatedWithoutUsersView), selfFields(delegatedWithoutUsersView))
 	assertFields(t, statusBody(t, nil, delegatedWithoutUsersView.Token), selfFields(delegatedWithoutUsersView), selfFields(delegatedWithoutUsersView), selfFields(delegatedWithoutUsersView))
 	assertFields(t, statusBodyAt(t, "/api?include_voce_chat_email=true&user_id=1&export=users", nil, delegatedWithoutUsersView.Token), selfFields(delegatedWithoutUsersView), selfFields(delegatedWithoutUsersView), selfFields(delegatedWithoutUsersView))
-	assertFields(t, statusBody(t, nil, "expired-or-invalid-token"), map[uint]bool{}, map[uint]bool{}, map[uint]bool{})
+	invalidRequest := httptest.NewRequest(http.MethodGet, "/api/status", nil)
+	invalidRequest.Header.Set("Authorization", "Bearer expired-or-invalid-token")
+	invalidResponse := httptest.NewRecorder()
+	r.ServeHTTP(invalidResponse, invalidRequest)
+	if invalidResponse.Code != http.StatusUnauthorized {
+		t.Fatalf("invalid credential status=%d", invalidResponse.Code)
+	}
 	assertFields(t, statusBody(t, seedSession(ordinaryA), primary.Token), selfFields(ordinaryA), selfFields(ordinaryA), selfFields(ordinaryA))
 
 	if err := db.Create(&models.AdminCapabilityGrant{UserID: delegatedWithUsersView.ID, Capability: string(authorization.CapabilityUsersView), GrantedByUserID: primary.ID}).Error; err != nil {

@@ -249,24 +249,25 @@ func SetupRouter(musicService *music.Service) *gin.Engine {
 
 	// API 路由组
 	api := r.Group("/api")
+	publicRead := api.Group("", middleware.PublicReadAuthMiddleware())
 
 	// 消息详情页路由（移到 API 组外）
-	r.GET("/m/:id", controllers.GetMessagePage)
+	r.GET("/m/:id", middleware.PublicReadAuthMiddleware(), controllers.GetMessagePage)
 
 	// RSS 路由保留在 API 组外，禁用时仍返回显式 404，避免旧链接落入前端兜底页。
-	r.GET("/rss", controllers.GenerateRSS)
+	r.GET("/rss", middleware.PublicReadAuthMiddleware(), controllers.GenerateRSS)
 
 	// 公共路由
 	api.GET("/setup/status", controllers.GetMobileSetupStatus)
 	api.POST("/setup/owner", controllers.InitializeMobileSiteOwner)
-	api.GET("", controllers.GetStatus)
-	api.GET("/frontend/config", controllers.GetFrontendConfig)
-	api.GET("/settings", controllers.GetFrontendConfig)
-	api.GET("/announcements", controllers.ListAnnouncements)
-	api.GET("/announcements/unread", controllers.GetUnreadAnnouncements)
+	publicRead.GET("", controllers.GetStatus)
+	publicRead.GET("/frontend/config", controllers.GetFrontendConfig)
+	publicRead.GET("/settings", controllers.GetFrontendConfig)
+	publicRead.GET("/announcements", controllers.ListAnnouncements)
+	publicRead.GET("/announcements/unread", controllers.GetUnreadAnnouncements)
 	api.PUT("/announcements/read-all", controllers.MarkAllAnnouncementsRead)
 	api.PUT("/announcements/:id/read", controllers.MarkAnnouncementRead)
-	api.GET("/feed/items", controllers.GetInfoFeedItems)
+	publicRead.GET("/feed/items", controllers.GetInfoFeedItems)
 	api.POST("/feed/refresh", controllers.RefreshPublicInfoFeedItems)
 	api.POST("/login", controllers.Login)
 	api.GET("/auth/identity", controllers.GetAuthIdentity)
@@ -276,29 +277,29 @@ func SetupRouter(musicService *music.Service) *gin.Engine {
 	aiCredentials.POST("", controllers.CreateAICredential)
 	aiCredentials.DELETE("/:id", controllers.RevokeAICredential)
 	api.POST("/register", controllers.Register)
-	api.GET("/status", controllers.GetStatus)
-	api.GET("/users/profile", controllers.GetUserProfile)
+	publicRead.GET("/status", controllers.GetStatus)
+	publicRead.GET("/users/profile", controllers.GetUserProfile)
 	api.GET("/captcha", controllers.GetCaptcha)
 	// api.GET("/config", controllers.GetFrontendConfig)
-	api.GET("/messages", controllers.GetMessages)
-	api.POST("/messages/locate", controllers.LocateMessagePage)
-	api.GET("/messages/locate", controllers.LocateMessagePage)
-	api.POST("/messages/page", controllers.GetMessagesByPage)
-	api.GET("/messages/page", controllers.GetMessagesByPage)
-	api.GET("/messages/:id", controllers.GetMessage)
-	api.GET("/messages/calendar", controllers.GetMessagesCalendar) // 新增热力图专用路由
-	api.GET("/messages/search", controllers.SearchMessages)        // 新增搜索消息路由
-	api.GET("/version/check", controllers.CheckVersion)            // 添加版本检查路由
-	api.GET("/version", controllers.GetVersion)                    // 当前运行版本（镜像标签/环境变量）
+	publicRead.GET("/messages", controllers.GetMessages)
+	publicRead.POST("/messages/locate", controllers.LocateMessagePage)
+	publicRead.GET("/messages/locate", controllers.LocateMessagePage)
+	publicRead.POST("/messages/page", controllers.GetMessagesByPage)
+	publicRead.GET("/messages/page", controllers.GetMessagesByPage)
+	publicRead.GET("/messages/:id", controllers.GetMessage)
+	publicRead.GET("/messages/calendar", controllers.GetMessagesCalendar) // 新增热力图专用路由
+	publicRead.GET("/messages/search", controllers.SearchMessages)        // 新增搜索消息路由
+	api.GET("/version/check", controllers.CheckVersion)                   // 添加版本检查路由
+	api.GET("/version", controllers.GetVersion)                           // 当前运行版本（镜像标签/环境变量）
 	api.GET("/version/runtime", controllers.GetRuntimeEnv)
 	// 版本更新（管理员）将在下方统一 authRoutes 组中注册
 	// 添加标签和图像相关路由
-	api.GET("/messages/tags/:tag", controllers.GetMessagesByTag)         // 获取指定标签的消息
-	api.GET("/messages/tags", controllers.GetAllTags)                    // 获取所有标签列表
-	api.GET("/messages/images", controllers.GetAllImages)                // 获取所有图片列表
-	api.POST("/messages/:id/like", controllers.IncrementMessageLike)     // 点赞接口
-	api.POST("/messages/:id/like/toggle", controllers.ToggleMessageLike) // 点赞切换
-	api.GET("/guestbook/message", controllers.GetGuestbookMessageID)     // 获取留言板消息ID
+	publicRead.GET("/messages/tags/:tag", controllers.GetMessagesByTag)     // 获取指定标签的消息
+	publicRead.GET("/messages/tags", controllers.GetAllTags)                // 获取所有标签列表
+	publicRead.GET("/messages/images", controllers.GetAllImages)            // 获取所有图片列表
+	api.POST("/messages/:id/like", controllers.IncrementMessageLike)        // 点赞接口
+	api.POST("/messages/:id/like/toggle", controllers.ToggleMessageLike)    // 点赞切换
+	publicRead.GET("/guestbook/message", controllers.GetGuestbookMessageID) // 获取留言板消息ID
 	// 友链申请与审核控制器暂时保留在代码中，但不注册运行路由。
 	// 如需恢复，必须在此处重新显式注册全部公开和管理端入口。
 	api.GET("/douyin/resolve", controllers.ResolveDouyinShortURL)
@@ -378,8 +379,8 @@ func SetupRouter(musicService *music.Service) *gin.Engine {
 	}
 
 	// 评论系统（内置）公共路由
-	api.GET("/messages/:id/comments", controllers.GetComments)
-	api.POST("/messages/comments/counts", controllers.GetCommentCounts)
+	publicRead.GET("/messages/:id/comments", controllers.GetComments)
+	publicRead.POST("/messages/comments/counts", controllers.GetCommentCounts)
 	api.POST("/messages/:id/comments", controllers.PostComment)
 	// 管理员评论列表（提供公共路径，附加会话中间件以注入用户上下文）
 	api.GET("/comments", middleware.SessionAuthMiddleware(), middleware.RequireCapability(authorization.CapabilityCommentsView), controllers.ListComments)

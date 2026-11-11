@@ -3,7 +3,6 @@ package middleware
 import (
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
@@ -13,24 +12,18 @@ import (
 	"github.com/rcy1314/echo-noise/internal/models"
 	"github.com/rcy1314/echo-noise/internal/services"
 	"github.com/rcy1314/echo-noise/internal/updates"
-	"github.com/rcy1314/echo-noise/pkg"
 )
 
 func SessionAuthMiddleware() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		session := sessions.Default(ctx)
 		userID := session.Get("user_id")
-		expireAt := parseSessionExpireAt(session.Get("login_expire_at"))
-		issuedAt := parseSessionExpireAt(session.Get("login_issued_at"))
-		if sessionUserID, ok := toUint(userID); ok && sessionUserID > 0 {
-			db, err := database.GetDB()
-			var sessionUser models.User
-			if err != nil || db.First(&sessionUser, sessionUserID).Error != nil || services.IsUserLoginExpired(&sessionUser, issuedAt, time.Now()) || (issuedAt <= 0 && expireAt > 0 && time.Now().Unix() > expireAt) {
-				_ = pkg.ClearUserSession(ctx)
-				ctx.JSON(http.StatusUnauthorized, dto.Fail[any]("未登录或登录已过期"))
-				ctx.Abort()
-				return
-			}
+		sessionUser, present, err := resolveSessionIdentity(ctx)
+		if err != nil {
+			AbortAuthentication(ctx, err)
+			return
+		}
+		if present {
 			ctx.Set("user_id", sessionUser.ID)
 			ctx.Set("username", sessionUser.Username)
 			ctx.Set("is_admin", sessionUser.IsAdmin)
@@ -43,6 +36,9 @@ func SessionAuthMiddleware() gin.HandlerFunc {
 			// Bearer Token 回退仅保留给管理员，避免普通用户的持久化 token 绕过登录过期时间。
 			if authenticateAdminBearerToken(ctx) {
 				ctx.Next()
+				return
+			}
+			if ctx.IsAborted() {
 				return
 			}
 			// 定义公共路由
@@ -69,12 +65,10 @@ func SessionAuthMiddleware() gin.HandlerFunc {
 				}
 			}
 
-			ctx.JSON(http.StatusUnauthorized, dto.Fail[any]("未登录或登录已过期"))
-			ctx.Abort()
+			AbortAuthentication(ctx, services.ErrInvalidBearerIdentity)
 			return
 		}
-		ctx.JSON(http.StatusUnauthorized, dto.Fail[any]("未登录或登录已过期"))
-		ctx.Abort()
+		AbortAuthentication(ctx, services.ErrInvalidBearerIdentity)
 	}
 }
 
@@ -90,7 +84,13 @@ func legacyBearerHeader(header string) string {
 
 func authenticateAdminBearerToken(ctx *gin.Context) bool {
 	user, _, via, err := services.ResolveBearerIdentity(legacyBearerHeader(ctx.GetHeader("Authorization")), false)
-	if err != nil || user == nil || via != "token" || !user.IsAdmin {
+	if err != nil {
+		if ctx.GetHeader("Authorization") != "" {
+			AbortAuthentication(ctx, err)
+		}
+		return false
+	}
+	if user == nil || via != "token" || !user.IsAdmin {
 		return false
 	}
 	ctx.Set("user_id", user.ID)
@@ -258,8 +258,7 @@ func TokenAuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		user, credential, via, err := services.ResolveBearerIdentity(legacyBearerHeader(c.GetHeader("Authorization")), false)
 		if err != nil || user == nil {
-			c.JSON(http.StatusUnauthorized, dto.Fail[any]("未登录或登录已过期"))
-			c.Abort()
+			AbortAuthentication(c, err)
 			return
 		}
 		c.Set("user_id", user.ID)

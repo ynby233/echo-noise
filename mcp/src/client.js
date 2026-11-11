@@ -92,8 +92,9 @@ export class NoteClient {
         credentials: 'omit',
         cache: 'no-store',
       })
-      if (!response.ok) {
+      if (!response.ok && response.status !== 401) {
         controller.abort()
+        if (response.status === 403) throw failure('FORBIDDEN', '权限不足，当前账号无权执行此操作；重新登录不会增加权限。')
         throw failure('HTTP', `后端请求失败（HTTP ${response.status}）`)
       }
       if (Number(response.headers.get('content-length')) > MAX_RESPONSE_BYTES) {
@@ -121,6 +122,18 @@ export class NoteClient {
       let offset = 0
       for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength }
       const raw = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+      if (response.status === 401) {
+        let authError
+        try { authError = JSON.parse(raw) } catch {}
+        // Only stable error codes select local text. Never echo arbitrary remote messages.
+        if (authError?.code === 0 && authError?.error === 'login_expired') {
+          throw failure('LOGIN_EXPIRED', '登录已过期，请重新登录站点，或使用 login 工具以同账号密码续期后重试。')
+        }
+        if (path === '/api/ai/login') {
+          throw failure('INVALID_CREDENTIALS', '登录续期失败，请检查同账号用户名、密码及 AI 凭据；已撤销的凭据需重新创建。')
+        }
+        throw failure('INVALID_CREDENTIALS', 'AI 凭据无效或已撤销，请检查配置或在个人设置中创建新凭据。')
+      }
       if (text) {
         const type = response.headers.get('content-type') || ''
         if (!/^(application\/(rss\+xml|xml)|text\/(xml|plain))(;|$)/i.test(type)) {

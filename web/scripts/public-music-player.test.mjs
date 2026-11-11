@@ -13,7 +13,7 @@ const publicMusicHook = await readFile(join(webRoot, 'composables/usePublicMusic
 
 assert.match(
   router,
-  /\/\/ 公共路由[\s\S]*api\.GET\("\/frontend\/config",\s*controllers\.GetFrontendConfig\)/,
+  /\/\/ 公共路由[\s\S]*publicRead\.GET\("\/frontend\/config",\s*controllers\.GetFrontendConfig\)/,
   'frontend/config must stay public so guests can read music player settings'
 )
 

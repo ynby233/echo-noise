@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/rcy1314/echo-noise/internal/database"
 	"github.com/rcy1314/echo-noise/internal/dto"
+	"github.com/rcy1314/echo-noise/internal/middleware"
 	"github.com/rcy1314/echo-noise/internal/models"
 	"github.com/rcy1314/echo-noise/internal/services"
 	"gorm.io/gorm"
@@ -102,7 +103,7 @@ func bearerIdentityResponse(user *models.User, credential *models.AICredential, 
 func GetAuthIdentity(c *gin.Context) {
 	user, credential, via, err := services.ResolveBearerIdentity(c.GetHeader("Authorization"), false)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, dto.Fail[any]("无效的凭据或登录已过期"))
+		middleware.AbortAuthentication(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"code": 1, "data": bearerIdentityResponse(user, credential, via)})
