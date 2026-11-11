@@ -1,6 +1,6 @@
-# R4：首页按需加载与资源整理（2026-09-09）
+# 首页按需加载与资源整理（2026-09-09）
 
-范围为桌面交接文档的工作线 4。对照构建为 d55af51a6314cffca36c5f836d537d61fa2e290a，结果来自本地生产静态构建与合成 API，不涉及真实账号、笔记发布或生产数据。
+范围为当时桌面交接中的首页按需加载与资源整理。对照构建为 d55af51a6314cffca36c5f836d537d61fa2e290a，结果来自本地生产静态构建与合成 API，不涉及真实账号、笔记发布或生产数据。
 
 后续独立验收在 bf45012c 发现正文次级依赖无法重试、全局 CSS 失败污染无关并发功能两项 P2。本报告最初的入口失败测试没有覆盖这两个边界，不能作为完整失败恢复的证明。65212e07 修复 CSS 隔离和依赖重新请求后，再验收又确认 Blob 恢复模块被部署 CSP 阻止；该问题已继续修复，详见文末两次验收后的记录。下方原首屏测量保留为首次实现的历史样本。
 
@@ -59,13 +59,13 @@ SW 独立验证：保留 115 个预缓存请求，合计 3,927,809 字节解码�
 - 图床首次打开、录音首次打开及取消（Chromium 模拟麦克风）；通知、信息流、留言、后台入口。
 - 搜索 JS 失败后重新下载成功；搜索 CSS 失败后补载成功；正文 Lute 失败时保留文本并可重试。另以独立浏览器注入预览模块本身下载失败，重试恢复标题排版。
 - 最新、个人、信息流第 2 页刷新恢复，以及总页数缩小时的恢复行为；GitHub 卡片外阴影回归。
-- 1440 与 390 宽度截图、390 明暗主题操作。仅为本轮布局迁移冒烟验证，未替代 R7 的全尺寸、全后台面板和长时间操作验收。
+- 1440 与 390 宽度截图、390 明暗主题操作。仅为本轮布局迁移冒烟验证，未替代综合发布验收中的全尺寸、全后台面板和长时间操作验收。
 
 ## 检查与复现
 
 通过 npm test（108 个文件）、nuxi typecheck、npm run generate、git diff --check；本轮未修改 Go 后端。产物浏览器检查脚本为 web/scripts/home-lazy-loading.browser.cjs，分页脚本为 web/scripts/home-page-position.browser.cjs。相关原源码断言已随职责迁移更新读取范围，原行为约束保留。
 
-在 web 目录完成 npm run generate 后，从仓库根运行：
+以下为当时的复现命令：先在 web 目录完成 npm run generate，再从仓库根运行。命令和下文证据中的旧环境路径、`r4-*` 文件名及外部报告名保留原值以便追溯，不表示当前环境路径或本次已执行验证；重新复现时需按实际环境配置路径。
 
 ```powershell
 $env:PLAYWRIGHT_MODULE = 'C:\Users\Jin\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\node_modules\playwright'
@@ -86,7 +86,7 @@ node web/scripts/home-lazy-loading.browser.cjs
 
 ## 独立验收后的修复（2026-09-09）
 
-调查结论：R4-S1、R4-Q1 均属实。改代码前，使用原平台资源重新复现 CSS 串扰，并使用当前生产构建运行新增浏览器脚本：正文依赖重试、搜索 CSS 与正文并发、搜索 CSS 与编辑器并发均失败；同功能并发共享下载的对照组通过。最小原生 import 探针也确认入口查询参数不能清除静态依赖的失败记录。
+调查结论：正文次级依赖无法重试、全局 CSS 失败污染无关并发功能两项问题均属实。改代码前，使用原平台资源重新复现 CSS 串扰，并使用当时生产构建运行新增浏览器脚本：正文依赖重试、搜索 CSS 与正文并发、搜索 CSS 与编辑器并发均失败；同功能并发共享下载的对照组通过。最小原生 import 探针也确认入口查询参数不能清除静态依赖的失败记录。
 
 65212e07 的修复方式：`build/scoped-module-preload.mjs` 在 Vite 的预加载调用入口传入该次导入的依赖列表；`retryable-module.ts` 只处理自己依赖的 CSS，不再订阅全局 `vite:preloadError`。CSS 下载成功后共享结果，失败移除对应 link，下一次重新加载。
 
@@ -114,7 +114,7 @@ node web/scripts/async-feature-failures.browser.cjs
 
 ## 再验收后的 CSP 兼容修复（2026-09-09）
 
-再验收报告 `echo-noise-R4-reacceptance-2026-09-09-65212e07.md` 的剩余 P2 属实。当前平台 `/api/version/build`、工作流提交和实际 chunk 靶点均对应 65212e07；在同一平台独立复跑正文依赖与搜索入口故障，资源恢复请求已经发出，但控制台均由 `script-src 'self' 'unsafe-inline' https: http:` 阻止 `blob:` 模块。仓库测试服务加上 `internal/middleware/security_headers.go` 的同一 CSP 后，也稳定得到 3 组通过、2 组失败，排除了旧版本、旧靶点和平台偶发因素。
+历史再验收报告 `echo-noise-R4-reacceptance-2026-09-09-65212e07.md` 的剩余 P2 属实（外部报告原名保留）。当时平台 `/api/version/build`、工作流提交和实际 chunk 靶点均对应 65212e07；在同一平台独立复跑正文依赖与搜索入口故障，资源恢复请求已经发出，但控制台均由 `script-src 'self' 'unsafe-inline' https: http:` 阻止 `blob:` 模块。仓库测试服务加上 `internal/middleware/security_headers.go` 的同一 CSP 后，也稳定得到 3 组通过、2 组失败，排除了旧版本、旧靶点和平台偶发因素。
 
 最终设计不放宽安全头、不生成运行时脚本文本，也不再使用 Blob。构建插件自动识别 `asyncFeature` / `createRetryableModule` 包裹的动态入口，为这些入口及其非首屏静态依赖生成 `_nuxt/__retry__/` 下的同源恢复图。正常加载继续使用原 chunk；发生已污染的模块记录时，界面重试才导入普通同源恢复 chunk。恢复图对首屏 Vue、Pinia 和应用单例仍引用原 URL，因此已有状态与组件身份不变；恢复图内部的失败分支使用新 URL，避开浏览器缓存的失败模块记录。动态功能入口仍回到自己的原始 URL 和重试边界，`import.meta.url` 保持原资源基址。
 

@@ -14,7 +14,7 @@ const measureOnly = process.env.MEASURE_ONLY === '1'
 const results = []
 const record = row => { results.push(row); console.log('Passed:', row.label) }
 const pixel = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j9XkAAAAASUVORK5CYII='
-const content = `# R4 正文\n\n普通阅读 **内容**\n\n- [ ] 任务\n\n|甲|乙|\n|---|---|\n|1|2|\n\n![测试图片](${pixel})`
+const content = `# 首页懒加载正文\n\n普通阅读 **内容**\n\n- [ ] 任务\n\n|甲|乙|\n|---|---|\n|1|2|\n\n![测试图片](${pixel})`
 const chunks = fs.readdirSync(path.join(output, '_nuxt')).filter(name => name.endsWith('.js'))
 const chunkFor = name => chunks.find(file => fs.readFileSync(path.join(output, '_nuxt', file), 'utf8').includes(`__name:"${name}"`))
 const features = ['VditorEditor', 'Searchmode', 'InfoFeedList', 'UserNotificationCenter', 'BuiltinComments', 'ImageHostingUploader', 'AudioRecorder', 'StatusPanel']
@@ -23,7 +23,7 @@ const featureChunks = Object.fromEntries(features.map(name => [name, chunkFor(na
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://local')
   const cookies = Object.fromEntries(String(req.headers.cookie || '').split(';').map(part => part.trim().split('=')))
-  const loggedIn = cookies['r4-viewer'] !== 'guest'
+  const loggedIn = cookies['home-lazy-loading-viewer'] !== 'guest'
   const json = (data, status = 200) => { res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(data)) }
   if (url.pathname.startsWith('/api/')) {
     const p = url.pathname
@@ -34,10 +34,10 @@ const server = http.createServer(async (req, res) => {
       data = { id: 1, userid: 1, username: 'admin', is_admin: true }
     }
     if (p.endsWith('/frontend/config')) data = { frontendSettings: {
-      feedEnabled: true, commentEnabled: true, musicEnabled: false, pwaEnabled: cookies['r4-sw'] === '1',
-      announcementEnabled: false, homeLayoutDefault: cookies['r4-layout'] || 'masonry', latestGalleryEnabled: false,
+      feedEnabled: true, commentEnabled: true, musicEnabled: false, pwaEnabled: cookies['home-lazy-loading-sw'] === '1',
+      announcementEnabled: false, homeLayoutDefault: cookies['home-lazy-loading-layout'] || 'masonry', latestGalleryEnabled: false,
     } }
-    if (p.endsWith('/messages/page')) data = { total: 1, items: [{ id: 1, content: content + (cookies['r4-music'] === '1' ? '\n\nhttps://music.163.com/#/song?id=123\n\nhttps://music.163.com/#/song?id=456' : ''), username: 'admin', user_id: 1, visibility: 'public', can_interact: true, created_at: '2026-09-08T00:00:00Z' }] }
+    if (p.endsWith('/messages/page')) data = { total: 1, items: [{ id: 1, content: content + (cookies['home-lazy-loading-music'] === '1' ? '\n\nhttps://music.163.com/#/song?id=123\n\nhttps://music.163.com/#/song?id=456' : ''), username: 'admin', user_id: 1, visibility: 'public', can_interact: true, created_at: '2026-09-08T00:00:00Z' }] }
     if (p.endsWith('/guestbook/message')) data = { id: 2 }
     if (p.endsWith('/comments')) data = []
     if (p.endsWith('/comments/counts')) data = { 1: 0 }
@@ -66,10 +66,10 @@ const server = http.createServer(async (req, res) => {
   const createPage = async ({ loggedIn = true, layout = 'masonry', savedLayout = true, serviceWorker = false, musicEmbed = false } = {}) => {
     const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, serviceWorkers: serviceWorker ? 'allow' : 'block' })
     await context.addCookies([
-      { name: 'r4-viewer', value: loggedIn ? 'admin' : 'guest', url: baseURL },
-      { name: 'r4-layout', value: layout, url: baseURL },
-      { name: 'r4-sw', value: serviceWorker ? '1' : '0', url: baseURL },
-      { name: 'r4-music', value: musicEmbed ? '1' : '0', url: baseURL },
+      { name: 'home-lazy-loading-viewer', value: loggedIn ? 'admin' : 'guest', url: baseURL },
+      { name: 'home-lazy-loading-layout', value: layout, url: baseURL },
+      { name: 'home-lazy-loading-sw', value: serviceWorker ? '1' : '0', url: baseURL },
+      { name: 'home-lazy-loading-music', value: musicEmbed ? '1' : '0', url: baseURL },
     ])
     await context.addInitScript(({ layout, savedLayout }) => {
       if (savedLayout) localStorage.setItem('homeLayoutDesktop', layout)
@@ -239,7 +239,7 @@ const server = http.createServer(async (req, res) => {
       await previewRetry.page.route('**/lute/lute.min.js', route => { luteAttempts++; return luteBlocked ? route.abort('failed') : route.continue() })
       await previewRetry.page.goto(baseURL)
       await previewRetry.page.locator('.markdown-load-error').waitFor()
-      assert((await previewRetry.page.locator('.markdown-preview').first().textContent()).includes('R4 正文'), 'failed preview keeps readable text')
+      assert((await previewRetry.page.locator('.markdown-preview').first().textContent()).includes('首页懒加载正文'), 'failed preview keeps readable text')
       luteBlocked = false
       await previewRetry.page.locator('.markdown-load-error').getByRole('button', { name: '重试', exact: true }).click()
       await previewRetry.page.waitForSelector('.markdown-preview h1')

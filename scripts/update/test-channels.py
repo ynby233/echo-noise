@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Real registry/artifacts/controllers/executor; GitHub event responses are local.
 
-Run on an independent Linux Engine with U7_CHANNEL_FIXTURES containing a
+Run on an independent Linux Engine with UPDATE_CHANNEL_FIXTURES containing a
 three-commit git repository, revisions.json, built-at and coordinator-A/B/C.
 The binaries must embed those revisions, versions and build time.
 """
@@ -30,7 +30,7 @@ f = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(f)
 f.unittest_patch = patch
 docker = f.docker
-source = Path(os.environ["U7_CHANNEL_FIXTURES"]).resolve()
+source = Path(os.environ["UPDATE_CHANNEL_FIXTURES"]).resolve()
 scripts = Path("scripts").resolve()
 revisions = json.loads((source / "revisions.json").read_text())
 built_at = (source / "built-at").read_text().strip()
@@ -131,7 +131,7 @@ def workflow_step(name):
     return "\n".join(body) + "\n"
 
 
-with tempfile.TemporaryDirectory(prefix="echo-noise-u7-channels-") as temp:
+with tempfile.TemporaryDirectory(prefix="echo-noise-update-channels-") as temp:
     root = Path(temp); root.chmod(0o700)
     f.prefix = root.name; f.containers = []
     server = None
@@ -268,8 +268,8 @@ with tempfile.TemporaryDirectory(prefix="echo-noise-u7-channels-") as temp:
             marker = root / "cancel-marker"
             if marker.exists(): marker.unlink()
             script = root / "cancel.sh"
-            script.write_text("set -euo pipefail\n" + preceding + '\necho ready > "$U7_STAGE_MARKER"\nexec sleep 180\n')
-            cancel_env = dict(env, U7_STAGE_MARKER=str(marker))
+            script.write_text("set -euo pipefail\n" + preceding + '\necho ready > "$UPDATE_STAGE_MARKER"\nexec sleep 180\n')
+            cancel_env = dict(env, UPDATE_STAGE_MARKER=str(marker))
             process = subprocess.Popen(["bash", str(script)], cwd=source / "git", env=cancel_env,
                                        stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, start_new_session=True)
             try:
@@ -307,7 +307,7 @@ with tempfile.TemporaryDirectory(prefix="echo-noise-u7-channels-") as temp:
         if sys.exc_info()[0] is not None and app:
             logs = subprocess.run(["docker", "logs", "--tail", "25", app], capture_output=True, text=True)
             print(logs.stdout + logs.stderr, flush=True)
-        evidence = os.environ.get("U7_CHANNEL_EVIDENCE")
+        evidence = os.environ.get("UPDATE_CHANNEL_EVIDENCE")
         if evidence and app:
             destination = Path(evidence) / f.prefix
             destination.mkdir(mode=0o700, parents=True, exist_ok=True)

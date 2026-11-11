@@ -396,14 +396,12 @@ jobs:
           $markedExe = Join-Path $exe.DirectoryName ("saynote-" + $env:BUILD_ID + ".exe")
           Copy-Item -LiteralPath $exe.FullName -Destination $markedExe -Force
           gh release upload "$env:RELEASE_TAG" "$markedExe" --clobber
-      - name: Upload Release (desktop placeholder)
+      - name: Report unavailable desktop build
         if: env.DESKTOP_READY != 'true'
         shell: bash
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "placeholder desktop build (signed workflow) for ${{ matrix.os }} at tag ${{ inputs.tag_name }}" > "$RUNNER_TEMP/placeholder-desktop-${{ matrix.os }}.txt"
-          gh release upload "${{ env.RELEASE_TAG }}" "$RUNNER_TEMP/placeholder-desktop-${{ matrix.os }}.txt" --clobber
+          echo "::error::Desktop build prerequisites are unavailable for ${{ matrix.os }}; no installer was produced."
+          exit 1
       - name: Sign mac app & notarize
         shell: bash
         if: matrix.os == 'macos-latest' && steps.mac_codesign.outputs.ready == 'true'
@@ -843,11 +841,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release upload "${{ env.RELEASE_TAG }}" "${{ env.FINAL_APK }}" --clobber
-      - name: Upload Release (apk placeholder)
+      - name: Report unavailable Android build
         if: env.MOBILE_READY != 'true'
         shell: bash
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "placeholder android apk at tag ${{ inputs.tag_name }}" > "$RUNNER_TEMP/placeholder-android.txt"
-          gh release upload "${{ env.RELEASE_TAG }}" "$RUNNER_TEMP/placeholder-android.txt" --clobber
+          echo "::error::Android build prerequisites are unavailable; no APK was produced."
+          exit 1

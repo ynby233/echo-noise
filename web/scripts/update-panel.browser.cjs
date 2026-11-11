@@ -141,6 +141,6 @@ const server = http.createServer(async (req, res) => {
     }
     role = 2; await page.reload(); await section.waitFor(); await text('正式版'); assert.equal(await section.getByRole('button', { name: '安装测试版', exact: true }).count(), 0); assert.equal(await section.getByText('已安装提交', { exact: false }).count(), 0); assert(!((await section.textContent()).includes(revision.slice(0, 12))))
     assert.deepEqual(errors, [])
-    console.log('U5 production browser passed: channels/capability/credential/lost POST/reconnect/reopen/attention/success/drafts/privacy/320-1440 themes')
+    console.log('Update panel production browser passed: channels/capability/credential/lost POST/reconnect/reopen/attention/success/drafts/privacy/320-1440 themes')
   } finally { await browser.close(); await new Promise(resolve => server.close(resolve)) }
 })().catch(e => { console.error(e); process.exitCode = 1; server.close() })

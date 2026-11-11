@@ -480,12 +480,12 @@ func TestProtectedAdminRouteMatrixRejectsDelegatedAdministratorWithoutRequiredGr
 		response := httptest.NewRecorder()
 		r.ServeHTTP(response, request)
 		if response.Code != map[string]int{"/api/updates/tasks": http.StatusPreconditionFailed, "/api/version/update": http.StatusNotImplemented}[path] {
-			t.Fatalf("U2 installation route %s status=%d body=%s", path, response.Code, response.Body.String())
+			t.Fatalf("installation route %s status=%d body=%s", path, response.Code, response.Body.String())
 		}
 	}
 	var updateTaskCount int64
 	if err := db.Model(&models.UpdateTask{}).Count(&updateTaskCount).Error; err != nil || updateTaskCount != 0 {
-		t.Fatalf("U2 installation routes created %d tasks: %v", updateTaskCount, err)
+		t.Fatalf("installation routes created %d tasks: %v", updateTaskCount, err)
 	}
 
 	type routeCase struct {

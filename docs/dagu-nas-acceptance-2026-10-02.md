@@ -1,10 +1,10 @@
-# U6：Dagu 容器与 NAS 接入验收
+# Dagu 容器与 NAS 接入验收
 
 > 2026-10-04 接入范围调整：本文保留历史验收证据；Dagu 专用镜像、任务示例、接入说明及 CI 已从当前开源交付移除。下列旧实现链接固定到历史提交，不能作为当前部署步骤。当前接入使用 [通用 API/钩子和执行器](../scripts/update/README.md)，个人部署维护在私有环境。
 
 ## 交付范围
 
-按 [实施交接第 11 节](direct-update-implementation-handoff-2026-09-11.md#11-u6dagu-容器执行与-nas-首次接入) 实施。保留 U1–U5 的渠道、任务协议、固定 ID 1 权限、近期能力判断、数据保护、恢复记录及人工结案；未改前端。Dagu 是可选接入，未配置唤醒仍可主动领取，不引入 fnOS 任务、任意命令平台或自动安装。
+按 [实施交接第 11 节](direct-update-implementation-handoff-2026-09-11.md#11-dagu-容器执行与-nas-首次接入) 实施。保留服务端更新功能的渠道、任务协议、固定 ID 1 权限、近期能力判断、数据保护、恢复记录及人工结案；未改前端。Dagu 是可选接入，未配置唤醒仍可主动领取，不引入 fnOS 任务、任意命令平台或自动安装。
 
 代码分为容器交付 `22c88c6f`、已复现 NAS 配置修复与创建后唤醒 `6fd49a5d`、权限回归 `805ba575`、完整仓库构建上下文修复 `ba4ef8b7`。最终产品代码为 `ba4ef8b7f493f39d2378f01ba0eb691f5721a6f2`；后续验收文档提交不改变镜像运行身份。所有提交推送至 origin/main，未发布正式 Release 或标签。
 
@@ -22,7 +22,7 @@ NAS 默认 AppArmor 阻止读取宿主系统进程。实测定位后仅给执行
 
 ## 本地与隔离证据
 
-Windows：51 项 Python 测试、全部 `go test ./... -count=1 -timeout=10m`、`go vet ./...`、相关 fixture 编译/vet 与 `git diff --check` 通过。未改前端，U5 已验收浏览器用例保持，U7 全链界面矩阵另行执行。
+Windows：51 项 Python 测试、全部 `go test ./... -count=1 -timeout=10m`、`go vet ./...`、相关 fixture 编译/vet 与 `git diff --check` 通过。未改前端，后台更新界面已验收浏览器用例保持，更新验收与交付全链界面矩阵另行执行。
 
 NAS 上使用独立嵌套 Engine，无业务挂载、无对外发布端口；测试 coordinator 使用实际 TaskService、认证及真实 update-tool/registry，两个隔离构建的身份只用于 fixture，不当作发布版本证据。
 
@@ -37,7 +37,7 @@ NAS 上使用独立嵌套 Engine，无业务挂载、无对外发布端口；测
 | 新版健康失败 | 原任务 needs_attention；备份、active.json 和活动占位保留，不启动旧容器 |
 | 凭据与数据 | 撤销后 401；SQLite、受保护配置、附件及 ZIP 内容验证通过 |
 
-此前 NAS 嵌套环境的 U1–U5 Docker/Compose 链通过，但它没有 systemd，不能执行 daemon restart 用例；该用例保留在正式 CI 独立 Ubuntu runner，未将本地部分通过写成全通过。最终 [执行器 CI](https://github.com/ynby233/echo-noise/actions/runs/36934321333) 对完整产品 SHA 通过，包含 daemon restart、原 Docker/Compose 全部保护及四条 Dagu 链。隔离协调 fixture 的成功不能代替下述个人后台证据。
+此前 NAS 嵌套环境的服务端更新功能 Docker/Compose 链通过，但它没有 systemd，不能执行 daemon restart 用例；该用例保留在正式 CI 独立 Ubuntu runner，未将本地部分通过写成全通过。最终 [执行器 CI](https://github.com/ynby233/echo-noise/actions/runs/36934321333) 对完整产品 SHA 通过，包含 daemon restart、原 Docker/Compose 全部保护及四条 Dagu 链。隔离协调 fixture 的成功不能代替下述个人后台证据。
 
 同 SHA 的自动 [镜像构建与 smoke test](https://github.com/ynby233/echo-noise/actions/runs/36934321355) 通过，未重复手动 dispatch。渠道为 edge-mcp；stable 尚无正式 Release，未伪造稳定目标或执行降级。
 
@@ -49,7 +49,7 @@ CI 曾实际暴露抽取 fixture 后 registry 变量缺失、root 构建目录�
 
 首次引导从真实后台确认并创建任务 `081f1f5baa829b9f30b3669895d30088`，分钟调度领取，完整更新至 `6fd49a5d5c5a1883f843978311f30c6d8306713a`，最终 succeeded。此时旧应用尚无唤醒，因此明确属于分钟领取引导；随后 Dagu 切换镜像内 u6-1，无临时覆盖脚本，保留同配置/token/state/backups，近期检查通过。引导镜像 digest：`sha256:c74c2ce4f41bbc25dead8b82da09f28a3562fa86d4896961608913a8f0db94d9`。
 
-第二次通过同一真实后台确认任务 `a50997e7ff42012a2c69185027ee6197`，固定认证 Webhook 于创建后触发，Dagu 记录 triggerType=webhook，任务经历领取、下载、停机、一致备份、替换、核验和重连，最终 succeeded。2026-10-02 06:26:53（北京时间）创建，06:27:56 完成；本次约 63 秒含下载，不将其当固定停机承诺。最终运行完整 revision `ba4ef8b7f493f39d2378f01ba0eb691f5721a6f2`、digest `sha256:76bb9f9ec6e6dab5eaf0344dd6ceee223aad2dff4e390569ab4a7c9fc5137774`、instance_id 均与原任务/配对一致。06:28 后分钟检查自动恢复成功，后台显示检查通过及已是最新；两份备份和上述业务数据再次核验一致。U6 已具备后台完整链和个人接入证据，可以关闭。
+第二次通过同一真实后台确认任务 `a50997e7ff42012a2c69185027ee6197`，固定认证 Webhook 于创建后触发，Dagu 记录 triggerType=webhook，任务经历领取、下载、停机、一致备份、替换、核验和重连，最终 succeeded。2026-10-02 06:26:53（北京时间）创建，06:27:56 完成；本次约 63 秒含下载，不将其当固定停机承诺。最终运行完整 revision `ba4ef8b7f493f39d2378f01ba0eb691f5721a6f2`、digest `sha256:76bb9f9ec6e6dab5eaf0344dd6ceee223aad2dff4e390569ab4a7c9fc5137774`、instance_id 均与原任务/配对一致。06:28 后分钟检查自动恢复成功，后台显示检查通过及已是最新；两份备份和上述业务数据再次核验一致。Dagu 与 NAS 接入已具备后台完整链和个人接入证据，可以关闭。
 
 引导后实际业务库：147 条 messages、34 个附件 Blob、3 个用户保持；备份 SQLite integrity_check 为 ok，messages/attachment_blobs/attachment_references 全行与现存库一致；164 个原配置和附件文件内容一致。备份 ZIP 169 个成员、testzip 通过；原挂载、设备、Host 网络、固定主机名及 restart=no 保留，应用 healthy，旧业务写入容器停止且 restart=no。重连后台站长权限、原笔记统计及附件入口正常。
 
@@ -57,12 +57,12 @@ CI 曾实际暴露抽取 fixture 后 registry 变量缺失、root 构建目录�
 
 最终复验时 GitHub 匿名版本源返回 403。NAS 同出口响应头确认 X-RateLimit-Remaining=0 / Limit=60，重置时间为 2026-10-02 06:46:48（北京时间）；因此“源码状态”暂时显示检查失败。已安装身份、GHCR 渠道/固定 digest、任务 succeeded、健康和分钟能力检查均独立核实通过，此处不写成源码查询成功。配额重置后再检查；未把管理员 gh token 注入业务或绕过原错误提示。
 
-## 停用、恢复与 U7
+## 停用、恢复与更新验收与交付
 
 ### 后续重建配置故障
 
 2026-10-02 后续实查发现 Dagu 被重新创建，丢失 `pid: host` 和已验收的 `apparmor=unconfined`，其分钟任务报 `host_view_unavailable_or_permission_denied`。同一真实 CLI 检查可稳定复现：业务宿主 PID 在容器的 `/proc` 不存在，业务路径 inode 核对因缺少该 PID 失败；业务挂载仍在，原安装任务 succeeded 且没有未结更新。恢复两项运行配置后同一检查通过，保留重新创建后的时区、账户、任务、状态及备份，不替换应用、不放宽执行器保护。完整私有 Compose 配置已保存并通过 `docker compose config --quiet`；后续经 NAS 管理页面或其他方式重建 Dagu 时应保留此配置，不能只保存镜像、环境和挂载。
 
-从 Dagu 固定任务移除 schedule 并禁用 Webhook，再按业务策略撤销 executor；未结任务先依 U4 处理。保持原 active.json、token 引用与备份，容器重建使用固定配置先 run 恢复。新版曾启动且结果不明时不自动重装、降级、启动旧容器或恢复旧库；人工结案按 [主说明](../scripts/update/README.md)。
+从 Dagu 固定任务移除 schedule 并禁用 Webhook，再按业务策略撤销 executor；未结任务先依一致备份与失败恢复处理。保持原 active.json、token 引用与备份，容器重建使用固定配置先 run 恢复。新版曾启动且结果不明时不自动重装、降级、启动旧容器或恢复旧库；人工结案按 [主说明](../scripts/update/README.md)。
 
-U7 仍负责全链矩阵：正式渠道追上/无降级、Release/标签和取消发布顺序、浏览器宽度/主题/草稿、长时间运行、NAS/Docker 真正重启、受权备份恢复往返及更多故障组合。本次个人实例未人为制造停机故障、重启 NAS/Docker 或还原业务库。仅 linux/amd64 + SQLite 实际验收；ARM、MySQL/PostgreSQL、远端附件、桌面/Android 不在本次证据范围。
+更新验收与交付仍负责全链矩阵：正式渠道追上/无降级、Release/标签和取消发布顺序、浏览器宽度/主题/草稿、长时间运行、NAS/Docker 真正重启、受权备份恢复往返及更多故障组合。本次个人实例未人为制造停机故障、重启 NAS/Docker 或还原业务库。仅 linux/amd64 + SQLite 实际验收；ARM、MySQL/PostgreSQL、远端附件、桌面/Android 不在本次证据范围。

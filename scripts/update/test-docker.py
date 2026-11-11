@@ -239,7 +239,7 @@ os._exit(0)
         z.extract("database.db", backup_dir)
     with sqlite3.connect(backup_dir / "database.db") as db:
         assert db.execute("SELECT content FROM messages").fetchone()[0] == "WAL-only"
-    print("U4 offline readonly WAL: crash-left committed note archived; DB/WAL/SHM bytes unchanged", flush=True)
+    print("Backup/restore offline readonly WAL: crash-left committed note archived; DB/WAL/SHM bytes unchanged", flush=True)
 
 
 def rejected(action, code):
@@ -747,7 +747,7 @@ def test_mode(mode, old_ref, new_ref, new_digest, attention=False, scenario=""):
                 assert ex.record["closed"]
                 assert_status(task["id"], "succeeded")
                 assert_old_removed(ex)
-                print("U4 verify-reconcile: real health/runtime checked, same task legally succeeded without reinstall", flush=True)
+                print("Backup/restore verify-reconcile: real health/runtime checked, same task legally succeeded without reinstall", flush=True)
                 return
             # Revoked credentials cannot settle by HTTP. Explicit host authority
             # with the writer stopped settles the same task without restoring DB.
@@ -788,7 +788,7 @@ def test_mode(mode, old_ref, new_ref, new_digest, attention=False, scenario=""):
             rejected(ex.run, "manual_reconciliation_required")
             assert_status(task["id"], "needs_attention")
             assert current_id(ex) == cid
-        print("U4 " + scenario + ": real engine/coordinator boundary passed", flush=True)
+        print("Backup/restore " + scenario + ": real engine/coordinator boundary passed", flush=True)
         return
     # Lose a committed claim response, then retrieve precisely the same task.
     assigned = ex.api("POST", "/api/updates/executor/claim")
@@ -886,7 +886,7 @@ def test_mode(mode, old_ref, new_ref, new_digest, attention=False, scenario=""):
         assert db.execute("SELECT content FROM messages WHERE id=1").fetchone()[0] == "old WAL note"
     assert (recovery_blobs / "blob").read_bytes() == b"external-blob"
     assert (recovery / "images" / "image").read_bytes() == b"legacy-image"
-    print(mode + ": U4 real old-image archive contains SQLite/WAL note, external blob, media and protected config", flush=True)
+    print(mode + ": backup/restore real old-image archive contains SQLite/WAL note, external blob, media and protected config", flush=True)
     assert Path(cfg["image_file"]).read_text().strip() == "UPDATE_IMAGE=" + new_ref
     assert ex.record["download"]["requested_digest"] != ex.record["download"]["manifest_digest"]
     assert ex.record["download"]["image_id"] != ex.record["download"]["requested_digest"]
@@ -937,8 +937,8 @@ def build_images():
     registry = docker("run", "--detach", "--name", prefix + "-registry", "--publish", "127.0.0.1::5000", "registry:2")
     containers.append(registry)
     registry_port = json.loads(docker("inspect", registry))[0]["NetworkSettings"]["Ports"]["5000/tcp"][0]["HostPort"]
-    registry_image = "127.0.0.1:" + registry_port + "/echo-noise-u3"
-    manifest_url = "http://127.0.0.1:" + registry_port + "/v2/echo-noise-u3/manifests/"
+    registry_image = "127.0.0.1:" + registry_port + "/echo-noise-update-executor"
+    manifest_url = "http://127.0.0.1:" + registry_port + "/v2/echo-noise-update-executor/manifests/"
     refs = []
     for i in (1, 2):
         context = root / ("image-" + str(i))
@@ -974,7 +974,7 @@ def build_images():
 if __name__ == "__main__":
     from unittest.mock import patch as unittest_patch
     print("Engine " + docker("version", "--format", "{{.Server.Version}}") + "; " + docker("compose", "version", "--short"), flush=True)
-    prefix = "echo-noise-u3-" + str(os.getpid())
+    prefix = "echo-noise-update-executor-" + str(os.getpid())
     containers = []
     compose_cleanup = []
     networks = []

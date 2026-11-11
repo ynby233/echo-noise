@@ -39,4 +39,4 @@ for (const endpoint of [
   assert.ok(routes.includes(endpoint), `router must expose ${endpoint}`)
 }
 
-console.log('workline C completion contract checks passed')
+console.log('Authorization and interaction contract checks passed')

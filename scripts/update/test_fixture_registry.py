@@ -13,7 +13,7 @@ spec.loader.exec_module(fixture)
 
 class FixtureRegistryTests(unittest.TestCase):
     def test_cached_foreign_digest_does_not_select_manifest(self):
-        repo = "127.0.0.1:12345/echo-noise-u3"
+        repo = "127.0.0.1:12345/echo-noise-update-executor"
         manifest = "sha256:" + "a" * 64
         index = "sha256:" + "b" * 64
 
@@ -21,7 +21,7 @@ class FixtureRegistryTests(unittest.TestCase):
             if args[0] == "inspect":
                 return json.dumps([{"NetworkSettings": {"Ports": {"5000/tcp": [{"HostPort": "12345"}]}}}])
             if args[:2] == ("image", "inspect"):
-                return json.dumps([{"RepoDigests": ["127.0.0.1:9999/echo-noise-u3@sha256:" + "0" * 64, repo + "@" + manifest]}])
+                return json.dumps([{"RepoDigests": ["127.0.0.1:9999/echo-noise-update-executor@sha256:" + "0" * 64, repo + "@" + manifest]}])
             return "registry"
 
         class Response:

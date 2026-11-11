@@ -12,7 +12,7 @@
 | 同域构建 | `bash scripts/build.sh` | 生成前端并同步至根目录 `public`，供 Go 服务静态托管。脚本需要 Bash 和 `rsync`。 |
 | 容器启动 | `docker-entrypoint.sh` | 加载运行配置并启动镜像内服务；卷映射、环境变量和发布方式仍以 `README.md` 为准。 |
 
-Windows 开发环境可先执行 `. D:\ChatGPT\environments\echo-noise\env.ps1`。任何会写数据的本地复现都应显式设置独立的 `DB_PATH`、`ATTACHMENT_BLOB_ROOT` 和工作目录，不得指向 NAS 或共享实例。
+Windows 开发前先加载本机项目工具链与环境配置，并保持当前工作树为工作目录。任何会写数据的本地复现都应显式设置独立的 `DB_PATH`、`ATTACHMENT_BLOB_ROOT` 和工作目录，不得指向 NAS 或共享实例。
 
 ## 2. 模块地图
 
@@ -24,7 +24,7 @@ Windows 开发环境可先执行 `. D:\ChatGPT\environments\echo-noise\env.ps1`�
 | `internal/database` | 数据库连接、迁移与全局句柄。SQLite 保持 WAL、busy timeout、单连接并关闭 GORM prepared-statement 缓存；其他数据库不继承该限制。 |
 | `internal/backup` | SQLite 一致性快照、ZIP 检查、恢复暂存、下次启动应用和回退。HTTP 下载和云同步必须共用 `CreateArchive`，不得复制活跃 SQLite 主文件。 |
 | `internal/syncmanager` | 手动/定时云同步和成功元数据。完整 I/O 操作由 `LockOperation` 串行化；只有 2xx 上传及后续远端核对成功才能推进同步时间。 |
-| `internal/controllers` | Gin 请求解析和响应映射。R5 仅按认证、笔记、评论、通知、设置、用户、版本等领域拆文件；业务规则优先放现有 service，而非新建转发层。 |
+| `internal/controllers` | Gin 请求解析和响应映射，按认证、笔记、评论、通知、设置、用户、版本等领域拆文件；业务规则优先放现有 service，而非新建转发层。 |
 | `internal/services/notification_query_service.go` | 通知资格判定、计数、选页和页面 hydrate。撤回点赞会过滤，其余不可达目标保留占位；未读数不得调用完整 UI 响应构造。 |
 | `internal/services` | 设置读取/保存、信息流加载与数据源、推送、回收站等业务。设置和 feed 已按现有职责拆文件，路由及导出函数保持。 |
 | `internal/routers/routers.go` | 路由、鉴权中间件组合和静态资源入口。新增 handler 后在这里核对公开、登录和 capability 边界。 |
@@ -96,18 +96,18 @@ Windows 开发环境可先执行 `. D:\ChatGPT\environments\echo-noise\env.ps1`�
 
 `main` 的非纯文档提交自动构建 `ghcr.io/ynby233/echo-noise:edge-mcp`；已发布且非 draft/prerelease 的 `vX.Y.Z` Release 构建 `stable-mcp`。工作流先发布唯一候选并通过健康检查，再移动渠道标签；完整 Git revision、构建时间和显示版本同时写入二进制及 OCI 元数据。`latest-mcp` 已退役，不再发布或参与发现。
 
-`GET /api/version/check` 只返回不含 revision/digest 的公开状态；登录后的 ID 1 站长可通过 `GET /api/version/channels` 查看两个渠道的固定目标。U2 已加入持久化任务协调，U3/U4 已交付宿主替换及旧镜像离线一致备份并完成隔离验收；U5 已接通受能力判断保护的任务创建，实际宿主首次接入归 U6。正式 Release 和现有 NAS 替换仍需相应授权。
+`GET /api/version/check` 只返回不含 revision/digest 的公开状态；登录后的 ID 1 站长可通过 `GET /api/version/channels` 查看两个渠道的固定目标。更新流程支持持久化任务协调、宿主替换、旧镜像离线一致备份及受能力判断保护的任务创建。正式 Release 和现有 NAS 替换仍需相应授权。
 
 ### 更新任务与执行器接口
 
-`GET /api/updates`、`GET /api/updates/state` 和 `GET /api/updates/tasks/:id` 是只读查询；受托管理员即使持有 `version.view`，也不会得到完整 revision、digest、执行器信息或宿主错误摘要。`PUT /api/updates/channel` 只修改后续跟随偏好，不创建任务。生产 `POST /api/updates/tasks` 仅接受固定 ID 1 站长选择的、服务端发现的 `stable`/`edge` 后代目标；要求近期同实例/u5-1/Linux amd64/SQLite 的实际部署检查，否则 412。目标 digest/revision 在创建时固定，连续提交返回同一条活动任务；确认目标变化返回 409。旧 `POST /api/version/update` 保持 501，历史 `GET /api/version/update/stream` 已退役且无副作用。实际 NAS 首次引导及安装归 U6。
+`GET /api/updates`、`GET /api/updates/state` 和 `GET /api/updates/tasks/:id` 是只读查询；受托管理员即使持有 `version.view`，也不会得到完整 revision、digest、执行器信息或宿主错误摘要。`PUT /api/updates/channel` 只修改后续跟随偏好，不创建任务。生产 `POST /api/updates/tasks` 仅接受固定 ID 1 站长选择的、服务端发现的 `stable`/`edge` 后代目标；要求近期同实例、执行器版本 `u6-1`、Linux amd64、SQLite 的实际部署检查，否则 412。`u6-1` 是沿用历史命名的协议兼容值，以 `internal/updates/capability.go` 的 `ExecutorVersion` 为准，不是维护阶段名称；旧值 `u5-1` 不满足当前能力检查。目标 digest/revision 在创建时固定，连续提交返回同一条活动任务；确认目标变化返回 409。旧 `POST /api/version/update` 保持 501，历史 `GET /api/version/update/stream` 已退役且无副作用。
 
 执行器凭据由站长在 `/api/updates/executor/credential` 创建、查看状态或撤销，明文只在创建响应中出现一次，数据库只存验证值。创建时生成持久的实例 ID；站长在 `/api/updates` 可见，宿主需在首次配对时人工核对，并从受限 `/api/updates/executor/runtime` 再次核对。执行器必须以 `Authorization: Bearer ...` 调用 `/api/updates/executor/claim`、`/api/updates/executor/tasks/:id/events` 和 `/api/updates/executor/runtime`；用户登录、普通管理员 token 与执行器 token 不互通。轮换后旧凭据只可完成已领取任务；任务结束后仅可重试该任务的最终回报，不能领取新任务或读取运行身份，过期或明确撤销仍立即失效。claim 响应丢失后，同一执行器再次领取会得到原任务；任务不会因心跳超时分配给另一执行器，状态只能按真实阶段前进或进入 `failed`/`needs_attention`。`needs_attention` 保留活动占位并可由原执行器取回；宿主核对本地记录和实际运行状态后只能继续 `verifying` 或确认 `failed`，不能退回替换阶段，结果明确前禁止创建第二个任务。空白及未知回报状态被拒绝。服务端不保存执行器回报的自由文本，避免将宿主路径或凭据写入任务/审计；详情查宿主日志。
 
-U2 聚焦回归：
+更新任务与权限回归：
 
 ```powershell
-. D:\ChatGPT\environments\echo-noise\env.ps1
+# 先加载本机项目环境，保持当前工作树为工作目录
 go test ./internal/updates ./internal/controllers ./internal/middleware ./internal/authorization ./internal/models ./internal/routers -count=1
 ```
 
@@ -115,13 +115,12 @@ stable 按其自身 OCI version 对应的 `/releases/tags/{version}` 和解引�
 
 `/app/noise --build-info` 为本地只读命令，只输出二进制内嵌身份，不加载 runtime.env、不启动数据库/迁移/worker。旧二进制不支持或身份不足时，发布 smoke 明确失败（身份命令最多等待 20 秒），不能用外层 label 或环境变量补成“已验证”。候选和最终选中的固定产物都运行 `scripts/release/smoke-image.sh`，验证 revision/version/build time 与标签一致并通过健康检查；重跑复用旧固定产物时保留其真实构建时间，不覆盖正式标签。
 
-身份行为回归：`node web/scripts/docker-runtime-identity.test.mjs`，对候选和既有固定目标分别覆盖正确/错误/缺失身份。独立 Docker 引擎可运行 `sh scripts/release/test-runtime-identity-docker.sh IMAGE FULL_REVISION VERSION` 复现“正确标签、健康、错误二进制”并验证拒绝。U1 验收曾在运行 `35351554173` 构建并 smoke runner 本地、不推送的 `v0.0.0` 正式身份样例；该一次性证据不在普通 edge 构建中重复，实际 stable 候选仍经过同一二进制身份与最终固定产物 smoke。
+身份行为回归：`node web/scripts/docker-runtime-identity.test.mjs`，对候选和既有固定目标分别覆盖正确/错误/缺失身份。独立 Docker 引擎可运行 `sh scripts/release/test-runtime-identity-docker.sh IMAGE FULL_REVISION VERSION` 复现“正确标签、健康、错误二进制”并验证拒绝。历史验收曾在运行 `35351554173` 构建并 smoke runner 本地、不推送的 `v0.0.0` 正式身份样例；该一次性证据不在普通 edge 构建中重复，实际 stable 候选仍经过同一二进制身份与最终固定产物 smoke。
 
 发布策略本地检查：
 
 ```powershell
-. D:\ChatGPT\environments\echo-noise\env.ps1
-$env:Path = 'D:\ChatGPT\environments\echo-noise\mingit-2.54.0\usr\bin;D:\ChatGPT\environments\echo-noise\mingit-2.54.0\cmd;' + $env:Path
+# 先加载本机项目环境，确保便携 Git 的 cmd 与 usr/bin 位于 PATH
 dash scripts/release/test-release-policy.sh
 Set-Location web
 node scripts/docker-channel-workflow.test.mjs
@@ -130,7 +129,7 @@ node scripts/docker-channel-workflow.test.mjs
 先加载项目工具链，再按改动范围运行最小检查：
 
 ```powershell
-. D:\ChatGPT\environments\echo-noise\env.ps1
+# 先加载本机项目环境，保持当前工作树为工作目录
 git diff --check
 go test ./internal/backup ./internal/database ./internal/syncmanager -count=1
 go test ./internal/controllers -run 'Test(Notification|Unread|Deletion)' -count=1
@@ -173,27 +172,27 @@ node scripts/update-panel.browser.cjs
 
 日常修改先跑相关测试；涉及运行行为的交付候选执行完整自动化及上述浏览器检查。源码文本断言保留结构约束，已出现的行为缺陷补真实调用或浏览器回归，不通过删除断言凑绿。纯注释变更核对准确性和相关检查即可，不重复整套长测。
 
-最终发布另做 R7 的独立备份恢复往返、30–60 分钟连续操作与资源增长观察、1440/768/390/320 宽度及明暗主题、NAS 候选与可用真机验证。这些不由上述脚本代替；结果分别记录本地、构建/工作流、实际部署和设备证据。
+最终发布另做独立备份恢复往返、30–60 分钟连续操作与资源增长观察、1440/768/390/320 宽度及明暗主题、NAS 候选与可用真机验证。这些不由上述脚本代替；结果分别记录本地、构建/工作流、实际部署和设备证据。
 
 ## 6. 已知平台边界
 
-### U3/U4 外部执行器与数据保护
+### 外部执行器与数据保护
 
-通用 Docker/Compose 执行器、配置、旧镜像离线 SQLite 备份和人工结案见 [scripts/update](../scripts/update/README.md)。迁移后加载 `D:\ChatGPT\app\environments\echo-noise\env.ps1`，显式切回 `D:\ChatGPT\app\projects\echo-noise`，避免脚本内旧路径误导。阶段检查为 Python 标准库测试、更新/备份/同步相关 Go 测试、fixture 编译/vet 和 `Test external update executor` 真实隔离引擎测试。U5 接通能力判断和后台，只在近期实际部署检查通过时允许创建，否则 412；旧安装镜像无 update-tool 时停机前拒绝，不能用 fixture 绕过。旧自更新仍 501/410。实际 NAS 引导及调度安装归 U6。U4 证据和失败边界见 [U4 验收报告](u4-backup-failure-recovery-acceptance-2026-10-01.md)。
+通用 Docker/Compose 执行器、配置、旧镜像离线 SQLite 备份和人工结案见 [scripts/update](../scripts/update/README.md)。运行前加载本机项目环境，并核对当前工作树路径。验证包括 Python 标准库测试、更新/备份/同步相关 Go 测试、fixture 编译/vet 和 `Test external update executor` 真实隔离引擎测试。后台只在近期实际部署检查通过时允许创建任务，否则 412；旧安装镜像无 update-tool 时停机前拒绝，不能用 fixture 绕过。旧自更新仍 501/410。备份恢复证据和失败边界见 [备份失败与恢复验收报告](backup-failure-recovery-acceptance-2026-10-01.md)。
 
-U5 浏览器入口 `node scripts/update-panel.browser.cjs` 使用真实生产 Vue 组件、隔离状态 API 和 Chromium，覆盖两渠道空态/失败、安装条件、一次显示凭据、草稿确认、连点、创建响应丢失、停机重连、清缓存换浏览器任务恢复、人工处理占位、成功/失败、委派权限及 320/390/768/1440 明暗主题。它验证前端实际行为；真实容器替换由独立执行器 workflow 验证，NAS 接入留给 U6。
+更新面板浏览器入口 `node scripts/update-panel.browser.cjs` 使用真实生产 Vue 组件、隔离状态 API 和 Chromium，覆盖两渠道空态/失败、安装条件、一次显示凭据、草稿确认、连点、创建响应丢失、停机重连、清缓存换浏览器任务恢复、人工处理占位、成功/失败、委派权限及 320/390/768/1440 明暗主题。它验证前端实际行为；真实容器替换由独立执行器 workflow 验证，NAS 接入需另做现场验证。
 
-2026-10-02 U6 已完成：复用用户现有 Dagu 2.18.1，执行器 u6-1 的可重建环境、宿主路径/磁盘/进程视图、固定认证唤醒和分钟检查/领取/恢复已通过隔离及 NAS 后台完整更新。保留原 claim/events、flock、active.json 和三分钟能力窗口；业务与 Engine 根只读挂载，独立控制目录持久化。交付 [Dagu 说明](https://github.com/ynby233/echo-noise/blob/fc0a89aadd94bd6c8bf178092dd381c48b017913/scripts/update/dagu.md)，容器验收入口 `sudo -E python3 scripts/update/test-dagu.py`（先编译 README 中 fixture/update-tool 并构建派生镜像），CI 同时保留原 `test-docker.py` 全部回归。实测 NAS 默认 AppArmor、私有文件及固定主机名差异和处理边界见 [U6 验收报告](u6-dagu-nas-acceptance-2026-10-02.md)。下一阶段 U7 从全链矩阵接手，不重新初始化配对或退回原计划。
+2026-10-02 的历史验收复用了用户现有 Dagu 2.18.1，执行器的可重建环境、宿主路径/磁盘/进程视图、固定认证唤醒和分钟检查/领取/恢复通过了隔离及 NAS 后台完整更新。该实现保留 claim/events、flock、active.json 和三分钟能力窗口；业务与 Engine 根只读挂载，独立控制目录持久化。[历史 Dagu 说明](https://github.com/ynby233/echo-noise/blob/fc0a89aadd94bd6c8bf178092dd381c48b017913/scripts/update/dagu.md) 记录了当时的容器验收入口和构建前提；Dagu 专用实现及 CI 已于 2026-10-04 移除。实测 NAS 默认 AppArmor、私有文件及固定主机名差异和处理边界见 [Dagu 与 NAS 验收报告](dagu-nas-acceptance-2026-10-02.md)。
 
-U7 的矩阵、故障注入、实际运行证据和未验现场项见 [U7 验收报告](u7-end-to-end-acceptance-2026-10-02.md)。现有 `test-docker.py` 增加真实 registry 超时、新版启动退出、迁移部分写入后失败、运行提交/实例不匹配，断言保留备份与人工处理占位、旧容器不自动重启、修复后同目标显式结案；`test-dagu.py` 保留分钟/唤醒/漏通知/重建全链。发布策略运行检查为 `sh scripts/release/test-release-policy.sh`，已加入执行器 workflow；缓存镜像的 `RepoDigests` 顺序不能当作刚推送标签的身份。上述引擎脚本含容器替换和故障操作，只在独立 Engine/runner 运行，禁止将它们直接对准个人业务 Engine。
+全链矩阵、故障注入、实际运行证据和未验现场项见 [端到端验收报告](end-to-end-acceptance-2026-10-02.md)。现有 `test-docker.py` 增加真实 registry 超时、新版启动退出、迁移部分写入后失败、运行提交/实例不匹配，断言保留备份与人工处理占位、旧容器不自动重启、修复后同目标显式结案；历史 `test-dagu.py` 覆盖了分钟/唤醒/漏通知/重建全链。发布策略运行检查为 `sh scripts/release/test-release-policy.sh`，已加入执行器 workflow；缓存镜像的 `RepoDigests` 顺序不能当作刚推送标签的身份。上述引擎脚本含容器替换和故障操作，只在独立 Engine/runner 运行，禁止将它们直接对准个人业务 Engine。
 
-后续定位与隔离真实备份恢复见 [U7 补修记录](u7-recovery-and-acceptance-2026-10-02.md)：重建测试按 Dagu 的实测恢复时序等待，并验证三个分钟位置；恢复目标带尾部分隔符时先规范化路径，避免将临时目录建到尚不存在的目标内部。`test-channels.py` 和执行器 workflow 编译三提交/同源重建产物，通过真实 registry、现有发现/任务控制器、容器更新和原发布 shell 验证渠道及故障；GitHub Release 事件 HTTP 在本地提供，不能据此宣称远端发布已验。
+故障定位与隔离真实备份恢复见 [恢复与验收补修记录](update-recovery-and-acceptance-2026-10-02.md)：历史重建测试按 Dagu 的实测恢复时序等待，并验证三个分钟位置；恢复目标带尾部分隔符时先规范化路径，避免将临时目录建到尚不存在的目标内部。`test-channels.py` 和执行器 workflow 编译三提交/同源重建产物，通过真实 registry、现有发现/任务控制器、容器更新和原发布 shell 验证渠道及故障；GitHub Release 事件 HTTP 在本地提供，不能据此宣称远端发布已验。
 
 现场观察或诊断读取 SQLite 后必须关闭连接/文件描述符再等待下一采样；Python 的 `with sqlite3.connect(...)` 只管理事务，不自动关闭连接。持续持有业务文件会被既有宿主写入者检查拒绝，不能为诊断脚本增加豁免。Dagu 重建后先核对实际检查及同一 instance，不仅检查容器 running；新版曾启动时按原 `reconcile` 流程保留现场并受权结案。个人 NAS/Docker 重启、运行库恢复和正式 Release 发布仍需各自的明确授权，独立 CI/恢复实验不替代现场验收。
 
-独立复核增加明确 409/412 拒绝后无需刷新可恢复、已有旧终态时未知 POST 不解锁且只查询新任务的行为回归；Python 预检文件系统异常清除旧成功检查的回归也已加入。首页懒加载脚本在工具栏因重叠收起时正常点击可见展开手柄，再点击留言，不强制点击或移除加载断言。最新证据见 [U5 复核修复验收](u5-review-repairs-acceptance-2026-10-01.md)。
+独立复核增加明确 409/412 拒绝后无需刷新可恢复、已有旧终态时未知 POST 不解锁且只查询新任务的行为回归；Python 预检文件系统异常清除旧成功检查的回归也已加入。首页懒加载脚本在工具栏因重叠收起时正常点击可见展开手柄，再点击留言，不强制点击或移除加载断言。相关证据见 [更新面板复核修复验收](admin-update-review-repairs-acceptance-2026-10-01.md)。
 
-2026-10-01 的实际提交、两项成功工作流、镜像 digest、NAS 只读核对与 U4 接口位置见 [U3 交付报告](u3-external-executor-acceptance-2026-10-01.md)。
+2026-10-01 的实际提交、两项成功工作流、镜像 digest、NAS 只读核对与备份恢复接口位置见 [外部执行器交付报告](external-executor-acceptance-2026-10-01.md)。
 
 - SQLite 的单连接和 prepared-statement 策略只适用于 SQLite；PostgreSQL/MySQL 使用各自连接池。
 - 恢复是“验证并暂存，重启前应用”，不是请求内热替换。恢复完成前保留旧数据回退路径；不能把 Git 回退当作数据回退。

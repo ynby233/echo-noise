@@ -1,8 +1,10 @@
-# 外部更新执行器与 U4 数据保护
+# 外部更新执行器与数据保护
 
-通用外部执行器，更新一个管理员登记的 Docker 容器或 Compose 服务。程序不在应用容器中运行，应用不挂 Docker socket。U5 已接通受控 `POST /api/updates/tasks`；没有近期部署检查返回 412，不能仅凭有效 token 安装。开源接入边界为下述 API、可选认证唤醒钩子及通用执行器；调度工具和个人 NAS 部署由使用者自行配置，不交付特定调度器镜像或任务。旧镜像没有 `/app/update-tool` 时，停机前返回 `u4_backup_unavailable`。
+通用外部执行器，更新一个管理员登记的 Docker 容器或 Compose 服务。程序不在应用容器中运行，应用不挂 Docker socket。后台已接通受控 `POST /api/updates/tasks`；没有近期部署检查返回 412，不能仅凭有效 token 安装。开源接入边界为下述 API、可选认证唤醒钩子及通用执行器；调度工具和个人 NAS 部署由使用者自行配置，不交付特定调度器镜像或任务。旧镜像没有 `/app/update-tool` 时，停机前返回 `u4_backup_unavailable`（旧镜像缺少离线备份工具，保留此错误码以兼容既有脚本和日志）。
 
 依赖为 Linux、Python 3.9+ 标准库、Docker CLI/本地 Engine、curl；Compose 模式另需 Compose v2（`config --format json`、`up --pull never`）。锁用 `fcntl.flock`，与宿主 flock 相同；不新增服务或 Python 包、不自动安装依赖。非回环地址必须使用 HTTPS，保留系统证书验证，不跟随认证请求重定向。实际验收架构是 linux/amd64；arm64 配置/manifest 判断可识别，但尚无 ARM 运行验收。
+
+协议兼容说明：`u6-1` 是已部署执行器与服务端交换的能力版本标识，不是面向用户的功能名称，也不表示脚本包含所有后续修复。`u3-1`、`u4-1`、`u5-1` 是仍可读取的旧恢复记录版本。为保证旧任务能够继续恢复，这些持久化及接口值保持不变；安装或升级应使用与当前服务端配套的 `executor.py`。
 
 ## 配对与固定配置
 
@@ -47,7 +49,7 @@ python3 /etc/echo-noise-update/executor.py check /etc/echo-noise-update/executor
 
 ## 部署配置真源
 
-Docker 模式按 JSON 固定参数创建，停止旧容器并关闭其自动重启，改名保留旧容器，从已拉取的本地 image ID 创建新容器。`image.env` 原子保存目标 registry digest；重启已创建容器保持镜像，之后人工重建也必须读取此文件。例如与示例参数对应的首次/人工重建命令（仅 U4/U6 安装获授权后使用）为：
+Docker 模式按 JSON 固定参数创建，停止旧容器并关闭其自动重启，改名保留旧容器，从已拉取的本地 image ID 创建新容器。`image.env` 原子保存目标 registry digest；重启已创建容器保持镜像，之后人工重建也必须读取此文件。例如与示例参数对应的首次/人工重建命令（仅在管理员确认安装与数据保护方案后使用）为：
 
 ```sh
 . /etc/echo-noise-update/image.env
@@ -83,7 +85,7 @@ python3 executor.py poll /absolute/executor.json    # 先恢复；无待办只�
 
 状态按 `claimed → downloading → stopping → backing_up → replacing → verifying → succeeded` 回报。停机期间继续确认后的宿主操作，事件落盘后在新服务恢复时串行补报。ACK 丢失重发当前未确认事件；409 保留记录并退出，不能忽略/跳过。实例或配置不一致、原任务无本地证据时停止，不领取第二条任务。下载/停机前检查失败记录 failed；停止/备份中断结果不明进入 `needs_attention`；替换意图存在且实际目标已运行时只核验/补报，不再次替换。
 
-最终 ACK 丢失保留 `step=complete/failed` 和待报 `succeeded/failed`，下次用原 token 引用补报，不先要求旧 token 调用 claim/runtime。轮换按 U2 范围接受自己最终回报；撤销/过期 401，记录保留、非零退出。已确认结束记录在下次领取前按任务 ID 归档；旧镜像/备份不全局 prune。
+最终 ACK 丢失保留 `step=complete/failed` 和待报 `succeeded/failed`，下次用原 token 引用补报，不先要求旧 token 调用 claim/runtime。正常轮换的旧凭据仅可回报自己已领取任务的结果；撤销/过期 401，记录保留、非零退出。已确认结束记录在下次领取前按任务 ID 归档；旧镜像/备份不全局 prune。
 
 `poll` 先加载 journal，按原流程完成已闭合记录的有限清理/归档；仍有记录时直接调用原 `run` 恢复，不先访问新 token 的 `/work`。无记录才查询 `/work`，核对固定实例 ID 和两个真正的布尔标志；响应无效或实例不匹配时失败。两个标志均为 false 输出 `idle` 并 exit 0，不调用 runtime/check/claim、不访问 Engine、不创建探测容器、不测量备份、不改 journal。任一标志为 true 则沿原完整预检、检查回报、领取及执行路径；只有检查请求且无任务时，原 claim 返回 204 后结束。
 
@@ -97,7 +99,7 @@ Docker 模式在新版镜像/挂载/健康/runtime 验证通过、原任务 succ
 
 异常 step、有限错误码与待报 needs_attention 同一次原子写入。旧版 attention/pending=[] 记录在 run/report 通过原 token、原任务事件接口补报；需本地旧容器/image 证据及合法 downloading/stopping/backing_up/replacing/verifying 状态。服务端仍校验任务归属和状态转换，409/401/传输失败保留记录；无法证明合法来源返回 `attention_evidence_requires_reconciliation`，无本地证据的 claim 保持 `manual_reconciliation_required`。补报不会 stop/replace，不解除活动占位。
 
-## U4 一致备份、停机与人工结案
+## 一致备份、停机与人工结案
 
 ```sh
 python3 -m unittest discover -s scripts/update -p 'test_*.py' -v
@@ -127,7 +129,7 @@ F1–F6 补验包含真实 network connect、自定义 hostname/domain 拒绝及
 
 隔离数据、实际生产业务恢复及部署者选择的调度接入分别验收。后台恢复、能力检查和可选认证唤醒保持；旧自更新入口仍 501/410，不作为 fallback。docs 中既有个人部署验收报告是历史证据，不作为当前开源调度器接入说明。
 
-## U5 后台与能力检查
+## 后台与能力检查
 
 固定 ID 1 站长在后台“版本与更新”创建一次显示的 token、读取实例 ID，按上文写受控配置；在宿主运行 `check`。当前 `u6-1` 的 check、无 journal 的 run 和有待办的 poll 在真实 preflight 与旧镜像 SQLite 备份 plan/数据布局/写入者/空间检查通过后，上报同一 instance/full revision。失败清除此前成功检查，HTTP 只接收有限能力字段，具体错误留在宿主 stderr。`u3-1`/`u4-1`/`u5-1` 本地 journal 仍可恢复；升级脚本不能删除旧凭据或未结束记录。
 
@@ -135,7 +137,7 @@ F1–F6 补验包含真实 network connect、自定义 hostname/domain 拒绝及
 
 `POST /api/updates/prepare` 持久记录当前有效凭据的部署检查请求；已可安装时不写新请求，未完成的重复请求合并。原 `check` 或 `run` 的检查回报也可满足请求：`checked_at >= requested_at` 表示完成，失败回报同样消费请求但不使安装可用。已完成却失败的请求在 30 秒冷却内再次准备返回 429、`Retry-After: 30`，活动任务返回 409，缺凭据、过期或其他不支持条件返回 412。响应中的 `wake_status` 仅为 not_needed/sent/unconfigured/failed/coalesced；唤醒失败保留请求，后续补偿检查不会自行创建安装任务。
 
-`GET /api/updates` 返回两渠道、跟随偏好、能力、活动任务或最近结果及站长部署指引；`GET /api/updates/state` 每三秒只查询本地任务/运行身份/能力，不重复扫描 registry。刷新、换浏览器、清缓存均从服务端发现原任务。`needs_attention` 占用两个渠道，必须按 U4 结案；任务创建重试返回原活动任务，渠道目标在确认后变化返回 409。浏览器 HTTP 中断只查询，不自动再次 POST；页面停机时依赖宿主日志。匿名 `GET /api/updates/maintenance` 仅返回维护布尔值，没有任务 ID/镜像/提交/错误/凭据信息。
+`GET /api/updates` 返回两渠道、跟随偏好、能力、活动任务或最近结果及站长部署指引；`GET /api/updates/state` 每三秒只查询本地任务/运行身份/能力，不重复扫描 registry。刷新、换浏览器、清缓存均从服务端发现原任务。`needs_attention` 占用两个渠道，必须按下述人工结案流程处理；任务创建重试返回原活动任务，渠道目标在确认后变化返回 409。浏览器 HTTP 中断只查询，不自动再次 POST；页面停机时依赖宿主日志。匿名 `GET /api/updates/maintenance` 仅返回维护布尔值，没有任务 ID/镜像/提交/错误/凭据信息。
 
 安装确认列出目标提交、digest 和跟随偏好，提示停机和当前浏览器草稿；不会清除笔记/后台草稿，不保证其他用户草稿。一次性 token 只保留组件内存，隐藏/关闭/切换账号后清除。页面成功来自服务端 succeeded，新的运行提交另显示；没有假百分比或固定延时刷新报成功。
 
@@ -165,4 +167,4 @@ python3 executor.py reconcile /absolute/executor.json --task TASK_ID --outcome f
 # 已由管理员完成必要的数据恢复时可用 --reason manual-recovery-complete
 ```
 
-CLI 获取同一 flock，指定任务 ID/instance，持久化结案意图，再用当前安装镜像的离线工具修改该任务及唯一 active_slot。它不依赖 HTTP token、不放宽 HTTP 认证、不修改业务库内容、不报 succeeded；只允许可合法失败的活动任务（包括 claimed 以及停机中无法补报 attention 的 downloading/stopping/backing_up/replacing/verifying）。有限原因保存在任务和事件，幂等重试保留原证据。拒绝不匹配实例/任务、pending 和已完成结果。本地 active.json 存在时须同一任务，成功仅将其关闭并保留历史。执行器不启动容器；管理员在核对数据安全后按原策略恢复服务。现存镜像缺少工具时先按 U6 的明确引导方案升级工具，不能删库/删任务解除占位。
+CLI 获取同一 flock，指定任务 ID/instance，持久化结案意图，再用当前安装镜像的离线工具修改该任务及唯一 active_slot。它不依赖 HTTP token、不放宽 HTTP 认证、不修改业务库内容、不报 succeeded；只允许可合法失败的活动任务（包括 claimed 以及停机中无法补报 attention 的 downloading/stopping/backing_up/replacing/verifying）。有限原因保存在任务和事件，幂等重试保留原证据。拒绝不匹配实例/任务、pending 和已完成结果。本地 active.json 存在时须同一任务，成功仅将其关闭并保留历史。执行器不启动容器；管理员在核对数据安全后按原策略恢复服务。现存镜像缺少工具时先按明确的首次部署方案升级工具，不能删库/删任务解除占位。

@@ -19,14 +19,14 @@
         <section v-if="isPrimaryAdmin" class="admin-form-section"><div class="admin-section-heading"><h3>宿主执行器</h3><p>两渠道共用同一实例和执行器。</p></div>
           <div class="space-y-2 text-sm" :class="theme.text">
             <p>{{ executor ? '凭据已配置' : '凭据未配置' }} · 最近连接：{{ time(executor?.last_seen_at) }}</p>
-            <p>最近部署检查：{{ time(executor?.checked_at) }} · {{ executor?.executor_version || '未上报脚本版本' }}</p>
+            <p>最近部署检查：{{ time(executor?.checked_at) }} · {{ executor?.executor_version ? '已上报脚本版本' : '未上报脚本版本' }}</p>
             <p role="status">{{ capabilityText }}</p>
             <p v-if="instanceID" class="break-all">实例 ID：<code>{{ instanceID }}</code></p>
             <div class="flex flex-wrap gap-2"><UButton size="sm" variant="soft" :disabled="!canPrepare" :loading="preparing" @click="prepareInstallation(null)">检查部署</UButton><UButton size="sm" variant="soft" :loading="configuring" :disabled="busy" @click="credential(false)">{{ executor ? '轮换凭据' : '创建凭据' }}</UButton><UButton v-if="executor" size="sm" color="red" variant="soft" :loading="configuring" @click="credential(true)">撤销凭据</UButton></div>
             <div v-if="token" class="space-y-2"><p>仅本次显示，请保存为宿主 0600 的独立文件，不放进命令参数、日志或截图。轮换后保留原任务使用的旧文件至结案。</p><textarea aria-label="一次性执行器凭据" readonly :value="token" rows="3" class="w-full rounded border p-2 font-mono text-xs bg-transparent" /><UButton size="xs" variant="soft" @click="token = ''">已保存，隐藏凭据</UButton></div>
             <details><summary class="cursor-pointer">首次配置与恢复指引</summary><ol class="list-decimal pl-5 mt-2 space-y-1" :class="theme.mutedText">
               <li>创建凭据，人工核对实例 ID；宿主管理员按部署指引登记 Docker/Compose、数据挂载和备份目录。</li>
-              <li>安装含备份工具的引导镜像及 u6-1 脚本，将 token 存入独立受保护文件。网页无需 SSH 密码或任务计划管理权限。</li>
+              <li>安装含备份工具的引导镜像及配套更新执行器脚本，将 token 存入独立受保护文件。网页无需 SSH 密码或任务计划管理权限。</li>
               <li>执行 <code>python3 executor.py check /absolute/executor.json</code>，或点击“检查部署”。部署检查三分钟内有效；宿主管理员可沿用旧周期 run，也可配置按需唤醒 run 和低频 poll 补偿。</li>
               <li>人工处理先保留任务 ID、state_dir/active.json、backup_dir/任务 ID 和任务计划 stderr；核对镜像、备份及数据库后按指引使用 reconcile，不能删记录或手改任务。</li>
               <li>服务长期不可访问时，从宿主任务日志或 SSH 查现场，网页无法替代离线恢复。</li>
@@ -93,7 +93,7 @@ const time = (value: any) => value && Number.isFinite(new Date(value).getTime())
 const channel = (name: string) => channels.value.find(c => c.name === name) || { status: 'missing' }
 const statuses: Record<string, string> = { current: '已是最新', same_source_rebuild: '同一提交重新构建，无需安装', update_available: '有可更新的后代版本', channel_behind: '渠道落后，当前安装保持不变', diverged: '提交历史分叉，不能自动更新', unknown_history: '无法比较历史，不能自动更新', no_release: '尚无正式版', release_pending: '正式版产物尚未就绪', missing: '尚无可用镜像', unsupported: '当前架构不支持', invalid_target: '目标身份无效', check_failed: '检查失败，请重试', source_ready: '已构建', source_skipped: '源码变动无需构建', build_pending: '等待构建', building: '构建中', publishing: '产物发布中', build_failed: '构建失败', build_cancelled: '构建已取消' }
 const statusText = (status: string) => statuses[status] || '等待检查'
-const reasons: Record<string, string> = { executor_unconfigured: '执行器未配置，只能检查更新', deployment_unchecked: '尚未完成当前安装的宿主部署检查', executor_offline: '部署检查已过期，安装前将重新检查', credential_expired: '凭据已过期，请轮换', instance_mismatch: '执行器未配对到同一实例', executor_upgrade_required: '脚本过旧，请升级至 u6-1 后重新检查', platform_unsupported: '仅验收 Linux/amd64 安装，当前架构不支持', database_unsupported: '数据库不支持自动备份，当前不能安装', deployment_check_failed: '部署或 SQLite 备份检查失败，请查看宿主日志；旧引导镜像或不支持的数据布局需先处理' }
+const reasons: Record<string, string> = { executor_unconfigured: '执行器未配置，只能检查更新', deployment_unchecked: '尚未完成当前安装的宿主部署检查', executor_offline: '部署检查已过期，安装前将重新检查', credential_expired: '凭据已过期，请轮换', instance_mismatch: '执行器未配对到同一实例', executor_upgrade_required: '脚本过旧，请升级至配套更新执行器脚本后重新检查', platform_unsupported: '仅验收 Linux/amd64 安装，当前架构不支持', database_unsupported: '数据库不支持自动备份，当前不能安装', deployment_check_failed: '部署或 SQLite 备份检查失败，请查看宿主日志；旧引导镜像或不支持的数据布局需先处理' }
 const capabilityText = computed(() => installation.value.available ? '近期部署检查通过，具备安装条件' : reasons[installation.value.reason] || '安装条件尚未满足')
 const phases: Record<string, string> = { pending: '等待执行器', claimed: '已领取', downloading: '下载镜像', stopping: '停止旧服务', backing_up: '一致备份', replacing: '替换容器', verifying: '核验运行身份', succeeded: '已完成', failed: '失败', needs_attention: '需要人工处理' }
 const phaseText = computed(() => phases[task.value?.status] || '等待状态')

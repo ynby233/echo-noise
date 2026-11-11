@@ -1,8 +1,8 @@
-# U4 一致备份与失败恢复验收
+# 一致备份与失败恢复验收
 
-**U4 已完成并通过本地、独立真实引擎及对应镜像验收，可以关闭；下一阶段 U5。**
+**一致备份与失败恢复已完成并通过本地、独立真实引擎及对应镜像验收，可以关闭；下一阶段后台更新界面。**
 
-日期：2026-10-01。接手基线 `80373270`；按 [U3 修复交接](u3-acceptance-repair-handoff-2026-10-01.md) 与 [U1–U7 第 9 节](direct-update-implementation-handoff-2026-09-11.md) 实施。U1–U3 的已验收行为保留，未实施 U5/U6/U7，未操作 NAS 业务容器、数据或计划任务，未发布正式 Release。
+日期：2026-10-01。接手基线 `80373270`；按 [外部更新执行器修复交接](external-executor-acceptance-repair-handoff-2026-10-01.md) 与 [服务端更新全流程第 9 节](direct-update-implementation-handoff-2026-09-11.md) 实施。渠道、任务与执行器的已验收行为保留，未实施后台更新界面/Dagu 与 NAS 接入/更新验收与交付，未操作 NAS 业务容器、数据或计划任务，未发布正式 Release。
 
 ## 实现结果
 
@@ -41,7 +41,7 @@
 | 新版失败且已有业务写入 | 健康验证失败，保留目标及 needs_attention；旧容器不运行/restart=no；新写入保留。撤销 token 后停止目标，root 离线 failed 结案释放占位，重新启动目标后新写入仍在 |
 | 人工成功结案 | 修复合成 health 故障，重新核验目标、同实例/full revision 后，原任务 needs_attention → verifying → succeeded；无再次替换 |
 | 停机中断/daemon 重启 | 旧容器停止后 SIGKILL 执行器；journal 保留 stop_intent。独立 runner 实际重启 Docker daemon，旧 always 容器因 restart=no 未复活；重启原实例仅用于报告恢复，不重复 stop/replace |
-| U3 回归 | F1–F6、host/MAC、本地 endpoint/volume、probe 恢复、409/响应丢失、轮换/撤销、flock、Compose 再 up 全部通过 |
+| 外部更新执行器回归 | F1–F6、host/MAC、本地 endpoint/volume、probe 恢复、409/响应丢失、轮换/撤销、flock、Compose 再 up 全部通过 |
 
 对应自动 [镜像构建 36813085921](https://github.com/ynby233/echo-noise/actions/runs/36813085921) 已 success，headSha 同为 `a7db4aecc9c721f5b90f8c52bce0fde11d6fd9a0`。候选构建/smoke、旧运行身份缺口拒绝、固定目标发布及 smoke、edge 标签移动全部成功。本次取消已被最终提交替代的待排队构建，没有取消最终运行，也未重复手动 dispatch；保留已完成的历史证据。
 
@@ -51,10 +51,10 @@
 
 首个实际验收仍为 Linux/amd64 + SQLite + 单实例、本地附件布局。ARM、MySQL/PostgreSQL、远端附件保护、NAS 调度和真实业务恢复没有验收，不能写成已支持。宿主 root 可以在检查后启动未来写入者，部署管理员须暂停外部写入任务；程序只检查当前容器重启策略、共享挂载和 /proc 文件描述符，不建立通用调度/冻结系统。
 
-生产 `POST /api/updates/tasks` 保持 501。下一阶段 U5 完成能力判断及后台任务恢复/提示，随后 U6 首次引导必须先让已安装旧镜像包含工具再安装宿主脚本/任务计划；更老安装停机前 `u4_backup_unavailable`，不能用新镜像工具迁移旧库来绕过。U7 验收完整已接入链条。本次保留未跟踪 `docs/direct-update-feasibility-2026-09-10.md`，不混入提交。
+生产 `POST /api/updates/tasks` 保持 501。下一阶段后台更新界面完成能力判断及后台任务恢复/提示，随后Dagu 与 NAS 接入首次引导必须先让已安装旧镜像包含工具再安装宿主脚本/任务计划；更老安装停机前 `u4_backup_unavailable`，不能用新镜像工具迁移旧库来绕过。更新验收与交付验收完整已接入链条。本次保留未跟踪 `docs/direct-update-feasibility-2026-09-10.md`，不混入提交。
 
 
 
 独立只读 GHCR 查询确认 `edge-mcp` 与 `sha-a7db4aecc9c721f5b90f8c52bce0fde11d6fd9a0-mcp` 是同一索引，OCI revision 精确匹配、version=`a7db4aecc9c7`。索引 digest=`sha256:eeb29b9e5f14fbab2e1b088ce0f0b631ef9ee0fc1c0c11d8265abb099b6992e7`，linux/amd64 manifest=`sha256:6e41b59226e7a571f268c4339861402147f7028c287304c4db30bb35b0c18749`。这些证明本次产物，不代表 NAS 已部署。最终报告的纯文档提交不改变代码身份，也不要求重复镜像构建。
 
-U4 范围内未完成项为无。U5/U6/U7 以及上述未支持平台保持各自范围。未增加新依赖、内容 hash、baseline 或通用在线冻结/运维框架；保留已有权限、事务、任务归属、单活动占位、凭据轮换/撤销及宿主锁。
+一致备份与失败恢复范围内未完成项为无。后台更新界面/Dagu 与 NAS 接入/更新验收与交付以及上述未支持平台保持各自范围。未增加新依赖、内容 hash、baseline 或通用在线冻结/运维框架；保留已有权限、事务、任务归属、单活动占位、凭据轮换/撤销及宿主锁。

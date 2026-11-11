@@ -61,8 +61,8 @@ jobs:
           work="$(mktemp -d)"
           mkdir "$work/git"
           git -C "$work/git" init -q -b main
-          git -C "$work/git" config user.name U7
-          git -C "$work/git" config user.email u7@example.invalid
+          git -C "$work/git" config user.name "Update Channel Fixtures"
+          git -C "$work/git" config user.email update-channel-fixtures@example.invalid
           built_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           revisions=()
           for name in A B C; do
@@ -84,5 +84,5 @@ jobs:
           printf '%s' "$rebuilt_at" > "$work/rebuilt-at"
           printf '["%s","%s","%s"]' "${revisions[@]}" > "$work/revisions.json"
           sudo chown -R root:root "$work"
-          sudo -E env U7_CHANNEL_FIXTURES="$work" python3 scripts/update/test-channels.py
+          sudo -E env UPDATE_CHANNEL_FIXTURES="$work" python3 scripts/update/test-channels.py
           sudo rm -rf "$work"

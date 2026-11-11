@@ -313,14 +313,14 @@ class RecoveryTests(unittest.TestCase):
         self.assertTrue(self.calls[-1][1]["ok"])
         self.assertEqual(json.loads(self.ex.journal.read_text())["backup_plan"], historical)
 
-    def test_product_requires_u4_before_stop(self):
+    def test_product_requires_backup_before_stop(self):
         self.claim()
         self.ex.data_protection_available = types.MethodType(executor.Executor.data_protection_available, self.ex)
         self.ex.download = lambda: {"image_id": "new", "manifest_digest": self.task["target_digest"]}
         self.ex.inspect = lambda _: {"Config": {}, "Mounts": [], "State": {"Running": True}, "Id": "old-container"}
         self.ex.check_writers = lambda *a, **k: None
         self.ex.offline_tool = lambda *a, **k: (_ for _ in ()).throw(executor.Stop("old_tool_missing"))
-        self.ex.stop_container = lambda: self.fail("stopped without U4")
+        self.ex.stop_container = lambda: self.fail("stopped without backup support")
         with self.assertRaisesRegex(executor.Stop, "u4_backup_unavailable"):
             self.ex.run()
 
