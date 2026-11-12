@@ -9,7 +9,7 @@ export type AdminSectionKey =
   'site-register' | 'site-announcement' | 'site-music' |
   'site-social-links' | 'site-ads' | 'site-feed' | 'site-rss' | 'hitokoto' | 'life-countdown' |
   'site-configs' | 'comments' | 'email' | 'admin-users' | 'registration-review' | 'widgets' |
-  'storage' | 'cloud-backup' | 'backup-data' | 'backup-attachments' | 'backup-server-config' | 'authorization' | 'admin-audit' | 'notes' | 'recycle-bin' | 'comment-recycle-bin' |
+  'storage' | 'backups' | 'cloud-backup' | 'backup-data' | 'backup-attachments' | 'backup-server-config' | 'authorization' | 'admin-audit' | 'notes' | 'recycle-bin' | 'comment-recycle-bin' |
   'system-push' | 'personal-notes' | 'personal-note-recycle-bin' | 'personal-interactions' | 'personal-interaction-recycle-bin'
 
 export type AdminSectionModule = { default: Component }
@@ -50,8 +50,5 @@ export const adminSectionLoaders: Partial<Record<AdminSectionKey, AdminSectionLo
   'comment-recycle-bin': () => import('./ManagedContentSection.vue'),
   attachments: () => import('./AttachmentsSection.vue'),
   storage: () => import('./StorageSection.vue'),
-  'cloud-backup': () => import('./CloudBackupSection.vue'),
-  'backup-data': () => import('./DataBackupSection.vue'),
-  'backup-attachments': () => import('./AttachmentBackupSection.vue'),
-  'backup-server-config': () => import('./ServerConfigBackupSection.vue'),
+  backups: () => import('./BackupSection.vue'),
 }

@@ -1,12 +1,12 @@
 <template>
-  <section v-if="isPrimaryAdmin" id="cloud-backup-section" :class="adminShellCardClass">
+  <section v-if="isPrimaryAdmin" id="cloud-backup-section" class="backup-cloud-settings" :class="embedded ? '' : adminShellCardClass">
     <ConfigLoadState :loading="loading" :error="error" @retry="load" />
     <fieldset :disabled="!ready || loading || saving" :inert="!ready || loading || saving" class="min-w-0">
-      <AdminModuleHeader title="云备份连接配置" icon="i-heroicons-cloud" description="配置云备份使用的存储服务和连接凭据。" :theme="theme" />
-      <div class="px-4 pb-4">
-        <div class="admin-storage-settings space-y-3">
-          <div class="admin-settings-toolbar font-semibold flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2" :class="theme.text">
-            <span>云备份连接</span>
+      <AdminModuleHeader v-if="!embedded" title="云备份连接" icon="i-heroicons-cloud" description="配置备份使用的 S3／R2 服务。" :theme="theme" />
+      <div :class="embedded ? '' : 'px-4 pb-4'">
+        <div class="backup-cloud-fields">
+          <div class="backup-section-header" :class="theme.text">
+            <div class="backup-section-copy"><h3>云端连接</h3><p>数据、附件和服务端配置共用此备份通道。</p></div>
             <div class="flex flex-wrap items-center gap-3">
               <span class="text-xs sm:text-sm" :class="theme.mutedText">状态</span>
               <span :class="[storageEnabled ? 'text-green-600 dark:text-green-400' : 'text-indigo-400', 'text-xs sm:text-sm']">{{ storageEnabled ? '已启用' : '未启用' }}</span>
@@ -14,10 +14,7 @@
             </div>
           </div>
 
-          <div v-if="!storageEnabled" class="admin-storage-local" :class="theme.border">
-            <div class="text-xs sm:text-sm" :class="theme.text">云备份连接未启用</div>
-            <div class="text-xs mt-1" :class="theme.mutedText">关闭连接会保留已保存的连接配置和凭据。</div>
-          </div>
+          <p v-if="!storageEnabled" class="backup-scope">启用后可将备份保存到云端。关闭时保留现有连接凭据。</p>
 
           <div v-else class="space-y-3">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -66,7 +63,7 @@ import { computed, reactive, ref, toRefs, watch } from 'vue'
 import { useRuntimeConfig } from '#imports'
 import { useAdminCapabilities } from '~/composables/useAdminCapabilities'
 
-const props = defineProps<{ theme: any, adminShellCardClass: any }>()
+const props = defineProps<{ theme: any, adminShellCardClass: any, embedded?: boolean }>()
 const { theme, adminShellCardClass } = toRefs(props)
 const { isPrimaryAdmin } = useAdminCapabilities()
 const baseApi = useRuntimeConfig().public.baseApi || '/api'

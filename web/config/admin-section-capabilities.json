@@ -21,6 +21,7 @@
   "security": "security.view",
   "attachments": "attachments.view",
   "storage": "storage.view",
+  "backups": ["backup.data.view", "backup.attachments.view", "backup.server_config.view"],
   "backup-data": "backup.data.view",
   "backup-attachments": "backup.attachments.view",
   "backup-server-config": "backup.server_config.view",

@@ -1,35 +1,18 @@
 <template>
-  <div v-if="canView" id="storage-section" class="admin-split-modules">
-    <section id="attachment-storage-section" class="col-span-12" :class="adminShellCardClass">
+  <div v-if="canView" id="storage-section">
+    <section id="attachment-storage-section" class="storage-workspace" :class="adminShellCardClass">
       <ConfigLoadState :loading="loading" :error="error" @retry="load" />
       <fieldset :disabled="!ready || loading || saving" :inert="!ready || loading || saving" class="min-w-0">
-        <AdminModuleHeader title="附件存储与处理" icon="i-heroicons-cloud" description="按授权查看附件存储状态和管理压缩处理；存储位置与连接凭据仅站长可配置。" :theme="theme" />
+        <AdminModuleHeader title="附件存储" icon="i-heroicons-cloud" description="设置新附件的保存位置与图片、视频处理方式。" :theme="theme" />
         <div class="px-4 pb-4">
-          <div class="admin-storage-settings">
-            <div class="admin-settings-toolbar font-semibold mb-2 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2" :class="theme.text">
-              <span>附件存储</span>
-              <div class="flex flex-wrap items-center gap-3">
-                <span class="text-xs sm:text-sm" :class="theme.mutedText">当前模式</span>
-                <span :class="[attachmentStorageEnabled ? 'text-green-600 dark:text-green-400' : 'text-indigo-400', 'text-xs sm:text-sm']">{{ attachmentStorageEnabled ? '云端存储' : '本地存储' }}</span>
-                <UToggle v-if="isPrimaryAdmin && canManage" v-model="attachmentStorageEnabled" />
-              </div>
+          <div class="storage-settings-body">
+            <div class="storage-setting-row">
+              <div class="backup-section-copy"><h3>保存位置</h3><p>{{ attachmentStorageEnabled ? '上传到已配置的云存储' : '上传到服务器本地目录' }}</p></div>
+              <div class="storage-setting-control"><span>{{ attachmentStorageEnabled ? '云端' : '本地' }}</span><UToggle v-if="isPrimaryAdmin && canManage" v-model="attachmentStorageEnabled" /></div>
             </div>
-
-            <div class="font-semibold mb-2 mt-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2" :class="theme.text">
-              <span>附件压缩处理（自动压缩图片/视频）</span>
-              <div class="flex flex-wrap items-center gap-3">
-                <span class="text-xs sm:text-sm" :class="theme.mutedText">状态</span>
-                <span :class="[attachmentStorageConfig.enableCompression ? 'text-green-600 dark:text-green-400' : 'text-indigo-400', 'text-xs sm:text-sm']">{{ attachmentStorageConfig.enableCompression ? '已开启' : '未开启' }}</span>
-                <UToggle v-if="canManage" v-model="attachmentStorageConfig.enableCompression" @update:model-value="value => toggleCompression(!!value)" />
-                <span class="text-xs px-1.5 py-0.5 rounded border ml-1" :class="attachmentStorageConfig.ffmpegInstalled ? 'border-green-500/30 text-green-500' : 'border-red-500/30 text-red-500'">
-                  {{ attachmentStorageConfig.ffmpegInstalled ? 'FFmpeg已就绪' : '未检测到FFmpeg' }}
-                </span>
-              </div>
-            </div>
-
-            <div v-if="!attachmentStorageEnabled" class="admin-storage-local" :class="theme.border">
-              <div class="text-xs sm:text-sm" :class="theme.text">当前使用本地存储</div>
-              <div class="text-xs mt-1" :class="theme.mutedText">图片/视频附件保存在服务器目录</div>
+            <div class="storage-setting-row">
+              <div class="backup-section-copy"><h3>自动压缩图片与视频</h3><p>仅影响后续上传，已有附件不会重新处理。</p></div>
+              <div class="storage-setting-control"><span class="storage-tool-status" :class="{ 'storage-tool-missing': !attachmentStorageConfig.ffmpegInstalled }">{{ attachmentStorageConfig.ffmpegInstalled ? 'FFmpeg 已就绪' : '未检测到 FFmpeg' }}</span><UToggle v-if="canManage" v-model="attachmentStorageConfig.enableCompression" @update:model-value="value => toggleCompression(!!value)" /><span v-else>{{ attachmentStorageConfig.enableCompression ? '已开启' : '未开启' }}</span></div>
             </div>
 
             <fieldset v-if="isPrimaryAdmin && attachmentStorageEnabled" :disabled="!canManage" class="min-w-0 space-y-3">
@@ -63,7 +46,7 @@
               <p class="text-xs" :class="theme.mutedText">凭据留空时保留，输入新值时替换；选择清除后保存才会删除现有凭据。</p>
             </fieldset>
 
-            <div class="admin-row-actions mt-3">
+            <div class="storage-form-actions">
               <UButton icon="i-heroicons-arrow-path" size="sm" class="admin-action" variant="soft" color="gray" @click="load">刷新</UButton>
               <UButton v-if="canManage" size="sm" class="admin-action" color="primary" :loading="saving" @click="saveAttachmentStorageConfig">保存配置</UButton>
             </div>

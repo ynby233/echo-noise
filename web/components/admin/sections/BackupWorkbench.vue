@@ -1,65 +1,68 @@
 <template>
-  <section v-if="allowed('view')" :class="adminShellCardClass">
-    <AdminModuleHeader :title="label" icon="i-heroicons-archive-box" :description="backupScopes[kind]" :theme="theme" />
-    <div class="px-4 pb-4 space-y-4">
+  <section v-if="allowed('view')" class="backup-workbench" :class="embedded ? '' : adminShellCardClass">
+    <AdminModuleHeader v-if="!embedded" :title="label" icon="i-heroicons-archive-box" :description="backupScopes[kind]" :theme="theme" />
+    <div class="backup-content" :class="{ 'backup-content-standalone': !embedded }">
       <ConfigLoadState :loading="loading" :error="error" @retry="load" />
-      <p class="text-sm break-all">服务器备份目录：{{ directory || '读取后显示' }}</p>
-      <p class="text-sm" :class="theme.mutedText">备份包可能包含私密内容，仅站长可下载或恢复。</p>
-      <p v-if="pendingRestart" role="status" class="text-amber-600">恢复已暂存，请由站长重启服务后生效。当前运行中的数据尚未切换。</p>
-      <p v-for="warning in warnings" :key="warning" role="status" class="text-amber-600">{{ warning }}</p>
-      <p v-if="notice" role="status" class="text-sm whitespace-pre-line">{{ notice }}</p>
-      <p v-if="busy" role="status" aria-live="polite" class="text-sm">操作进行中，请等待服务器处理完成。大附件可能耗时较长；若请求中断，请刷新记录确认结果。</p>
-      <fieldset v-if="ready" :disabled="busy || loading" class="space-y-4 min-w-0">
-        <section v-if="allowed('create')" class="admin-form-section">
-          <div class="admin-section-heading"><h3>手动生成备份</h3></div>
-          <p class="text-sm" :class="theme.mutedText">备份保存在服务器目录或站长配置的云通道；生成后可在记录中查看结果。云端操作由服务端检查主通道是否可用。</p>
-          <label v-if="kind === 'attachments'" class="admin-labeled-field mt-2"><span>备份范围</span><select v-model="scope" class="admin-field"><option value="local">仅本地附件</option><option value="all">本地和云端附件</option></select></label>
-          <p v-if="kind === 'attachments'" class="text-sm" :class="theme.mutedText">仅本地备份不包含云端文件；选择本地和云端会下载本项目管理的云附件，外部图片或视频链接不在范围内。</p>
-          <div class="admin-row-actions mt-3"><label>保存位置 <select v-model="target" class="admin-field"><option value="local">本地</option><option value="cloud">云端</option><option value="both">本地和云端</option></select></label><UButton class="admin-action" :loading="busy" @click="createBackup">生成备份</UButton></div>
-        </section>
-        <section v-if="allowed('plan') && plan" class="admin-form-section">
-          <div class="admin-section-heading"><h3>自动备份计划</h3></div>
-          <label class="admin-toggle-row"><input v-model="plan.enabled" type="checkbox" />启用此类备份计划</label>
-          <div class="admin-fields-grid">
-            <label class="admin-labeled-field min-w-0"><span>执行时间</span><input v-model="plan.time" type="time" class="admin-field w-full min-w-0" /></label>
-            <label class="admin-labeled-field min-w-0"><span>时区</span><input v-model="plan.timezone" placeholder="Asia/Shanghai" class="admin-field w-full min-w-0" /></label>
-            <label class="admin-labeled-field min-w-0"><span>本地保留数量</span><input v-model.number="plan.keepLocal" type="number" min="1" max="1000" class="admin-field w-full min-w-0" /></label>
-            <label class="admin-labeled-field min-w-0"><span>云端保留数量</span><input v-model.number="plan.keepCloud" type="number" min="1" max="1000" class="admin-field w-full min-w-0" /></label>
-            <label class="admin-labeled-field min-w-0"><span>保存位置</span><select v-model="plan.target" class="admin-field w-full min-w-0"><option value="local">本地</option><option value="cloud">云端</option><option value="both">本地和云端</option></select></label>
-            <label v-if="kind === 'attachments'" class="admin-labeled-field min-w-0"><span>备份范围</span><select v-model="plan.scope" class="admin-field w-full min-w-0"><option value="local">仅本地附件</option><option value="all">本地和云端附件</option></select></label>
+      <p class="backup-scope">{{ backupScopes[kind] }}</p>
+      <div v-if="pendingRestart || notice || busy || warnings.length" class="backup-feedback" role="status" aria-live="polite">
+        <p v-if="pendingRestart">恢复已暂存，重启服务后生效；当前运行数据尚未切换。</p>
+        <p v-if="notice">{{ notice }}</p>
+        <p v-if="busy">正在处理，请稍候。大附件可能耗时较长。</p>
+        <p v-for="warning in warnings" :key="warning">{{ warning }}</p>
+      </div>
+      <fieldset v-if="ready" :disabled="busy || loading" class="backup-body">
+        <section v-if="allowed('create')" class="backup-create">
+          <div class="backup-section-copy"><h3>立即备份</h3><p>保存到服务器或已配置的云端，不会自动下载到当前设备。</p></div>
+          <div class="backup-create-controls">
+            <label v-if="kind === 'attachments'" class="backup-field"><span>附件范围</span><select v-model="scope" class="admin-field"><option value="local">仅本地附件</option><option value="all">本地和云端附件</option></select></label>
+            <label class="backup-field"><span>保存位置</span><select v-model="target" class="admin-field"><option value="local">本地</option><option value="cloud">云端</option><option value="both">本地和云端</option></select></label>
+            <UButton class="admin-action backup-primary-action" :loading="busy" @click="createBackup">生成备份</UButton>
           </div>
-          <p class="text-sm mt-2">上次执行：{{ formatTime(plan.lastRun) }} · 下次执行：{{ formatTime(plan.nextRun) }}</p>
-          <p class="text-sm" :class="theme.mutedText">同类备份在每个保存位置分别保留最近指定份数，手动与自动共同计数；新备份成功后才清理旧文件。</p>
-          <div class="admin-form-actions"><UButton class="admin-action" :loading="busy" @click="savePlan">保存计划</UButton></div>
         </section>
-        <section v-if="allowed('history')" class="admin-form-section">
-          <div class="admin-section-heading admin-inline-toolbar"><h3>备份记录</h3><UButton class="admin-action" size="sm" color="gray" @click="load">刷新</UButton></div>
-          <p v-if="!records.length" class="text-sm" :class="theme.mutedText">暂无备份记录。手动与自动备份会合并显示。</p>
-          <div v-for="record in records" :key="record.id" class="admin-subcard p-3 space-y-2 break-words" :class="theme.subtleBg">
-            <p>{{ formatTime(record.createdAt) }} · {{ record.trigger === 'scheduled' ? '自动' : record.trigger === 'discovered' ? (record.local ? '本地已有备份' : '云端已有备份') : '手动' }} · {{ backupRecordStatus(record.status) }} · {{ formatSize(record.size) }}</p>
-            <p v-if="record.error" role="alert" class="text-red-600">{{ record.error }}</p>
-            <div v-if="record.local || record.cloud" class="admin-row-actions">
-              <template v-for="source in recordSources(record)" :key="source">
-                <UButton v-if="allowed('download')" class="admin-action" size="sm" color="gray" @click="downloadRecord(record, source)">下载{{ source === 'local' ? '本地' : '云端' }}包</UButton>
-                <UButton v-if="allowed('restore')" class="admin-action" size="sm" color="orange" @click="restoreRecord(record, source)">恢复{{ source === 'local' ? '本地' : '云端' }}包</UButton>
-              </template>
+        <section v-if="allowed('plan') && plan" class="backup-plan">
+          <div class="backup-section-header">
+            <h3>定时与保留</h3>
+            <label class="backup-enable"><input v-model="plan.enabled" type="checkbox" /><span>每天自动备份</span></label>
+          </div>
+          <div class="backup-plan-fields">
+            <label class="backup-field"><span>执行时间</span><input v-model="plan.time" type="time" class="admin-field" /></label>
+            <label class="backup-field"><span>时区</span><input v-model="plan.timezone" placeholder="Asia/Shanghai" class="admin-field" /></label>
+            <label class="backup-field"><span>保存位置</span><select v-model="plan.target" class="admin-field"><option value="local">本地</option><option value="cloud">云端</option><option value="both">本地和云端</option></select></label>
+            <label v-if="kind === 'attachments'" class="backup-field"><span>附件范围</span><select v-model="plan.scope" class="admin-field"><option value="local">仅本地附件</option><option value="all">本地和云端附件</option></select></label>
+            <label class="backup-field"><span>本地保留（份）</span><input v-model.number="plan.keepLocal" type="number" min="1" max="1000" class="admin-field" /></label>
+            <label class="backup-field"><span>云端保留（份）</span><input v-model.number="plan.keepCloud" type="number" min="1" max="1000" class="admin-field" /></label>
+          </div>
+          <div class="backup-plan-footer"><div><p>手动与自动共同计数，新备份成功后清理旧文件。</p><p>上次：{{ formatTime(plan.lastRun) }} · 下次：{{ formatTime(plan.nextRun) }}</p></div><UButton class="admin-action" :loading="busy" @click="savePlan">保存计划</UButton></div>
+        </section>
+        <section v-if="allowed('history')" class="backup-history">
+          <div class="backup-section-header"><h3>备份记录 <span class="backup-count">{{ records.length }}</span></h3><UButton class="admin-action" size="sm" color="gray" @click="load">刷新</UButton></div>
+          <p v-if="!records.length" class="backup-empty">暂无备份，生成后将在这里显示。</p>
+          <div v-else class="backup-records">
+            <div v-for="record in records" :key="record.id" class="backup-record">
+              <div class="backup-record-details"><strong>{{ formatTime(record.createdAt) }}</strong><span>{{ record.trigger === 'scheduled' ? '自动' : record.trigger === 'discovered' ? (record.local ? '本地已有备份' : '云端已有备份') : '手动' }} · {{ backupRecordStatus(record.status) }} · {{ formatSize(record.size) }}</span><p v-if="record.error" role="alert" class="backup-record-error">{{ record.error }}</p></div>
+              <div v-if="record.local || record.cloud" class="backup-record-actions">
+                <div v-for="source in recordSources(record)" :key="source" class="backup-source-actions"><span>{{ source === 'local' ? '本地' : '云端' }}</span><UButton v-if="allowed('download')" class="admin-action" size="sm" color="gray" @click="downloadRecord(record, source)">下载</UButton><UButton v-if="allowed('restore')" class="admin-action" size="sm" color="orange" variant="soft" @click="restoreRecord(record, source)">恢复</UButton></div>
+              </div>
             </div>
           </div>
         </section>
-        <section v-if="allowed('restore')" class="admin-form-section">
-          <div class="admin-section-heading"><h3>检查与恢复备份包</h3></div>
-          <label v-if="kind === 'attachments' || (inspection?.legacy && inspectionHasAttachments(inspection))" class="admin-labeled-field"><span>附件恢复位置</span><select v-model="attachmentMode" class="admin-field"><option value="original">保留原本地／云端分布</option><option value="local">全部恢复到本地</option></select></label>
-          <p class="text-sm my-2" :class="theme.mutedText">选择 ZIP 后检查内容，不会立即恢复。独立包请在对应模块恢复；旧完整包由站长在数据备份模块恢复，其中包含的附件也会一起恢复。检查通过后仍需人工确认。</p>
-          <input ref="fileInput" type="file" accept=".zip,application/zip" aria-label="选择要检查的备份 ZIP 包" class="block w-full min-w-0 max-w-full text-sm" @change="selectFile" />
-          <div v-if="inspection" class="mt-3 space-y-2">
-            <p>{{ inspection.legacy ? '旧完整备份包' : '独立备份包' }} · {{ backupLabels[inspection.kind] }}<span v-if="kind === 'attachments' || inspection.legacy"> · 附件 {{ inspection.attachmentCount }} 个</span></p>
-            <p>包含：{{ inspection.components.join('、') || '以检查结果为准' }}</p>
-            <p v-for="warning in inspection.warnings" :key="warning" class="text-amber-600">{{ warning }}</p>
-            <p v-if="inspection.fallbackRequired" class="text-amber-600">原云存储不可用；恢复前请选择本地并确认附件迁移。</p>
-            <div class="admin-row-actions"><UButton class="admin-action" color="orange" :loading="busy" @click="restoreUpload">确认恢复此包</UButton><UButton class="admin-action" color="gray" @click="clearUpload">取消</UButton></div>
+        <details v-if="allowed('restore')" class="backup-import">
+          <summary>从文件恢复</summary>
+          <div class="backup-import-body">
+            <p>上传 ZIP 先检查，确认后才恢复。旧完整包请在“数据”中导入。</p>
+            <label v-if="kind === 'attachments' || (inspection?.legacy && inspectionHasAttachments(inspection))" class="backup-field"><span>附件恢复位置</span><select v-model="attachmentMode" class="admin-field"><option value="original">保留原本地／云端分布</option><option value="local">全部恢复到本地</option></select></label>
+            <input ref="fileInput" type="file" accept=".zip,application/zip" aria-label="选择要检查的备份 ZIP 包" class="backup-file-input" @change="selectFile" />
+            <div v-if="inspection" class="backup-inspection">
+              <p>{{ inspection.legacy ? '旧完整备份包' : '独立备份包' }} · {{ backupLabels[inspection.kind] }}<span v-if="kind === 'attachments' || inspection.legacy"> · 附件 {{ inspection.attachmentCount }} 个</span></p>
+              <p>包含：{{ inspection.components.join('、') || '以检查结果为准' }}</p>
+              <p v-for="warning in inspection.warnings" :key="warning">{{ warning }}</p>
+              <p v-if="inspection.fallbackRequired">云存储不可用；请选择本地并确认迁移。</p>
+              <div class="backup-import-actions"><UButton class="admin-action" color="gray" @click="clearUpload">取消</UButton><UButton class="admin-action" color="orange" :loading="busy" @click="restoreUpload">确认恢复此包</UButton></div>
+            </div>
           </div>
-        </section>
+        </details>
       </fieldset>
+      <details class="backup-notes"><summary>备份范围与保存目录</summary><p class="backup-directory">服务器备份目录：{{ directory || '读取后显示' }}</p><p>备份包可能包含私密内容，仅站长可下载或恢复。</p><p v-if="kind === 'attachments'">仅本地备份不包含云端文件；外部图片、视频链接不在备份范围内。</p></details>
     </div>
   </section>
 </template>
@@ -71,7 +74,7 @@ import { useAdminCapabilities } from '~/composables/useAdminCapabilities'
 import ConfigLoadState from './ConfigLoadState.vue'
 import { backupCapability, backupLabels, backupScopes, backupRecordStatus, backupPlanInput, backupResultMessage, confirmBackupRestore, type AttachmentMode, type BackupKind, type BackupPlan, type BackupRecord, type BackupTarget } from './backup-contract'
 import { BackupFallbackRequired, inspectionHasAttachments, parseBackupEnvelope, parseStatus, parseHistory, parseRestore, parseInspection, parseMessage, type Inspection, type RestoreResult } from './backup-payload'
-const props = defineProps<{ kind: BackupKind, theme: Record<string, string>, adminShellCardClass: string | string[] | Record<string, boolean> }>()
+const props = defineProps<{ kind: BackupKind, theme: Record<string, string>, adminShellCardClass: string | string[] | Record<string, boolean>, embedded?: boolean }>()
 const { can, isPrimaryAdmin } = useAdminCapabilities()
 const label = computed(() => backupLabels[props.kind])
 const allowed = (action: string) => (props.kind !== 'server-config' || isPrimaryAdmin.value) && (!['download', 'restore'].includes(action) || isPrimaryAdmin.value) && can(backupCapability(props.kind, 'view')) && can(backupCapability(props.kind, action))
@@ -199,7 +202,7 @@ const restoreUpload = () => {
 const recordSources = (record: BackupRecord): ('local' | 'cloud')[] => [...(record.local ? ['local' as const] : []), ...(record.cloud ? ['cloud' as const] : [])]
 const formatTime = (value?: string) => value ? new Date(value).toLocaleString('zh-CN') : '暂无'
 const formatSize = (size: number) => `${(size / 1024 / 1024).toFixed(2)} MB`
-const stop = () => { active = false; ++generation; ++lifecycle; for (const controller of controllers) controller.abort(); controllers.clear(); loading.value = false; busy.value = false; ready.value = false }
+const stop = () => { active = false; ++generation; ++lifecycle; for (const controller of controllers) controller.abort(); controllers.clear(); loading.value = false; busy.value = false }
 onMounted(load)
 onActivated(() => { active = true; if (!ready.value) void load() })
 onDeactivated(stop)

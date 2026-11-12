@@ -8,10 +8,7 @@ const registry = await read('components/admin/sections/registry.ts')
 
 for (const [key, file] of [
   ['storage', 'StorageSection.vue'],
-  ['cloud-backup', 'CloudBackupSection.vue'],
-  ['backup-data', 'DataBackupSection.vue'],
-  ['backup-attachments', 'AttachmentBackupSection.vue'],
-  ['backup-server-config', 'ServerConfigBackupSection.vue'],
+  ['backups', 'BackupSection.vue'],
 ]) {
   await access(new URL(`../components/admin/sections/${file}`, import.meta.url))
   assert.match(
@@ -21,6 +18,26 @@ for (const [key, file] of [
   )
 }
 assert.doesNotMatch(registry, /\bdb:\s*\(\)\s*=>|import\('\.\/DatabaseSection\.vue'\)/, 'legacy database entry must not be navigable')
+assert.doesNotMatch(registry, /'(?:cloud-backup|backup-data|backup-attachments|backup-server-config)':\s*\(\)\s*=>/, 'legacy backup keys resolve as aliases rather than independent pages')
+const workspace = await read('components/admin/sections/BackupSection.vue')
+assert.match(workspace, /defineAsyncComponent\(\(\) => import\('\.\/BackupWorkbench\.vue'\)\)/)
+assert.match(workspace, /v-if="activeTab === 'cloud'"/, 'cloud connections mount only when selected')
+assert.match(workspace, /<BackupWorkbench v-else :key="activeTab"/, 'only the selected backup kind is mounted')
+assert.doesNotMatch(workspace, /v-show/, 'inactive tabs must not all render at once')
+assert.match(workspace, /<KeepAlive :max="4">/, 'visited tabs retain form drafts while their workbenches are deactivated')
+assert.match(workspace, /role="tablist"/)
+assert.match(workspace, /embedded/, 'children render within the shared workspace heading')
+const storageGroup = panel.split("{ key: 'storage-maintain'")[1]?.split('\n')[0]
+assert.ok(storageGroup)
+assert.match(storageGroup, /key: 'storage', label: '附件存储'/)
+assert.match(storageGroup, /key: 'backups', label: '备份与恢复'/)
+assert.match(storageGroup, /key: 'attachments', label: '附件管理'/)
+assert.match(storageGroup, /key: 'version', label: '版本与更新'/)
+assert.doesNotMatch(storageGroup, /key: '(?:cloud-backup|backup-data|backup-attachments|backup-server-config)'/)
+assert.match(panel, /Object\.hasOwn\(backupSectionAliases, key\)/, 'legacy hashes must resolve through backup aliases')
+assert.match(panel, /backupTab\.value = backupSectionAliases\[/, 'legacy hashes select the matching workspace tab')
+assert.match(panel, /:backup-tab="backupTab"/)
+assert.match(panel, /@update:backup-tab="backupTab = \$event"/, 'tab selection stays synchronized for later hash navigation')
 
 assert.match(panel, /adminSectionLoaders\[activeSection\.value\]/, 'the selected section must still resolve through a dynamic loader')
 assert.match(panel, /accessibleSectionKeys\.value\.filter/, 'entry prewarming must use permission-filtered section keys')

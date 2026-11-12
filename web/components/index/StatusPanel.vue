@@ -49,6 +49,8 @@ store. Each selected section owns its data requests, form state and cleanup. -->
                 :module-cache="sectionModuleCache"
                 :section-title="activeSectionTitle"
                 :section-key="activeSection"
+                :backup-tab="backupTab"
+                @update:backup-tab="backupTab = $event"
                 :theme="theme"
                 :admin-shell-card-class="adminShellCardClass"
                 :admin-panel-card-class="adminPanelCardClass"
@@ -74,6 +76,7 @@ import { useUser } from '~/composables/useUser'
 import { useUserStore } from '~/store/user'
 import { useAdminCapabilities } from '~/composables/useAdminCapabilities'
 import { resolveAccessibleAdminSection } from '~/utils/admin-section-access'
+import { backupSectionAliases } from '~/utils/admin-section-access'
 import { resolveAdminDashboardPresentation } from '~/utils/admin-dashboard-policy'
 import { resolveManagedAttachmentURL } from '~/utils/media-url'
 import adminSectionCapabilities from '~/config/admin-section-capabilities.json'
@@ -97,17 +100,19 @@ const { logout } = useUser()
 const { capabilities: adminCapabilities, isPrimaryAdmin, isLoading: adminCapabilitiesLoading, isReady: adminCapabilitiesReady, can, refreshCapabilities } = useAdminCapabilities()
 const isAdmin = computed(() => !!(userStore.isLogin && ((userStore.user as any)?.is_admin || (userStore.user as any)?.IsAdmin)))
 const activeSection = ref<AdminSectionKey>('dashboard')
+const backupTab = ref('')
 const activeSectionLoader = computed(() => accessibleSectionKeys.value.includes(activeSection.value) ? adminSectionLoaders[activeSection.value] : undefined)
 const navigationError = ref('')
 const failedSection = ref<AdminSectionKey | null>(null)
 let navigationSequence = 0
-const sectionCapabilities: Partial<Record<AdminSectionKey, string>> = adminSectionCapabilities
+const sectionCapabilities: Partial<Record<AdminSectionKey, string | string[]>> = adminSectionCapabilities
 const canSection = (section: AdminSectionKey) => {
   if (!isAdmin.value) return ['dashboard', 'user', 'widgets', 'system-push', 'personal-notes', 'personal-note-recycle-bin', 'personal-interactions', 'personal-interaction-recycle-bin'].includes(section)
   if (section === 'site-rss') return isPrimaryAdmin.value
   if (section === 'cloud-backup' || section === 'backup-server-config') return isPrimaryAdmin.value
+  if (section === 'backups') return isPrimaryAdmin.value || (Array.isArray(sectionCapabilities.backups) && sectionCapabilities.backups.some(capability => can(capability)))
   const capability = sectionCapabilities[section]
-  return !capability || can(capability)
+  return !capability || (Array.isArray(capability) ? capability.some(value => can(value)) : can(capability))
 }
 const adminNavGroups = computed<NavGroup[]>(() => {
   const groups: NavGroup[] = [
@@ -115,7 +120,7 @@ const adminNavGroups = computed<NavGroup[]>(() => {
   { key: 'site-display', label: '站点与展示', icon: 'i-heroicons-wrench-screwdriver', items: [{ key: 'site', label: '网站配置', icon: 'i-heroicons-wrench-screwdriver' }, { key: 'site-configs', label: '站点信息', icon: 'i-heroicons-cog-6-tooth' }, { key: 'site-register', label: '注册配置', icon: 'i-heroicons-user-plus' }, { key: 'site-announcement', label: '公告', icon: 'i-heroicons-megaphone' }, { key: 'site-ads', label: '广告', icon: 'i-heroicons-photo' }, { key: 'site-feed', label: '信息流', icon: 'i-heroicons-rss' }, ...(isPrimaryAdmin.value ? [{ key: 'site-rss' as AdminSectionKey, label: 'RSS 订阅', icon: 'i-heroicons-rss' }] : []), { key: 'widgets', label: '小组件', icon: 'i-heroicons-squares-plus' }, { key: 'site-social-links', label: '社交链接', icon: 'i-heroicons-link' }] },
   { key: 'content-interaction', label: '内容与互动', icon: 'i-heroicons-puzzle-piece', items: [{ key: 'system-push', label: '系统推送', icon: 'i-heroicons-bell-alert' }, { key: 'personal-notes', label: '个人笔记', icon: 'i-heroicons-document-text' }, { key: 'personal-note-recycle-bin', label: '个人笔记回收站', icon: 'i-heroicons-trash' }, { key: 'personal-interactions', label: '个人互动', icon: 'i-heroicons-chat-bubble-left-right' }, { key: 'personal-interaction-recycle-bin', label: '个人互动回收站', icon: 'i-heroicons-archive-box' }, { key: 'comments', label: '互动管理', icon: 'i-heroicons-chat-bubble-left-right' }, { key: 'comment-recycle-bin', label: '互动回收站', icon: 'i-heroicons-archive-box' }, { key: 'notes', label: '笔记管理', icon: 'i-heroicons-document-text' }, { key: 'recycle-bin', label: '笔记回收站', icon: 'i-heroicons-trash' }, { key: 'site-music', label: '音乐配置', icon: 'i-heroicons-musical-note' }, { key: 'notify', label: '推送配置', icon: 'i-heroicons-bell-alert' }, { key: 'email', label: '邮件配置', icon: 'i-heroicons-envelope' }] },
   { key: 'account-security', label: '账号与安全', icon: 'i-heroicons-shield-check', items: [{ key: 'admin-users', label: '用户管理', icon: 'i-heroicons-user-group' }, { key: 'registration-review', label: '注册审核', icon: 'i-heroicons-user-plus' }, { key: 'access-logs', label: '访问日志', icon: 'i-heroicons-eye' }, { key: 'site-visits', label: '站点访问', icon: 'i-heroicons-home' }, { key: 'login-audits', label: '登录审计', icon: 'i-heroicons-clipboard-document-check' }, ...(isPrimaryAdmin.value ? [{ key: 'authorization' as AdminSectionKey, label: '管理员授权', icon: 'i-heroicons-key' }] : []), ...(can('audit.view') ? [{ key: 'admin-audit' as AdminSectionKey, label: '管理员审计', icon: 'i-heroicons-clipboard-document-list' }] : []), { key: 'security', label: '安全防护', icon: 'i-heroicons-shield-exclamation' }] },
-  { key: 'storage-maintain', label: '存储与维护', icon: 'i-heroicons-circle-stack', items: [{ key: 'attachments', label: '附件管理', icon: 'i-heroicons-paper-clip' }, { key: 'storage', label: '附件存储与处理', icon: 'i-heroicons-photo' }, { key: 'cloud-backup', label: '云备份连接配置', icon: 'i-heroicons-cloud' }, { key: 'backup-data', label: '数据备份', icon: 'i-heroicons-circle-stack' }, { key: 'backup-attachments', label: '附件备份', icon: 'i-heroicons-archive-box' }, { key: 'backup-server-config', label: '服务端配置备份', icon: 'i-heroicons-cog-6-tooth' }, { key: 'version', label: '版本与更新', icon: 'i-heroicons-arrow-path' }] },
+  { key: 'storage-maintain', label: '存储与维护', icon: 'i-heroicons-circle-stack', items: [{ key: 'attachments', label: '附件管理', icon: 'i-heroicons-paper-clip' }, { key: 'storage', label: '附件存储', icon: 'i-heroicons-photo' }, { key: 'backups', label: '备份与恢复', icon: 'i-heroicons-archive-box' }, { key: 'version', label: '版本与更新', icon: 'i-heroicons-arrow-path' }] },
   ]
   return groups.map(group => ({ ...group, items: group.items.filter(item => canSection(item.key)) })).filter(group => group.items.length > 0)
 })
@@ -197,6 +202,10 @@ const normalizeHash = (raw: string): AdminSectionKey | null => {
   if (key === 'panel-theme' || key === 'system') key = 'dashboard'
   if (['site-default-theme', 'site-pwa', 'site-github-card'].includes(key)) key = 'site'
   if (key === 'attachment-storage') key = 'storage'
+  if (Object.hasOwn(backupSectionAliases, key)) {
+    backupTab.value = backupSectionAliases[key as keyof typeof backupSectionAliases]
+    key = 'backups'
+  } else if (key === 'backups') backupTab.value = ''
   return accessibleSectionKeys.value.includes(key as AdminSectionKey) ? key as AdminSectionKey : null
 }
 const setActive = async (section: AdminSectionKey, updateHash = true) => {

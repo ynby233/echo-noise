@@ -22,23 +22,23 @@ for (const section of sections) {
     assert.equal(map[section], undefined, `primary-admin-only section ${section} must not be capability-mapped`)
     continue
   }
-  assert.equal(typeof map[section], 'string', `admin section ${section} must have an explicit capability mapping`)
+  assert.ok(typeof map[section] === 'string' || (section === 'backups' && Array.isArray(map[section]) && map[section].length > 0), `admin section ${section} must have an explicit capability mapping`)
 }
 for (const [section, capability] of Object.entries(map)) {
   assert.match(section, /^[a-z][a-z0-9-]*$/, `invalid admin section key ${section}`)
-  assert.match(capability, /^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$/, `invalid capability mapping for ${section}`)
+  for (const value of [capability].flat()) assert.match(value, /^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$/, `invalid capability mapping for ${section}`)
 }
 
 const declaredCapabilities = new Set(
   [...authorizationSource.matchAll(/Capability\w+\s+Capability\s*=\s*"([^"]+)"/g)].map((match) => match[1])
 )
 for (const [section, capability] of Object.entries(map)) {
-  assert.ok(declaredCapabilities.has(capability), `${section} maps to undeclared capability ${capability}`)
+  for (const value of [capability].flat()) assert.ok(declaredCapabilities.has(value), `${section} maps to undeclared capability ${value}`)
 }
 
 assert.match(panel, /import adminSectionCapabilities from '~\/config\/admin-section-capabilities\.json'/)
-assert.match(panel, /const sectionCapabilities: Partial<Record<AdminSectionKey, string>> = adminSectionCapabilities/)
-assert.doesNotMatch(panel, /const sectionCapabilities: Partial<Record<AdminSectionKey, string>> = \{[\s\S]*?\}/)
+assert.match(panel, /const sectionCapabilities: Partial<Record<AdminSectionKey, string \| string\[\]>> = adminSectionCapabilities/)
+assert.doesNotMatch(panel, /const sectionCapabilities: Partial<Record<AdminSectionKey, string \| string\[\]>> = \{[\s\S]*?\}/)
 assert.equal(map.authorization, 'authorization.manage')
 assert.equal(map['admin-audit'], 'audit.view')
 assert.equal(map['site-music'], 'music.view')
@@ -58,6 +58,7 @@ assert.equal(map['backup-data'], 'backup.data.view')
 assert.equal(map['backup-attachments'], 'backup.attachments.view')
 assert.equal(map['backup-server-config'], 'backup.server_config.view')
 assert.equal(map.db, undefined, 'legacy database capabilities must not expose a navigation entry')
+assert.deepEqual(map.backups, ['backup.data.view', 'backup.attachments.view', 'backup.server_config.view'])
 
 const canSectionBody = panel.match(/const canSection = \(section: AdminSectionKey\) => \{([\s\S]*?)\n\}/)?.[1]
 assert.ok(canSectionBody, 'navigation access predicate must be available for behavioral coverage')
@@ -77,3 +78,14 @@ for (const section of ['backup-data', 'backup-attachments']) {
     assert.equal(allowed(section, [map[section].replace(/view$/, action)]), false, `${action} cannot bypass the ${section} view prerequisite`)
   }
 }
+
+assert.equal(allowed('backups'), false, 'backup workspace requires a view grant')
+assert.equal(allowed('backups', ['storage.view']), false, 'storage access does not grant backup access')
+assert.equal(allowed('backups', [], true), true, 'primary administrator can enter without explicit grants')
+for (const capability of map.backups) {
+  assert.equal(allowed('backups', [capability]), true, 'any backup view grant opens the workspace')
+  assert.equal(allowed('backups', [capability], false, false), false, 'backup grants require an admin context')
+  assert.equal(allowed('backups', [capability.replace(/view$/, 'create')]), false, 'action grants do not imply view')
+}
+assert.equal(evaluateSection('backups', { value: true }, { value: false }, {}, () => true), false, 'missing root mapping must fail closed')
+assert.equal(evaluateSection('backups', { value: true }, { value: false }, { backups: [] }, () => true), false, 'empty root mapping must fail closed')
