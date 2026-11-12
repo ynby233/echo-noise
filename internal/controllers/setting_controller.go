@@ -19,6 +19,10 @@ import (
 )
 
 func hasAdminOnlySettingFields(setting dto.SettingDto) bool {
+	return setting.HasStorageSettings() || hasSiteSettingFields(setting)
+}
+
+func hasSiteSettingFields(setting dto.SettingDto) bool {
 	return setting.AllowRegistration != nil ||
 		setting.AutoApproveRegistration != nil ||
 		setting.SmtpEnabled != nil ||
@@ -32,10 +36,6 @@ func hasAdminOnlySettingFields(setting dto.SettingDto) bool {
 		setting.SmtpFrom != nil ||
 		setting.SmtpEncryption != nil ||
 		setting.SmtpTLS != nil ||
-		setting.StorageEnabled != nil ||
-		setting.StorageConfig != nil ||
-		setting.AttachmentStorageEnabled != nil ||
-		setting.AttachmentStorageConfig != nil ||
 		setting.RecycleBinRetentionDays != nil ||
 		setting.CommentRecycleBinRetentionDays != nil ||
 		setting.NotifyNoteDeletionByPrimary != nil ||
@@ -193,6 +193,24 @@ func UpdateSetting(c *gin.Context) {
 		return
 	}
 
+	if setting.HasStorageSettings() {
+		if setting.HasOwnerOnlyStorageSettings() && user.ID != models.PrimaryAdminUserID {
+			c.JSON(http.StatusForbidden, dto.Fail[string]("仅站长可管理云备份和附件存储连接配置"))
+			return
+		}
+		db, _ := database.GetDB()
+		if db == nil || !authorization.New(db).Authorize(user.ID, authorization.CapabilityStorageManage, nil).Allowed {
+			c.JSON(http.StatusForbidden, dto.Fail[string]("需要存储管理权限"))
+			return
+		}
+		if value, exists := setting.AttachmentStorageConfig["enableCompression"]; exists {
+			if _, ok := value.(bool); !ok {
+				c.JSON(http.StatusBadRequest, dto.Fail[string](models.InvalidRequestBodyMessage))
+				return
+			}
+		}
+	}
+
 	frontendSettings := setting.FrontendSettings
 	if services.HasMusicSettings(frontendSettings) {
 		db, _ := database.GetDB()
@@ -224,6 +242,16 @@ func UpdateSetting(c *gin.Context) {
 		}
 		c.JSON(http.StatusOK, dto.OK[any](nil, models.UpdateSettingSuccessMessage))
 		return
+	}
+
+	// The shared endpoint also accepts compression-only requests. Mixed payloads
+	// must satisfy the site-settings gate before any personal or site writes.
+	if hasSiteSettingFields(setting) || len(frontendSettings) > 0 || !setting.HasStorageSettings() {
+		db, _ := database.GetDB()
+		if db == nil || !authorization.New(db).Authorize(user.ID, authorization.CapabilitySiteSettingsManage, nil).Allowed {
+			c.JSON(http.StatusForbidden, dto.Fail[string]("需要站点设置管理权限"))
+			return
+		}
 	}
 
 	db, _ := database.GetDB()
@@ -421,12 +449,21 @@ func UpdateSetting(c *gin.Context) {
 		}
 	}
 
-	if err := db.Table("settings").Save(&oldSetting).Error; err != nil {
-		c.JSON(http.StatusOK, dto.Fail[string]("保存配置失败"))
-		return
+	registrationUpdates := map[string]interface{}{}
+	if setting.AllowRegistration != nil {
+		registrationUpdates["allow_registration"] = *setting.AllowRegistration
+	}
+	if setting.AutoApproveRegistration != nil {
+		registrationUpdates["auto_approve_registration"] = *setting.AutoApproveRegistration
+	}
+	if len(registrationUpdates) > 0 {
+		if err := db.Model(&oldSetting).Updates(registrationUpdates).Error; err != nil {
+			c.JSON(http.StatusOK, dto.Fail[string]("保存配置失败"))
+			return
+		}
 	}
 
-	if setting.AttachmentStorageEnabled != nil || setting.AttachmentStorageConfig != nil {
+	if setting.HasAttachmentStorageConnectionSettings() {
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Hour)
 			defer cancel()

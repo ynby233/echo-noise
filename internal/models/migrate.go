@@ -36,6 +36,9 @@ func MigrateDB(db *gorm.DB) error {
 	if err := db.AutoMigrate(&AICredential{}); err != nil {
 		return fmt.Errorf("migrate AI credentials: %w", err)
 	}
+	if err := db.AutoMigrate(&ManagedBackupPlan{}, &ManagedBackupRecord{}); err != nil {
+		return fmt.Errorf("migrate managed backups: %w", err)
+	}
 	if dbType == "sqlite" {
 		if err := enforceSQLiteRegistrationCandidateNotNull(db); err != nil {
 			return err
@@ -49,6 +52,17 @@ func MigrateDB(db *gorm.DB) error {
 	}
 	if err := db.Where("capability = ?", "version.update").Delete(&AdminCapabilityGrant{}).Error; err != nil {
 		return fmt.Errorf("remove retired delegated update grants: %w", err)
+	}
+	// Retired broad database grants never imply permission to export a backup.
+	// Remove dirty owner-only grants as well, without rewriting audit history.
+	if err := db.Where("capability IN ?", []string{
+		"database.view", "database.backup", "database.restore",
+		"backup.data.download", "backup.data.restore",
+		"backup.attachments.download", "backup.attachments.restore",
+		"backup.server_config.view", "backup.server_config.history", "backup.server_config.create",
+		"backup.server_config.plan", "backup.server_config.download", "backup.server_config.restore",
+	}).Delete(&AdminCapabilityGrant{}).Error; err != nil {
+		return fmt.Errorf("remove retired database and owner-only backup grants: %w", err)
 	}
 	if err := db.Where("capability = ? AND user_id IN (?)", "comments.delete", db.Model(&AdminCapabilityGrant{}).Select("user_id").Where("capability = ?", "comments.trash")).
 		Delete(&AdminCapabilityGrant{}).Error; err != nil {

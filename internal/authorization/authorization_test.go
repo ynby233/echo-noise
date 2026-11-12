@@ -235,8 +235,6 @@ func TestEveryChildCapabilityHasTheExpectedParent(t *testing.T) {
 		CapabilityAttachmentsDeleteReference: CapabilityAttachmentsView,
 		CapabilityAttachmentsPurgeBlob:       CapabilityAttachmentsView,
 		CapabilityStorageManage:              CapabilityStorageView,
-		CapabilityDatabaseBackup:             CapabilityDatabaseView,
-		CapabilityDatabaseRestore:            CapabilityDatabaseView,
 		CapabilityVersionUpdate:              CapabilityVersionView,
 		CapabilitySecurityManage:             CapabilitySecurityView,
 		CapabilitySecurityClearLogs:          CapabilitySecurityView,

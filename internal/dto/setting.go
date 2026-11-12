@@ -26,3 +26,27 @@ type SettingDto struct {
 	NotifyCommentDeletionByPrimary *bool                  `json:"notifyCommentDeletionByPrimary"`
 	VoceChatConfig                 map[string]interface{} `json:"voceChatConfig"`
 }
+
+func (setting SettingDto) HasStorageSettings() bool {
+	return setting.StorageEnabled != nil || setting.StorageConfig != nil ||
+		setting.AttachmentStorageEnabled != nil || setting.AttachmentStorageConfig != nil
+}
+
+// HasAttachmentStorageConnectionSettings rejects every field outside the delegated
+// compression allowlist, including credential-clear flags and future fields.
+func (setting SettingDto) HasAttachmentStorageConnectionSettings() bool {
+	if setting.AttachmentStorageEnabled != nil {
+		return true
+	}
+	for field := range setting.AttachmentStorageConfig {
+		if field != "enableCompression" {
+			return true
+		}
+	}
+	return false
+}
+
+func (setting SettingDto) HasOwnerOnlyStorageSettings() bool {
+	return setting.StorageEnabled != nil || setting.StorageConfig != nil ||
+		setting.HasAttachmentStorageConnectionSettings()
+}

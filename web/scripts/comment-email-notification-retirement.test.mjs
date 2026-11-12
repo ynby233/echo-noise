@@ -53,8 +53,8 @@ assert.match(archiveDelivery, /SendEmailHTMLWithFrom/, 'archive must retain the 
 assert.match(archiveFrontend, /commentEmailSiteURL/, 'archive must retain the original frontend configuration component')
 
 const readme = await read('README.md')
-assert.match(readme, /互动邮件通知.*暂时封存/, 'README must disclose the temporary retirement')
-assert.match(readme, /站内通知.*继续可用/, 'README must distinguish in-app notifications from archived email delivery')
+assert.match(readme, /互动邮件通知.*不属于现行可用功能[\s\S]*封存材料/, 'README must disclose the retired email functionality and archived source')
+assert.match(readme, /互动与通知[^\n]*站内通知/, 'README must distinguish supported in-app notifications from archived email delivery')
 
 const generatedFiles = []
 const walkGenerated = async (directory) => {

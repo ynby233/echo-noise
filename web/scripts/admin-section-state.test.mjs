@@ -242,30 +242,25 @@ test('registration explicitly clears stored admin email and password for token-o
   panel.dispose()
 })
 
-test('storage initialization and poll response cannot restart a hidden or disposed panel', async () => {
-  let request = deferred()
-  const panel = component('StorageSection', 'load, refreshLastSyncOnly, lastCloudSyncText, storageEnabled', { io: { fetch: () => request.promise } })
+test('cloud connection loading never polls, recovers, or applies a response after disposal', async () => {
+  const request = deferred()
+  const calls = []
+  const panel = component('CloudBackupSection', 'load, storageEnabled', { io: { fetch: url => { calls.push(url); return request.promise } } })
   const loading = panel.load()
-  await panel.deactivate()
+  panel.dispose()
   request.resolve({ ok: true, json: async () => ({ code: 1, data: { storageEnabled: true, storageConfig: { autoSyncEnabled: true, syncRole: 'primary' } } }) })
   await loading
   await flush()
+  assert.equal(panel.storageEnabled.value, false)
   assert.equal(panel.timers.size, 0)
-  await panel.activate()
-  assert.equal(panel.timers.size, 1)
-  request = deferred()
-  const poll = panel.refreshLastSyncOnly()
-  panel.dispose()
-  request.resolve({ ok: true, json: async () => ({ code: 1, data: { storageConfig: { lastSyncTime: '2026-09-09T01:00:00Z' } } }) })
-  await poll
-  assert.equal(panel.lastCloudSyncText.value, '')
-  assert.equal(panel.timers.size, 0)
+  assert.equal(calls.length, 1)
+  assert.match(calls[0], /\/frontend\/config\?/)
 })
 
-test('storage save rereads configured flags and clears submitted secrets without losing the other draft', async () => {
-  let stored = { storageConfig: {}, attachmentStorageConfig: {} }
+test('attachment and cloud saves clear submitted secrets without crossing module payloads', async () => {
+  const stored = { storageConfig: {}, attachmentStorageConfig: {} }
   const writes = []
-  const panel = component('StorageSection', 'load, saveAttachmentStorageConfig, saveStorageConfig, storageConfig, attachmentStorageConfig', { io: {
+  const io = {
     fetch: async (_url, options) => {
       if (options.method === 'PUT') {
         const body = JSON.parse(options.body)
@@ -275,23 +270,62 @@ test('storage save rereads configured flags and clears submitted secrets without
       }
       return { ok: true, json: async () => ({ code: 1, data: stored }) }
     },
-  } })
-  await panel.load()
-  panel.storageConfig.bucket = 'unsaved database bucket'
-  panel.attachmentStorageConfig.accessKey = 'synthetic-access'
-  panel.attachmentStorageConfig.secretKey = 'synthetic-secret'
-  await panel.saveAttachmentStorageConfig()
+  }
+  const attachment = component('StorageSection', 'load, saveAttachmentStorageConfig, attachmentStorageConfig', { io })
+  const cloud = component('CloudBackupSection', 'load, saveStorageConfig, storageConfig', { io })
+  await attachment.load()
+  await cloud.load()
+  cloud.storageConfig.bucket = 'unsaved cloud bucket'
+  attachment.attachmentStorageConfig.accessKey = 'synthetic-access'
+  attachment.attachmentStorageConfig.secretKey = 'synthetic-secret'
+  await attachment.saveAttachmentStorageConfig()
   assert.equal(writes.length, 1)
+  assert.equal(writes[0].storageConfig, undefined)
   assert.equal(writes[0].attachmentStorageConfig.secretKey, 'synthetic-secret')
-  assert.equal(panel.attachmentStorageConfig.accessKeyConfigured, true)
-  assert.equal(panel.attachmentStorageConfig.secretKeyConfigured, true)
-  assert.equal(panel.attachmentStorageConfig.secretKey, '')
-  assert.equal(panel.storageConfig.bucket, 'unsaved database bucket')
-  panel.storageConfig.secretKey = 'synthetic-secret'
-  await panel.saveStorageConfig()
-  assert.equal(panel.storageConfig.secretKeyConfigured, true)
-  assert.equal(panel.storageConfig.secretKey, '')
-  panel.dispose()
+  assert.equal(attachment.attachmentStorageConfig.accessKeyConfigured, true)
+  assert.equal(attachment.attachmentStorageConfig.secretKeyConfigured, true)
+  assert.equal(attachment.attachmentStorageConfig.secretKey, '')
+  assert.equal(cloud.storageConfig.bucket, 'unsaved cloud bucket')
+  cloud.storageConfig.secretKey = 'synthetic-secret'
+  await cloud.saveStorageConfig()
+  assert.equal(writes[1].attachmentStorageConfig, undefined)
+  assert.equal(writes[1].storageConfig.bucket, 'unsaved cloud bucket')
+  assert.equal(writes[1].storageConfig.autoSyncEnabled, false, 'saving a connection must not enable legacy automatic recovery')
+  assert.equal(cloud.storageConfig.secretKeyConfigured, true)
+  assert.equal(cloud.storageConfig.secretKey, '')
+  attachment.dispose()
+  cloud.dispose()
+})
+
+test('delegated storage managers submit processing only and cannot load or save cloud credentials', async () => {
+  const writes = [], reads = []
+  const io = {
+    useAdminCapabilities: () => ({ isPrimaryAdmin: vue.ref(false), can: capability => ['storage.view', 'storage.manage'].includes(capability) }),
+    fetch: async (url, options) => {
+      reads.push(url)
+      if (options.method === 'PUT') writes.push(JSON.parse(options.body))
+      return { ok: true, json: async () => ({ code: 1, data: { attachmentStorageEnabled: true, attachmentStorageConfig: { provider: 's3', bucket: 'private', secretKey: 'must-not-display', secretKeyConfigured: true, ffmpegInstalled: true } } }) }
+    },
+  }
+  const attachment = component('StorageSection', 'load, saveAttachmentStorageConfig, attachmentStorageConfig', { io })
+  await attachment.load()
+  assert.equal(attachment.attachmentStorageConfig.bucket, '')
+  assert.equal(attachment.attachmentStorageConfig.secretKey, '')
+  assert.equal(attachment.attachmentStorageConfig.secretKeyConfigured, false)
+  attachment.attachmentStorageConfig.bucket = 'forged destination'
+  attachment.attachmentStorageConfig.secretKey = 'forged credential'
+  attachment.attachmentStorageConfig.enableCompression = true
+  await attachment.saveAttachmentStorageConfig()
+  assert.deepEqual(writes, [{ attachmentStorageConfig: { enableCompression: true } }])
+  const cloud = component('CloudBackupSection', 'load, saveStorageConfig', { io })
+  const before = reads.length
+  await cloud.mount()
+  await cloud.load()
+  await cloud.saveStorageConfig()
+  assert.equal(reads.length, before, 'delegated storage grants must not cause any cloud connection request')
+  assert.equal(cloud.timers.size, 0)
+  attachment.dispose()
+  cloud.dispose()
 })
 
 test('music custom CDN draft and preset selection survive eviction together and save through music API', async () => {

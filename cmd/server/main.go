@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -101,11 +102,24 @@ func main() {
 	}
 	logLifecycleStage("startup", "config_load", "completed", stageStarted)
 
+	backupservice.ConfigureAttachmentHooks(backupservice.AttachmentHooks{
+		Export: services.ExportAttachmentArchive,
+		PrepareRestore: func(ctx context.Context, stage, mode string) error {
+			err := services.PrepareAttachmentRestore(ctx, stage, mode)
+			if errors.Is(err, services.ErrAttachmentFallbackRequired) {
+				return &backupservice.FallbackRequiredError{Cause: err}
+			}
+			return err
+		},
+		PrepareDatabase:     services.PrepareAttachmentDatabase,
+		PrepareDataDatabase: services.PrepareDataAttachmentRestore,
+	})
+	restoreLayout := backupservice.DefaultLayout()
 	// A restore is staged by the HTTP endpoint and deliberately applied before
 	// InitDB. Live workers retain DB handles, so applying it in a request would
 	// leave the process split between old and new data.
 	var appliedRestore *backupservice.AppliedRestore
-	if pending, err := backupservice.ApplyPendingRestore(backupservice.DefaultLayout()); err != nil {
+	if pending, err := backupservice.ApplyPendingRestore(restoreLayout); err != nil {
 		if backupservice.RestoreFailureRecovered(err) {
 			log.Printf("%v；已保留原数据并继续启动", err)
 		} else {
@@ -113,6 +127,22 @@ func main() {
 		}
 	} else {
 		appliedRestore = pending
+	}
+	if appliedRestore != nil {
+		if err := appliedRestore.RestoreRuntimeEnvironment(restoreLayout); err != nil {
+			rollbackErr := appliedRestore.Rollback()
+			if rollbackErr == nil {
+				_ = appliedRestore.DiscardPending()
+			}
+			log.Fatalf("恢复运行环境配置失败: %v；回退结果: %v", err, rollbackErr)
+		}
+		if err := config.LoadConfig(); err != nil {
+			rollbackErr := appliedRestore.Rollback()
+			if rollbackErr == nil {
+				_ = appliedRestore.DiscardPending()
+			}
+			log.Fatalf("恢复配置解析失败: %v；回退结果: %v", err, rollbackErr)
+		}
 	}
 
 	stageStarted = time.Now()
@@ -122,7 +152,7 @@ func main() {
 	if err := database.InitDB(); err != nil {
 		if appliedRestore != nil {
 			if closeErr := database.CloseDB(); closeErr != nil {
-				log.Printf("恢复后初始化失败，关闭数据库连接失败: %v", closeErr)
+				log.Fatalf("恢复后初始化失败，无法关闭数据库，保留恢复现场: %v", closeErr)
 			}
 			if rollbackErr := appliedRestore.Rollback(); rollbackErr != nil {
 				log.Printf("恢复后初始化失败且回退失败: %v", rollbackErr)
@@ -138,6 +168,16 @@ func main() {
 	}
 	if appliedRestore != nil {
 		if err := appliedRestore.Commit(); err != nil {
+			if !appliedRestore.Committed() {
+				if closeErr := database.CloseDB(); closeErr != nil {
+					log.Fatalf("恢复提交失败且数据库无法关闭: %v", closeErr)
+				}
+				rollbackErr := appliedRestore.Rollback()
+				if rollbackErr == nil {
+					_ = appliedRestore.DiscardPending()
+				}
+				log.Fatalf("恢复提交失败: %v；回退结果: %v", err, rollbackErr)
+			}
 			log.Printf("恢复已生效，但清理旧数据副本失败: %v", err)
 		}
 		log.Printf("待恢复备份已在启动前完成应用")
@@ -165,6 +205,8 @@ func main() {
 	logLifecycleStage("startup", "workers_start", "begin", stageStarted)
 	workerCtx, cancelWorkers := context.WithCancel(context.Background())
 	defer cancelWorkers()
+	syncmanager.DefaultManager.Start(workerCtx)
+	defer syncmanager.DefaultManager.Stop()
 	musicService.Start(workerCtx)
 	services.StartAnnouncementPushDispatcher(workerCtx, database.DB)
 	services.StartWebPushDispatcher(workerCtx, database.DB)
@@ -301,6 +343,7 @@ func main() {
 	stageStarted = time.Now()
 	logLifecycleStage("shutdown", "workers_stop", "begin", stageStarted)
 	cancelWorkers()
+	syncmanager.DefaultManager.Stop()
 	logLifecycleStage("shutdown", "workers_stop", "completed", stageStarted)
 
 	// 设置关闭超时时间

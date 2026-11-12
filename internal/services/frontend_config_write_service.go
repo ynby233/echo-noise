@@ -8,14 +8,9 @@ import (
 	"github.com/rcy1314/echo-noise/internal/models"
 	"github.com/rcy1314/echo-noise/internal/music"
 	"github.com/rcy1314/echo-noise/internal/syncmanager"
-	"io"
-	"net/http"
 	"net/url"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
 )
 
 var genericMusicColumns = []string{
@@ -109,7 +104,7 @@ func UpdateFrontendSetting(userID uint, settingMap map[string]interface{}) error
 		}
 		config.RSSMemberIDs = string(memberIDsJSON)
 	}
-	if strings.TrimSpace(config.RSSMemberIDs) == "[]" {
+	if _, enabledSet := frontendSettings["rssEnabled"]; enabledSet && strings.TrimSpace(config.RSSMemberIDs) == "[]" {
 		config.RSSEnabled = false
 	}
 	// 页面文案与关于页内容
@@ -154,7 +149,11 @@ func UpdateFrontendSetting(userID uint, settingMap map[string]interface{}) error
 	if n, ok := parsePositiveIntSetting(frontendSettings["loginExpireHours"]); ok {
 		loginExpireHours = n
 	}
-	config.LoginExpireDays, config.LoginExpireHours = normalizeLoginExpireConfig(loginExpireDays, loginExpireHours)
+	if _, daysSet := frontendSettings["loginExpireDays"]; daysSet {
+		config.LoginExpireDays, config.LoginExpireHours = normalizeLoginExpireConfig(loginExpireDays, loginExpireHours)
+	} else if _, hoursSet := frontendSettings["loginExpireHours"]; hoursSet {
+		config.LoginExpireDays, config.LoginExpireHours = normalizeLoginExpireConfig(loginExpireDays, loginExpireHours)
+	}
 	delegatedAdminLoginExpireDays := config.DelegatedAdminLoginExpireDays
 	delegatedAdminLoginExpireHours := config.DelegatedAdminLoginExpireHours
 	if n, ok := parsePositiveIntSetting(frontendSettings["delegatedAdminLoginExpireDays"]); ok {
@@ -163,7 +162,11 @@ func UpdateFrontendSetting(userID uint, settingMap map[string]interface{}) error
 	if n, ok := parsePositiveIntSetting(frontendSettings["delegatedAdminLoginExpireHours"]); ok {
 		delegatedAdminLoginExpireHours = n
 	}
-	config.DelegatedAdminLoginExpireDays, config.DelegatedAdminLoginExpireHours = normalizeLoginExpireConfig(delegatedAdminLoginExpireDays, delegatedAdminLoginExpireHours)
+	if _, daysSet := frontendSettings["delegatedAdminLoginExpireDays"]; daysSet {
+		config.DelegatedAdminLoginExpireDays, config.DelegatedAdminLoginExpireHours = normalizeLoginExpireConfig(delegatedAdminLoginExpireDays, delegatedAdminLoginExpireHours)
+	} else if _, hoursSet := frontendSettings["delegatedAdminLoginExpireHours"]; hoursSet {
+		config.DelegatedAdminLoginExpireDays, config.DelegatedAdminLoginExpireHours = normalizeLoginExpireConfig(delegatedAdminLoginExpireDays, delegatedAdminLoginExpireHours)
+	}
 	if vb, ok := frontendSettings["calendarEnabled"].(bool); ok {
 		config.CalendarEnabled = vb
 	} else if vs, ok := frontendSettings["calendarEnabled"].(string); ok {
@@ -196,7 +199,7 @@ func UpdateFrontendSetting(userID uint, settingMap map[string]interface{}) error
 			config.LifeExpectancyYears = n
 		}
 	}
-	if config.LifeExpectancyYears < 0 {
+	if _, exists := frontendSettings["lifeExpectancyYears"]; exists && config.LifeExpectancyYears < 0 {
 		config.LifeExpectancyYears = 0
 	}
 	for _, item := range []struct {
@@ -316,7 +319,7 @@ func UpdateFrontendSetting(userID uint, settingMap map[string]interface{}) error
 			config.FeedLimit = n
 		}
 	}
-	if config.FeedLimit <= 0 {
+	if _, exists := frontendSettings["feedLimit"]; exists && config.FeedLimit <= 0 {
 		config.FeedLimit = 0
 	}
 	if vi, ok := frontendSettings["feedRefreshSeconds"].(float64); ok {
@@ -328,7 +331,7 @@ func UpdateFrontendSetting(userID uint, settingMap map[string]interface{}) error
 			config.FeedRefreshSeconds = n
 		}
 	}
-	if config.FeedRefreshSeconds <= 0 {
+	if _, exists := frontendSettings["feedRefreshSeconds"]; exists && config.FeedRefreshSeconds <= 0 {
 		config.FeedRefreshSeconds = 7200
 	}
 	if arr, ok := frontendSettings["feedSources"].([]interface{}); ok {
@@ -532,31 +535,9 @@ func UpdateFrontendSetting(userID uint, settingMap map[string]interface{}) error
 				config.StorageSyncIntervalMinute = n
 			}
 		}
-		// 若未显式传入 autoSyncEnabled，则在云存储配置完整且启用时自动开启
-		if _, exists := sc["autoSyncEnabled"]; !exists {
-			if config.StorageEnabled &&
-				config.StorageProvider != "" &&
-				config.StorageEndpoint != "" &&
-				config.StorageBucket != "" &&
-				config.StorageAccessKey != "" &&
-				config.StorageSecretKey != "" {
-				config.StorageAutoSyncEnabled = true
-			}
-		}
-
-		// 若用户在后台明确保存了云存储参数（配置完整），则认为已人工确认同步
-		// 这样“首次确认”仅针对旧数据库中已存在云端参数但未确认的情况。
-		if config.StorageEnabled &&
-			strings.TrimSpace(config.StorageProvider) != "" &&
-			strings.TrimSpace(config.StorageEndpoint) != "" &&
-			strings.TrimSpace(config.StorageBucket) != "" &&
-			strings.TrimSpace(config.StorageAccessKey) != "" &&
-			strings.TrimSpace(config.StorageSecretKey) != "" {
-			// no-op: confirmation must be explicit via /api/backup/storage/sync-confirm
-		}
 	}
 
-	if config.StorageProvider == "r2" {
+	if sc, ok := settingMap["storageConfig"].(map[string]interface{}); ok && sc["provider"] == "r2" {
 		config.StorageUsePathStyle = true
 	}
 
@@ -600,7 +581,7 @@ func UpdateFrontendSetting(userID uint, settingMap map[string]interface{}) error
 		}
 	}
 
-	if config.AttachmentStorageProvider == "r2" {
+	if sc, ok := settingMap["attachmentStorageConfig"].(map[string]interface{}); ok && sc["provider"] == "r2" {
 		config.AttachmentStorageUsePathStyle = true
 	}
 
@@ -642,14 +623,6 @@ func UpdateFrontendSetting(userID uint, settingMap map[string]interface{}) error
 		config.SmtpTLS = v
 	}
 
-	// 自动启用：当必填项齐全时，强制启用
-	if !config.SmtpEnabled {
-		if config.SmtpHost != "" && config.SmtpPort > 0 && config.SmtpUser != "" && config.SmtpPass != "" &&
-			(config.SmtpEncryption == "ssl" || config.SmtpEncryption == "tls") {
-			config.SmtpEnabled = true
-		}
-	}
-
 	// 基础校验：开启时必填项必须完整
 	if config.SmtpEnabled {
 		if config.SmtpHost == "" || config.SmtpPort <= 0 || config.SmtpUser == "" || config.SmtpPass == "" ||
@@ -665,38 +638,6 @@ func UpdateFrontendSetting(userID uint, settingMap map[string]interface{}) error
 	}
 
 	syncmanager.Configure(config)
-
-	if config.StorageEnabled {
-		dbType := os.Getenv("DB_TYPE")
-		if dbType == "" {
-			dbType = "sqlite"
-		}
-		if dbType == "sqlite" {
-			base := strings.TrimSpace(config.StoragePublicBaseURL)
-			if base != "" {
-				url := strings.TrimRight(base, "/") + "/database.db"
-				client := &http.Client{Timeout: 60 * time.Second}
-				resp, err := client.Get(url)
-				if err == nil && resp.StatusCode >= 200 && resp.StatusCode < 300 {
-					defer resp.Body.Close()
-					tempFile := filepath.Join(os.TempDir(), "cloud_database.db")
-					out, err := os.Create(tempFile)
-					if err == nil {
-						_, _ = io.Copy(out, resp.Body)
-						out.Close()
-						dbPath := os.Getenv("DB_PATH")
-						if dbPath == "" {
-							dbPath = "/app/data/noise.db"
-						}
-						_ = os.MkdirAll(filepath.Dir(dbPath), 0755)
-						_ = copyFile(tempFile, dbPath)
-						_ = os.Remove(tempFile)
-						_ = database.ReconnectDB()
-					}
-				}
-			}
-		}
-	}
 
 	// 提交事务
 	if err := tx.Commit().Error; err != nil {

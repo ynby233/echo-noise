@@ -8,15 +8,19 @@ const registry = await read('components/admin/sections/registry.ts')
 
 for (const [key, file] of [
   ['storage', 'StorageSection.vue'],
-  ['db', 'DatabaseSection.vue'],
+  ['cloud-backup', 'CloudBackupSection.vue'],
+  ['backup-data', 'DataBackupSection.vue'],
+  ['backup-attachments', 'AttachmentBackupSection.vue'],
+  ['backup-server-config', 'ServerConfigBackupSection.vue'],
 ]) {
   await access(new URL(`../components/admin/sections/${file}`, import.meta.url))
   assert.match(
     registry,
-    new RegExp(`${key}:\\s*\\(\\)\\s*=>\\s*import\\('\\./${file.replace('.', '\\.')}'\\)`),
+    new RegExp(`(?:'${key}'|${key}):\\s*\\(\\)\\s*=>\\s*import\\('\\./${file.replace('.', '\\.')}'\\)`),
     `${key} must be exposed through its own dynamic import`,
   )
 }
+assert.doesNotMatch(registry, /\bdb:\s*\(\)\s*=>|import\('\.\/DatabaseSection\.vue'\)/, 'legacy database entry must not be navigable')
 
 assert.match(panel, /adminSectionLoaders\[activeSection\.value\]/, 'the selected section must still resolve through a dynamic loader')
 assert.match(panel, /accessibleSectionKeys\.value\.filter/, 'entry prewarming must use permission-filtered section keys')

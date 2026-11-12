@@ -21,7 +21,10 @@
   "security": "security.view",
   "attachments": "attachments.view",
   "storage": "storage.view",
-  "db": "database.view",
+  "backup-data": "backup.data.view",
+  "backup-attachments": "backup.attachments.view",
+  "backup-server-config": "backup.server_config.view",
+  "cloud-backup": "storage.view",
   "version": "version.view",
   "authorization": "authorization.manage",
   "admin-audit": "audit.view"

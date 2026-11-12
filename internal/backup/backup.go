@@ -6,6 +6,7 @@ package backup
 
 import (
 	"archive/zip"
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -19,6 +20,7 @@ import (
 	"github.com/rcy1314/echo-noise/config"
 	attachmentregistry "github.com/rcy1314/echo-noise/internal/attachments"
 	"github.com/rcy1314/echo-noise/internal/database"
+	"github.com/rcy1314/echo-noise/internal/vocechat"
 	"gorm.io/gorm"
 )
 
@@ -55,7 +57,10 @@ func RestartWarning(err error) string {
 
 // StageResult describes whether a staged archive can perform a complete data
 // migration. Old database-only archives remain usable but require a warning.
-type StageResult struct{ Warning string }
+type StageResult struct {
+	Warning    string                 `json:"warning,omitempty"`
+	Inspection TypedArchiveInspection `json:"inspection"`
+}
 
 // Root is one media tree in an archive. A missing root is valid for an empty
 // installation; an existing root that cannot be read makes the backup fail.
@@ -66,8 +71,12 @@ type Root struct {
 
 // Layout makes backup locations explicit and is injectable by tests.
 type Layout struct {
-	DatabasePath string
-	Roots        []Root
+	DatabasePath           string
+	Roots                  []Root
+	PlainPasswordStorePath string
+	ConfigDir              string
+	AttachmentHooks        *AttachmentHooks
+	pendingKind            ArchiveKind
 }
 
 // DefaultLayout preserves the established ZIP root names while including the
@@ -78,7 +87,9 @@ func DefaultLayout() Layout {
 		imagePath = filepath.Join("data", "images")
 	}
 	return Layout{
-		DatabasePath: database.SQLitePath(),
+		DatabasePath:           database.SQLitePath(),
+		PlainPasswordStorePath: vocechat.DefaultPlainPasswordStorePath(),
+		AttachmentHooks:        defaultAttachmentHooks(),
 		Roots: []Root{
 			{ArchiveName: "attachment-blobs", Path: attachmentregistry.DefaultLocalRoot()},
 			{ArchiveName: "images", Path: imagePath},
@@ -240,42 +251,33 @@ func InspectArchive(path string) error {
 }
 
 func inspectArchive(path string) (ArchiveInspection, error) {
-	reader, err := zip.OpenReader(path)
+	inspection, err := InspectTypedArchive(path)
 	if err != nil {
-		return ArchiveInspection{}, fmt.Errorf("打开备份文件失败: %w", err)
+		return ArchiveInspection{}, err
 	}
-	defer reader.Close()
-	inspection := ArchiveInspection{}
-	foundDatabase := false
-	seen := map[string]struct{}{}
-	for _, file := range reader.File {
-		name, err := safeArchiveName(file.Name)
-		if err != nil {
-			return ArchiveInspection{}, err
-		}
-		if _, duplicate := seen[name]; duplicate && !file.FileInfo().IsDir() {
-			return ArchiveInspection{}, fmt.Errorf("备份包含重复文件: %s", name)
-		}
-		seen[name] = struct{}{}
-		if name == "database.db" && !file.FileInfo().IsDir() {
-			foundDatabase = true
-		}
-		if name == "attachment-blobs" || strings.HasPrefix(name, "attachment-blobs/") || name == "attachments" || strings.HasPrefix(name, "attachments/") {
-			inspection.HasAttachmentData = true
-		}
-	}
-	if !foundDatabase {
-		return ArchiveInspection{}, errors.New("备份不包含 database.db")
-	}
-	return inspection, nil
+	return ArchiveInspection{HasAttachmentData: hasComponent(inspection, "attachment-blobs") || hasComponent(inspection, "attachments")}, nil
 }
 
 func safeArchiveName(name string) (string, error) {
-	cleaned := filepath.ToSlash(filepath.Clean(name))
-	if cleaned == "." || strings.HasPrefix(cleaned, "../") || strings.HasPrefix(cleaned, "/") || strings.Contains(cleaned, ":") {
+	if name == "" || strings.ContainsAny(name, "\\:\x00<>\"|?*") || strings.HasPrefix(name, "/") {
 		return "", fmt.Errorf("备份包含非法路径: %s", name)
 	}
-	return cleaned, nil
+	trimmed := strings.TrimSuffix(name, "/")
+	for _, part := range strings.Split(trimmed, "/") {
+		for _, r := range part {
+			if r < 32 || r == 127 {
+				return "", fmt.Errorf("备份包含控制字符路径")
+			}
+		}
+		if part == "" || part == "." || part == ".." || strings.HasSuffix(part, ".") || strings.HasSuffix(part, " ") {
+			return "", fmt.Errorf("备份包含非法路径: %s", name)
+		}
+		base := strings.ToUpper(strings.Split(part, ".")[0])
+		if base == "CON" || base == "PRN" || base == "AUX" || base == "NUL" || len(base) == 4 && (strings.HasPrefix(base, "COM") || strings.HasPrefix(base, "LPT")) && base[3] >= '1' && base[3] <= '9' {
+			return "", fmt.Errorf("备份包含保留路径: %s", name)
+		}
+	}
+	return trimmed, nil
 }
 
 // StageRestore validates and publishes a ZIP beside the database atomically.
@@ -286,37 +288,7 @@ func StageRestore(source string, layout Layout) error {
 }
 
 func StageRestoreWithResult(source string, layout Layout) (StageResult, error) {
-	restoreMu.Lock()
-	defer restoreMu.Unlock()
-	if updateReservation != "" {
-		return StageResult{}, errors.New("更新停机已准备，不能同时恢复备份")
-	}
-	inspection, err := inspectArchive(source)
-	if err != nil {
-		return StageResult{}, err
-	}
-	if err := os.MkdirAll(filepath.Dir(layout.DatabasePath), 0755); err != nil {
-		return StageResult{}, fmt.Errorf("创建恢复目录失败: %w", err)
-	}
-	stage, err := os.MkdirTemp(filepath.Dir(layout.DatabasePath), ".echo-noise-restore-check-*")
-	if err != nil {
-		return StageResult{}, err
-	}
-	defer os.RemoveAll(stage)
-	if err := extractArchive(source, stage); err != nil {
-		return StageResult{}, err
-	}
-	if err := validateSQLite(filepath.Join(stage, "database.db")); err != nil {
-		return StageResult{}, fmt.Errorf("备份数据库无效: %w", err)
-	}
-	if err := publishPendingRestore(source, layout); err != nil {
-		return StageResult{}, err
-	}
-	result := StageResult{}
-	if !inspection.HasAttachmentData {
-		result.Warning = incompleteMigrationWarning
-	}
-	return result, nil
+	return StageTypedRestore(context.Background(), source, layout, "original")
 }
 
 // ReserveUpdate uses the restore operation's existing lock. Once prepared,
@@ -346,19 +318,30 @@ func ReserveUpdate(task string, layout Layout, cancel bool) error {
 }
 
 func PendingRestorePath(layout Layout) string {
-	return filepath.Join(filepath.Dir(layout.DatabasePath), pendingRestoreName)
+	name := pendingRestoreName
+	if layout.pendingKind == KindAttachments || layout.pendingKind == KindServerConfig {
+		name = ".echo-noise-restore-" + string(layout.pendingKind) + "-pending.zip"
+	}
+	return filepath.Join(filepath.Dir(layout.DatabasePath), name)
 }
 
 func HasPendingRestore(layout Layout) bool {
-	for _, path := range []string{PendingRestorePath(layout), previousPendingRestorePath(layout)} {
-		if _, err := os.Stat(path); err == nil {
-			return true
+	for _, kind := range []ArchiveKind{KindData, KindAttachments, KindServerConfig} {
+		selected := layout
+		selected.pendingKind = kind
+		for _, p := range []string{PendingRestorePath(selected), previousPendingRestorePath(selected)} {
+			if _, err := os.Lstat(p); err == nil || !errors.Is(err, os.ErrNotExist) {
+				return true
+			}
 		}
 	}
 	return false
 }
 
 func previousPendingRestorePath(layout Layout) string {
+	if layout.pendingKind == KindAttachments || layout.pendingKind == KindServerConfig {
+		return strings.TrimSuffix(PendingRestorePath(layout), "-pending.zip") + "-previous.zip"
+	}
 	return filepath.Join(filepath.Dir(layout.DatabasePath), previousPendingRestoreName)
 }
 
@@ -429,6 +412,9 @@ type AppliedRestore struct {
 	targets     []string
 	directories []*directorySwap
 	pending     string
+	groups      []*AppliedRestore
+	committed   bool
+	fence       string
 }
 
 type renamePair struct{ from, to string }
@@ -481,10 +467,52 @@ func RestoreFailureRecovered(err error) bool {
 func ApplyPendingRestore(layout Layout) (*AppliedRestore, error) {
 	restoreMu.Lock()
 	defer restoreMu.Unlock()
-	return applyPendingRestore(layout)
+	fence, err := beginRestoreFence(layout)
+	if err != nil {
+		return nil, err
+	}
+	applied, err := applyPendingRestore(layout)
+	if err != nil {
+		if RestoreFailureRecovered(err) {
+			_ = os.Remove(fence)
+		}
+		return nil, err
+	}
+	if applied != nil {
+		applied.fence = fence
+	} else if fence != "" {
+		_ = os.Remove(fence)
+	}
+	return applied, nil
 }
 
 func applyPendingRestore(layout Layout) (*AppliedRestore, error) {
+	group := &AppliedRestore{}
+	for _, kind := range []ArchiveKind{KindData, KindAttachments, KindServerConfig} {
+		selected := layout
+		selected.pendingKind = kind
+		applied, err := applyPendingRestoreOne(selected)
+		if err != nil {
+			if rollbackErr := group.Rollback(); rollbackErr != nil {
+				return nil, &RestoreApplyError{Cause: errors.Join(err, rollbackErr)}
+			}
+			// A failed group must never partially replay on the next boot.
+			if RestoreFailureRecovered(err) {
+				_ = group.DiscardPending()
+			}
+			return nil, err
+		}
+		if applied != nil {
+			group.groups = append(group.groups, applied)
+		}
+	}
+	if len(group.groups) == 0 {
+		return nil, nil
+	}
+	return group, nil
+}
+
+func applyPendingRestoreOne(layout Layout) (*AppliedRestore, error) {
 	pending := PendingRestorePath(layout)
 	previous := previousPendingRestorePath(layout)
 	if _, pendingErr := os.Stat(pending); errors.Is(pendingErr, os.ErrNotExist) {
@@ -511,8 +539,28 @@ func applyPendingRestore(layout Layout) (*AppliedRestore, error) {
 	if err := extractArchive(pending, stage); err != nil {
 		return nil, quarantineFailedRestore(pending, err, true)
 	}
-	if err := validateSQLite(filepath.Join(stage, "database.db")); err != nil {
-		return nil, quarantineFailedRestore(pending, fmt.Errorf("待恢复数据库无效: %w", err), true)
+	inspection, manifest, err := readArchive(pending)
+	if err != nil {
+		return nil, quarantineFailedRestore(pending, err, true)
+	}
+	if err := validateLayout(layout); err != nil {
+		return nil, quarantineFailedRestore(pending, err, true)
+	}
+	if err := validateStagedPayload(stage, inspection); err != nil {
+		return nil, quarantineFailedRestore(pending, err, true)
+	}
+	if inspection.Legacy || inspection.Kind == KindData {
+		if layout.AttachmentHooks != nil && layout.AttachmentHooks.PrepareDataDatabase != nil {
+			if err := layout.AttachmentHooks.PrepareDataDatabase(context.Background(), stage, layout.DatabasePath); err != nil {
+				return nil, quarantineFailedRestore(pending, err, true)
+			}
+		}
+		if !hasComponent(inspection, passwordArchiveName) {
+			if err := createEmptyPasswordStore(filepath.Join(stage, passwordArchiveName)); err != nil {
+				return nil, quarantineFailedRestore(pending, err, true)
+			}
+			inspection.Components = append(inspection.Components, passwordArchiveName)
+		}
 	}
 	if err := os.Remove(previous); err != nil && !errors.Is(err, os.ErrNotExist) {
 		// Both files mean publication stopped after the new package became
@@ -521,17 +569,25 @@ func applyPendingRestore(layout Layout) (*AppliedRestore, error) {
 		return nil, &RestoreApplyError{Cause: fmt.Errorf("清理已替换的待恢复包失败: %w", err)}
 	}
 
-	pairs := []renamePair{{from: filepath.Join(stage, "database.db"), to: layout.DatabasePath}}
-	for _, root := range layout.Roots {
-		if strings.TrimSpace(root.ArchiveName) == "" || strings.TrimSpace(root.Path) == "" {
-			continue
+	pairs, err := selectedRestorePairs(stage, layout, inspection)
+	if err != nil {
+		return nil, quarantineFailedRestore(pending, err, true)
+	}
+	if !inspection.Legacy && inspection.Kind == KindAttachments {
+		if layout.AttachmentHooks == nil || layout.AttachmentHooks.PrepareDatabase == nil {
+			return nil, quarantineFailedRestore(pending, errors.New("attachment database restore hook is required"), true)
 		}
-		candidate := filepath.Join(stage, filepath.FromSlash(root.ArchiveName))
-		if info, statErr := os.Stat(candidate); statErr == nil && info.IsDir() {
-			pairs = append(pairs, renamePair{from: candidate, to: root.Path})
-		} else if statErr != nil && !errors.Is(statErr, os.ErrNotExist) {
-			return nil, quarantineFailedRestore(pending, statErr, true)
+		candidate, err := layout.AttachmentHooks.PrepareDatabase(context.Background(), stage, layout.DatabasePath, manifest.AttachmentMode)
+		if err != nil {
+			return nil, quarantineFailedRestore(pending, err, true)
 		}
+		if err := validateSQLite(candidate); err != nil {
+			return nil, quarantineFailedRestore(pending, err, true)
+		}
+		pairs = append([]renamePair{{from: candidate, to: layout.DatabasePath}}, pairs...)
+	}
+	if err := preflightPairs(pairs); err != nil {
+		return nil, quarantineFailedRestore(pending, err, true)
 	}
 	prepared := make([]preparedReplacement, 0, len(pairs))
 	for _, pair := range pairs {
@@ -554,12 +610,15 @@ func applyPendingRestore(layout Layout) (*AppliedRestore, error) {
 	// The archive contains a self-contained SQLite snapshot, not the live
 	// database's WAL sidecars. Keeping an old WAL beside the restored main file
 	// would let SQLite replay pre-restore changes after the next startup.
-	for _, sidecar := range []string{layout.DatabasePath + "-wal", layout.DatabasePath + "-shm"} {
-		// InitDB may create fresh sidecars before a later failure. Rollback must
-		// remove those newly generated files before the original sidecars return.
-		applied.targets = append(applied.targets, sidecar)
-		if err := moveExistingToRestoreBackup(sidecar, applied); err != nil {
-			return nil, rollbackAndQuarantine(applied, err)
+	for _, pair := range pairs {
+		if pair.to != layout.DatabasePath && pair.to != layout.passwordPath() {
+			continue
+		}
+		for _, sidecar := range []string{pair.to + "-wal", pair.to + "-shm"} {
+			applied.targets = append(applied.targets, sidecar)
+			if err := moveExistingToRestoreBackup(sidecar, applied); err != nil {
+				return nil, rollbackAndQuarantine(applied, err)
+			}
 		}
 	}
 	for _, pair := range prepared {
@@ -586,6 +645,9 @@ func applyPendingRestore(layout Layout) (*AppliedRestore, error) {
 }
 
 func prepareReplacement(source, target string) (preparedReplacement, error) {
+	if err := rejectSymlinkPath(target); err != nil {
+		return preparedReplacement{}, err
+	}
 	target = filepath.Clean(target)
 	sourceInfo, err := os.Stat(source)
 	if err != nil {
@@ -730,48 +792,90 @@ func quarantineFailedRestore(pending string, cause error, recovered bool) error 
 	return &RestoreApplyError{Cause: cause, Recovered: recovered, Quarantined: quarantined}
 }
 
-func moveExistingToRestoreBackup(path string, applied *AppliedRestore) error {
-	backup := path + ".restore-backup"
-	if err := os.RemoveAll(backup); err != nil {
-		return err
-	}
-	if _, err := os.Stat(path); err == nil {
-		if err := os.Rename(path, backup); err != nil {
-			return err
-		}
-		applied.backups = append(applied.backups, renamePair{from: backup, to: path})
+func moveExistingToRestoreBackup(p string, applied *AppliedRestore) error {
+	if _, err := os.Lstat(p); errors.Is(err, os.ErrNotExist) {
 		return nil
-	} else if !errors.Is(err, os.ErrNotExist) {
+	} else if err != nil {
 		return err
 	}
+	file, err := os.CreateTemp(filepath.Dir(p), ".echo-noise-restore-backup-*")
+	if err != nil {
+		return err
+	}
+	backup := file.Name()
+	if err := file.Close(); err != nil {
+		return err
+	}
+	if err := os.Remove(backup); err != nil {
+		return err
+	}
+	if err := os.Rename(p, backup); err != nil {
+		return err
+	}
+	applied.backups = append(applied.backups, renamePair{from: backup, to: p})
 	return nil
 }
 
 func (a *AppliedRestore) Commit() error {
-	if a == nil {
+	if a == nil || a.committed {
 		return nil
 	}
-	if err := os.Remove(a.pending); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return err
+	items := a.groups
+	if len(items) == 0 {
+		items = []*AppliedRestore{a}
 	}
-	for _, directory := range a.directories {
-		if err := os.RemoveAll(directory.backup); err != nil {
-			return err
+	marked := []renamePair{}
+	for _, item := range items {
+		if item.pending == "" {
+			continue
+		}
+		marker := item.pending + ".applied"
+		if err := os.Rename(item.pending, marker); err != nil {
+			var rollbackErr error
+			for index := len(marked) - 1; index >= 0; index-- {
+				rollbackErr = errors.Join(rollbackErr, os.Rename(marked[index].from, marked[index].to))
+			}
+			return errors.Join(err, rollbackErr)
+		}
+		marked = append(marked, renamePair{from: marker, to: item.pending})
+	}
+	// All packages are now committed and cannot replay. Cleanup failures must
+	// never trigger rollback after any old database/media has been removed.
+	a.committed = true
+	var cleanupErr error
+	for _, item := range items {
+		item.committed = true
+		for _, directory := range item.directories {
+			cleanupErr = errors.Join(cleanupErr, os.RemoveAll(directory.backup))
+		}
+		for _, backup := range item.backups {
+			cleanupErr = errors.Join(cleanupErr, os.RemoveAll(backup.from))
 		}
 	}
-	for _, backup := range a.backups {
-		if err := os.RemoveAll(backup.from); err != nil {
-			return err
-		}
+	for _, marker := range marked {
+		cleanupErr = errors.Join(cleanupErr, os.Remove(marker.from))
 	}
-	return nil
+	if a.fence != "" {
+		cleanupErr = errors.Join(cleanupErr, os.Remove(a.fence))
+	}
+	return cleanupErr
 }
+
+// Committed distinguishes cleanup errors from a failure to retire pending packages.
+func (a *AppliedRestore) Committed() bool { return a != nil && a.committed }
 
 // DiscardPending removes a restore package after a failed startup rollback so
 // one incompatible archive cannot trap every later restart in the same loop.
 func (a *AppliedRestore) DiscardPending() error {
 	if a == nil {
 		return nil
+	}
+	if len(a.groups) > 0 {
+		var result error
+		for _, item := range a.groups {
+			result = errors.Join(result, item.DiscardPending())
+		}
+		return result
 	}
 	if err := os.Remove(a.pending); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
@@ -782,6 +886,19 @@ func (a *AppliedRestore) DiscardPending() error {
 func (a *AppliedRestore) Rollback() error {
 	if a == nil {
 		return nil
+	}
+	if a.committed {
+		return errors.New("cannot roll back a committed restore")
+	}
+	if len(a.groups) > 0 {
+		var result error
+		for index := len(a.groups) - 1; index >= 0; index-- {
+			result = errors.Join(result, a.groups[index].Rollback())
+		}
+		if result == nil && a.fence != "" {
+			result = os.Remove(a.fence)
+		}
+		return result
 	}
 	var firstErr error
 	for index := len(a.directories) - 1; index >= 0; index-- {
@@ -800,10 +917,16 @@ func (a *AppliedRestore) Rollback() error {
 			firstErr = err
 		}
 	}
+	if firstErr == nil && a.fence != "" {
+		firstErr = os.Remove(a.fence)
+	}
 	return firstErr
 }
 
 func extractArchive(source, destination string) error {
+	if _, err := InspectTypedArchive(source); err != nil {
+		return err
+	}
 	reader, err := zip.OpenReader(source)
 	if err != nil {
 		return err
@@ -828,9 +951,9 @@ func extractArchive(source, destination string) error {
 		if err != nil {
 			return err
 		}
-		out, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_EXCL, file.Mode())
+		out, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 		if err == nil {
-			_, err = io.Copy(out, in)
+			_, err = io.Copy(out, io.LimitReader(in, int64(file.UncompressedSize64)+1))
 			closeErr := out.Close()
 			if err == nil {
 				err = closeErr

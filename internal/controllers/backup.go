@@ -7,246 +7,30 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/rcy1314/echo-noise/config"
 	backupservice "github.com/rcy1314/echo-noise/internal/backup"
 	"github.com/rcy1314/echo-noise/internal/database"
-	"github.com/rcy1314/echo-noise/internal/models"
-	"github.com/rcy1314/echo-noise/internal/storage"
 	"github.com/rcy1314/echo-noise/internal/syncmanager"
 )
 
 // 通过预签名URL上传备份到云存储（R2/S3）
 func HandleBackupUploadToURL(c *gin.Context) {
-	if _, err := checkAdmin(c); err != nil {
-		c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "需要管理员权限"})
-		return
-	}
-
-	var req struct {
-		UploadURL string `json:"uploadURL" binding:"required"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.UploadURL) == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "上传URL无效"})
-		return
-	}
-	u, err := url.Parse(req.UploadURL)
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "上传URL格式错误"})
-		return
-	}
-	releaseOperation := syncmanager.LockOperation()
-	defer releaseOperation()
-
-	tempDir, err := os.MkdirTemp("", "echo-noise-backup-*")
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "创建临时目录失败"})
-		return
-	}
-	defer os.RemoveAll(tempDir)
-
-	dbType := os.Getenv("DB_TYPE")
-	if dbType == "" {
-		dbType = "sqlite"
-	}
-	zipFile, err := createBackupArchive(tempDir, dbType)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": err.Error()})
-		return
-	}
-
-	f, err := os.Open(zipFile)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "读取备份文件失败"})
-		return
-	}
-	defer f.Close()
-	stat, err := f.Stat()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "读取备份文件信息失败"})
-		return
-	}
-	reqHttp, err := http.NewRequest(http.MethodPut, req.UploadURL, f)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "创建请求失败"})
-		return
-	}
-	reqHttp.Header.Set("Content-Type", "application/zip")
-	reqHttp.ContentLength = stat.Size()
-	client := &http.Client{Timeout: 120 * time.Second}
-	resp, err := client.Do(reqHttp)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "上传失败: " + err.Error()})
-		return
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "云备份上传成功"})
-		return
-	}
-	_, _ = io.Copy(io.Discard, resp.Body)
-	c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": fmt.Sprintf("上传失败(%d)", resp.StatusCode)})
+	c.JSON(http.StatusGone, gin.H{"code": 0, "msg": "请使用已配置的备份通道生成托管备份"})
 }
 
 // 通过预签名URL从云存储恢复
 func HandleBackupRestoreFromURL(c *gin.Context) {
-	if _, err := checkAdmin(c); err != nil {
-		c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "需要管理员权限"})
-		return
-	}
-	var req struct {
-		DownloadURL string `json:"downloadURL" binding:"required"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.DownloadURL) == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "下载URL无效"})
-		return
-	}
-	u, err := url.Parse(req.DownloadURL)
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "下载URL格式错误"})
-		return
-	}
-	releaseOperation := syncmanager.LockOperation()
-	defer releaseOperation()
-	tempDir, err := os.MkdirTemp("", "echo-noise-restore-*")
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "创建临时目录失败"})
-		return
-	}
-	defer os.RemoveAll(tempDir)
-
-	resp, err := (&http.Client{Timeout: 180 * time.Second}).Get(req.DownloadURL)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "下载失败: " + err.Error()})
-		return
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": fmt.Sprintf("下载失败(%d)", resp.StatusCode)})
-		return
-	}
-	restorePath := filepath.Join(tempDir, "cloud_backup.zip")
-	out, err := os.Create(restorePath)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "保存备份文件失败"})
-		return
-	}
-	if _, err := io.Copy(out, resp.Body); err != nil {
-		out.Close()
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "写入备份文件失败"})
-		return
-	}
-	if err := out.Close(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "写入备份文件失败"})
-		return
-	}
-	if os.Getenv("DB_TYPE") == "" || os.Getenv("DB_TYPE") == "sqlite" {
-		result, err := backupservice.StageRestoreWithResult(restorePath, backupservice.DefaultLayout())
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "备份校验失败: " + err.Error()})
-			return
-		}
-		c.JSON(http.StatusAccepted, stagedRestoreResponse("备份已校验并暂存，请重启服务后完成恢复", result))
-		return
-	}
-
-	if err := unzipBackup(restorePath, tempDir); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "解压失败"})
-		return
-	}
-	if err := backupCurrentImages(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "备份当前图片失败"})
-		return
-	}
-	if err := backupCurrentVideos(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "备份当前视频失败"})
-		return
-	}
-	if err := restoreImages(tempDir); err != nil {
-		restoreCurrentImages()
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "恢复图片失败"})
-		return
-	}
-	if err := restoreVideos(tempDir); err != nil {
-		restoreCurrentVideos()
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "恢复视频失败"})
-		return
-	}
-
-	dbType := os.Getenv("DB_TYPE")
-	if dbType == "" {
-		dbType = "sqlite"
-	}
-	switch dbType {
-	case "postgres":
-		if err := restorePostgres(tempDir); err != nil {
-			restoreCurrentImages()
-			c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "PostgreSQL恢复失败: " + err.Error()})
-			return
-		}
-	case "mysql":
-		if err := restoreMySQL(tempDir); err != nil {
-			restoreCurrentImages()
-			c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "MySQL恢复失败: " + err.Error()})
-			return
-		}
-	default:
-		if err := restoreSQLite(tempDir); err != nil {
-			restoreCurrentImages()
-			c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "SQLite恢复失败: " + err.Error()})
-			return
-		}
-	}
-	if err := database.ReconnectDB(); err != nil {
-		restoreCurrentImages()
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "数据库重连失败"})
-		return
-	}
-	cleanupImageBackup()
-	cleanupVideoBackup()
-	c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "云备份恢复成功", "shouldRefresh": true})
+	c.JSON(http.StatusGone, gin.H{"code": 0, "msg": "请从备份历史选择或上传备份，检查后明确确认恢复"})
 }
 
 func HandleBackupDownload(c *gin.Context) {
-	if _, err := checkAdmin(c); err != nil {
-		c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "需要管理员权限"})
-		return
-	}
-	releaseOperation := syncmanager.LockOperation()
-	defer releaseOperation()
-
-	dbType := os.Getenv("DB_TYPE")
-	if dbType == "" {
-		dbType = "sqlite"
-	}
-
-	tempDir, err := os.MkdirTemp("", "echo-noise-backup-*")
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "创建临时目录失败"})
-		return
-	}
-	defer os.RemoveAll(tempDir)
-
-	zipFile, err := createBackupArchive(tempDir, dbType)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": err.Error()})
-		return
-	}
-
-	// 设置响应头并发送文件
-	backupName := fmt.Sprintf("ech0_backup_%s_%s.zip", dbType, time.Now().Format("20060102150405"))
-	c.Header("Content-Description", "File Transfer")
-	c.Header("Content-Type", "application/zip")
-	c.Header("Content-Disposition", "attachment; filename="+backupName)
-	c.Header("Content-Transfer-Encoding", "binary")
-	c.File(zipFile)
+	c.JSON(http.StatusGone, gin.H{"code": 0, "msg": "请分别生成数据、附件或服务器配置备份，再从备份记录下载"})
 }
 
 func createBackupArchive(tempDir, dbType string) (string, error) {
@@ -284,239 +68,51 @@ func createBackupArchive(tempDir, dbType string) (string, error) {
 }
 
 func HandleBackupRestore(c *gin.Context) {
-	if _, err := checkAdmin(c); err != nil {
-		c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "需要管理员权限"})
+	if _, err := requirePrimaryAdmin(c); err != nil {
+		managedBackupError(c, http.StatusForbidden, err)
 		return
 	}
-
-	dbType := os.Getenv("DB_TYPE")
-	if dbType == "" {
-		dbType = "sqlite"
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, managedBackupUploadLimit+(1<<20))
+	if c.PostForm("confirm") != "true" {
+		managedBackupError(c, http.StatusBadRequest, errors.New("恢复前必须明确确认"))
+		return
 	}
-
-	file, err := c.FormFile("database")
+	if c.Request.MultipartForm != nil {
+		defer c.Request.MultipartForm.RemoveAll()
+	}
+	uploaded, err := c.FormFile("database")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "请选择有效的备份文件"})
+		managedBackupError(c, http.StatusBadRequest, err)
 		return
 	}
-
-	// 检查文件大小
-	if file.Size > 500*1024*1024 { // 500MB
-		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "备份文件过大"})
-		return
-	}
-	releaseOperation := syncmanager.LockOperation()
-	defer releaseOperation()
-
-	tempDir, err := os.MkdirTemp("", "echo-noise-restore-*")
+	reader, err := uploaded.Open()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "创建临时目录失败"})
+		managedBackupError(c, http.StatusBadRequest, err)
 		return
 	}
-	defer os.RemoveAll(tempDir)
-
-	// 保存并解压备份文件
-	backupPath := filepath.Join(tempDir, "uploaded-backup.zip")
-	if err := c.SaveUploadedFile(file, backupPath); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "保存备份文件失败"})
+	defer reader.Close()
+	path, cleanup, err := managedBackupSpool(c.Request.Context(), reader)
+	if err != nil {
+		managedBackupError(c, http.StatusBadRequest, err)
 		return
 	}
-	if dbType == "sqlite" {
-		result, err := backupservice.StageRestoreWithResult(backupPath, backupservice.DefaultLayout())
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "备份校验失败: " + err.Error()})
-			return
-		}
-		c.JSON(http.StatusAccepted, stagedRestoreResponse("备份已校验并暂存，请重启服务后完成恢复", result))
-		return
-	}
-
-	if err := unzipBackup(backupPath, tempDir); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "解压备份文件失败"})
-		return
-	}
-
-	// 备份当前图片
-	if err := backupCurrentImages(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "备份当前图片失败"})
-		return
-	}
-	// 备份当前视频
-	if err := backupCurrentVideos(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "备份当前视频失败"})
-		return
-	}
-
-	// 恢复图片
-	if err := restoreImages(tempDir); err != nil {
-		restoreCurrentImages() // 尝试恢复原图片
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "恢复图片失败"})
-		return
-	}
-	// 恢复视频
-	if err := restoreVideos(tempDir); err != nil {
-		restoreCurrentVideos() // 尝试恢复原视频
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "恢复视频失败"})
-		return
-	}
-	// 根据数据库类型执行不同的恢复逻辑
-	switch dbType {
-	case "postgres":
-		if err := restorePostgres(tempDir); err != nil {
-			restoreCurrentImages() // 恢复原图片
-			c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "PostgreSQL恢复失败: " + err.Error()})
-			return
-		}
-	case "mysql":
-		if err := restoreMySQL(tempDir); err != nil {
-			restoreCurrentImages() // 恢复原图片
-			c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "MySQL恢复失败: " + err.Error()})
-			return
-		}
-	default:
-		if err := restoreSQLite(tempDir); err != nil {
-			restoreCurrentImages() // 恢复原图片
-			c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "SQLite恢复失败: " + err.Error()})
-			return
-		}
-	}
-
-	// 重连数据库
-	if err := database.ReconnectDB(); err != nil {
-		restoreCurrentImages() // 恢复原图片
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "数据库重连失败"})
-		return
-	}
-
-	// 清理原图片备份
-	cleanupImageBackup()
-	// 清理原视频备份
-	cleanupVideoBackup()
-
-	c.JSON(http.StatusOK, gin.H{
-		"code":          1,
-		"msg":           "数据恢复成功",
-		"shouldRefresh": true,
-	})
+	defer cleanup()
+	release := syncmanager.LockOperation()
+	defer release()
+	managedBackupStage(c, path, "original", "data")
 }
 
 func HandleBackupPresignUpload(c *gin.Context) {
-	if _, err := checkAdmin(c); err != nil {
-		c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "需要管理员权限"})
-		return
-	}
-	var req struct {
-		ObjectKey      string `json:"objectKey"`
-		ExpiresSeconds int    `json:"expiresSeconds"`
-		ContentType    string `json:"contentType"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "请求参数错误"})
-		return
-	}
-	req.ObjectKey = "backup.zip"
-	if req.ContentType == "" {
-		req.ContentType = "application/zip"
-	}
-	if req.ExpiresSeconds <= 0 {
-		req.ExpiresSeconds = 3600
-	}
-
-	db, _ := database.GetDB()
-	var cfg models.SiteConfig
-	if err := db.Table("site_configs").First(&cfg).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "读取站点配置失败"})
-		return
-	}
-	if !cfg.StorageEnabled || cfg.StorageBucket == "" || cfg.StorageAccessKey == "" || cfg.StorageSecretKey == "" || cfg.StorageEndpoint == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "云存储未启用或配置不完整"})
-		return
-	}
-	url, err := storage.PresignUpload(cfg, cfg.StorageBucket, req.ObjectKey, time.Duration(req.ExpiresSeconds)*time.Second, req.ContentType)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "生成预签名上传URL失败: " + err.Error()})
-		return
-	}
-	finalKey := storage.ResolveObjectKey(cfg, req.ObjectKey)
-	c.JSON(http.StatusOK, gin.H{"code": 1, "data": gin.H{"url": url, "objectKey": finalKey}})
+	c.JSON(http.StatusGone, gin.H{"code": 0, "msg": "备份通道不再签发任意对象上传链接"})
 }
 
 func HandleBackupPresignDownload(c *gin.Context) {
-	if _, err := checkAdmin(c); err != nil {
-		c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "需要管理员权限"})
-		return
-	}
-	var req struct {
-		ObjectKey      string `json:"objectKey"`
-		ExpiresSeconds int    `json:"expiresSeconds"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "请求参数错误"})
-		return
-	}
-	req.ObjectKey = "backup.zip"
-	if req.ExpiresSeconds <= 0 {
-		req.ExpiresSeconds = 3600
-	}
-
-	db, _ := database.GetDB()
-	var cfg models.SiteConfig
-	if err := db.Table("site_configs").First(&cfg).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "读取站点配置失败"})
-		return
-	}
-	if !cfg.StorageEnabled || cfg.StorageBucket == "" || cfg.StorageAccessKey == "" || cfg.StorageSecretKey == "" || cfg.StorageEndpoint == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "云存储未启用或配置不完整"})
-		return
-	}
-	url, err := storage.PresignDownload(cfg, cfg.StorageBucket, req.ObjectKey, time.Duration(req.ExpiresSeconds)*time.Second)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "生成预签名下载URL失败: " + err.Error()})
-		return
-	}
-	finalKey := storage.ResolveObjectKey(cfg, req.ObjectKey)
-	c.JSON(http.StatusOK, gin.H{"code": 1, "data": gin.H{"url": url, "objectKey": finalKey}})
+	c.JSON(http.StatusGone, gin.H{"code": 0, "msg": "请使用具有独立下载权限的备份历史入口"})
 }
 
 // 立即执行云端同步（备份到 R2/S3）
 func HandleBackupSyncNow(c *gin.Context) {
-	if _, err := checkAdmin(c); err != nil {
-		c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "需要管理员权限"})
-		return
-	}
-	db, _ := database.GetDB()
-	var cfg models.SiteConfig
-	if err := db.Table("site_configs").First(&cfg).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "读取站点配置失败"})
-		return
-	}
-	if !cfg.StorageEnabled {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "云存储未启用"})
-		return
-	}
-	if strings.ToLower(cfg.StorageSyncRole) == "secondary" {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "云同步角色为备节点，禁止上传"})
-		return
-	}
-	confirmed := cfg.StorageSyncConfirmed && syncmanager.IsStorageSyncConfirmedLocal()
-	if !confirmed {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "检测到程序首次启用云同步/未确认，需先在后台确认是否同步"})
-		return
-	}
-	if err := syncmanager.SyncNow(); err != nil {
-		if errors.Is(err, backupservice.ErrRestartRequired) {
-			response := gin.H{"code": 1, "msg": "云端备份已校验并暂存，请重启服务后完成恢复", "pendingRestart": true}
-			if warning := backupservice.RestartWarning(err); warning != "" {
-				response["warning"] = warning
-				response["completeMigration"] = false
-			}
-			c.JSON(http.StatusAccepted, response)
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "同步失败: " + err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "已同步到云端"})
+	c.JSON(http.StatusGone, gin.H{"code": 0, "msg": "请使用独立备份模块执行云备份；旧双向同步已停用"})
 }
 
 func stagedRestoreResponse(message string, result backupservice.StageResult) gin.H {
@@ -530,37 +126,7 @@ func stagedRestoreResponse(message string, result backupservice.StageResult) gin
 
 // 确认云同步（首次启用/首次启动门禁）
 func HandleBackupSyncConfirm(c *gin.Context) {
-	if _, err := checkAdmin(c); err != nil {
-		c.JSON(http.StatusForbidden, gin.H{"code": 0, "msg": "需要管理员权限"})
-		return
-	}
-	db, _ := database.GetDB()
-	var cfg models.SiteConfig
-	if err := db.Table("site_configs").First(&cfg).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "读取站点配置失败"})
-		return
-	}
-	if !cfg.StorageEnabled {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "云存储未启用"})
-		return
-	}
-	confirmed := cfg.StorageSyncConfirmed && syncmanager.IsStorageSyncConfirmedLocal()
-	if confirmed {
-		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "已确认"})
-		return
-	}
-
-	if err := syncmanager.SetStorageSyncConfirmedLocal(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "确认失败: " + err.Error()})
-		return
-	}
-	if err := db.Table("site_configs").Where("id = ?", cfg.ID).Update("storage_sync_confirmed", true).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "确认失败: " + err.Error()})
-		return
-	}
-	cfg.StorageSyncConfirmed = true
-	syncmanager.Configure(cfg)
-	c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "已确认，可开始同步"})
+	c.JSON(http.StatusGone, gin.H{"code": 0, "msg": "请由站长配置云备份通道；旧同步确认已停用"})
 }
 func backupPostgres(tempDir string) error {
 	dumpFile := filepath.Join(tempDir, "database.sql")

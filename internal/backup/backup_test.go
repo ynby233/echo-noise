@@ -346,12 +346,15 @@ func TestCreateArchiveMarksMissingConfiguredAttachmentRootAsEmpty(t *testing.T) 
 	if !inspection.HasAttachmentData {
 		t.Fatal("new archive with an empty configured attachment root was classified as an old database-only archive")
 	}
-	result, err := StageRestoreWithResult(archivePath, Layout{DatabasePath: filepath.Join(root, "target.db")})
+	result, err := StageRestoreWithResult(archivePath, Layout{
+		DatabasePath: filepath.Join(root, "target.db"),
+		Roots:        []Root{{ArchiveName: "attachment-blobs", Path: filepath.Join(root, "target-blobs")}},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Warning != "" {
-		t.Fatalf("new archive with an empty attachment root warning = %q", result.Warning)
+	if strings.Contains(result.Warning, incompleteMigrationWarning) {
+		t.Fatalf("new archive with an empty attachment root has an incomplete migration warning = %q", result.Warning)
 	}
 }
 
@@ -552,7 +555,7 @@ func TestStageRestoreWarnsWhenArchiveHasNoAttachmentRoots(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Warning != "该备份不含附件，不能用于完整迁移" {
+	if !strings.Contains(result.Warning, "该备份不含附件，不能用于完整迁移") {
 		t.Fatalf("warning = %q", result.Warning)
 	}
 }
@@ -808,11 +811,15 @@ func TestApplyFailureQuarantinesPendingAndAllowsOldDataToBoot(t *testing.T) {
 		t.Fatal(err)
 	}
 	blockedParent := filepath.Join(root, "not-a-directory")
-	if err := os.WriteFile(blockedParent, []byte("blocked"), 0600); err != nil {
-		t.Fatal(err)
-	}
 	layout := Layout{DatabasePath: targetPath, Roots: []Root{{ArchiveName: "attachment-blobs", Path: filepath.Join(blockedParent, "blobs")}}}
 	if err := StageRestore(archivePath, layout); err != nil {
+		t.Fatal(err)
+	}
+	// Inject the filesystem failure after stage preflight has succeeded.
+	if err := os.Remove(blockedParent); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(blockedParent, []byte("blocked"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	_, err = ApplyPendingRestore(layout)

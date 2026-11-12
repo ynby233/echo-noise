@@ -34,7 +34,7 @@ assert.match(statusPanel, /label: '用户名'/, 'SMTP username must have an expl
 assert.match(statusPanel, /label: '密码'/, 'SMTP password must have an explicit clear action')
 assert.match(statusPanel, /清除现有\$\{credential\.label\}/, 'SMTP credentials must expose the explicit clear action')
 assert.match(statusPanel, /await loadSmtp\(\)/, 'SMTP save must refresh configured-state flags')
-assert.match(statusPanel, /await databaseDraft.saved\(\)/, 'backup storage save must reload configured-state flags through the draft loader')
+assert.match(statusPanel, /await cloudDraft.saved\(\)/, 'cloud backup connection save must reload configured-state flags through the draft loader')
 assert.match(statusPanel, /await attachmentDraft.saved\(\)/, 'attachment storage save must reload configured-state flags through the draft loader')
 assert.ok(
   statusPanel.includes('const hasUser = (!!smtp.user || smtp.userConfigured) && !smtp.clearUser') &&

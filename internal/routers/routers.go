@@ -335,6 +335,7 @@ func SetupRouter(musicService *music.Service) *gin.Engine {
 	executorRoutes.GET("/runtime", controllers.GetExecutorRuntime)
 	registerAdminAuthorizationRoutes(authRoutes)
 	registerRuntimePolicyRoutes(authRoutes)
+	registerManagedBackupRoutes(authRoutes)
 	registerMusicManagementRoutes(authRoutes, musicController)
 	registerNoteManagementRoutes(authRoutes)
 	authRoutes.GET("/users/me/stats", controllers.GetCurrentUserHomeStats)
@@ -361,7 +362,7 @@ func SetupRouter(musicService *music.Service) *gin.Engine {
 		tokenAuth.PUT("/messages/:id/comments/:cid", controllers.UpdateComment)
 		tokenAuth.DELETE("/messages/:id/comments/:cid", controllers.DeleteComment)
 		tokenAuth.PUT("/settings/music", middleware.RequireCapability(authorization.CapabilityMusicManage), controllers.UpdateMusicSetting)
-		tokenAuth.PUT("/settings", middleware.RequireCapability(authorization.CapabilitySiteSettingsManage), controllers.UpdateSetting)
+		tokenAuth.PUT("/settings", controllers.UpdateSetting)
 		tokenAuth.GET("/user/widget-preferences", controllers.GetWidgetPreferences)
 		tokenAuth.PUT("/user/widget-preferences", controllers.UpdateWidgetPreferences)
 		tokenAuth.GET("/admin/guest-widget-preferences", controllers.GetGuestWidgetPreferences)
@@ -438,14 +439,14 @@ func SetupRouter(musicService *music.Service) *gin.Engine {
 	// 数据库备份相关路由
 	backup := authRoutes.Group("/backup")
 	{
-		backup.GET("/download", middleware.RequireCapability(authorization.CapabilityDatabaseBackup), controllers.HandleBackupDownload)
-		backup.POST("/restore", middleware.RequireCapability(authorization.CapabilityDatabaseRestore), controllers.HandleBackupRestore)
-		backup.POST("/storage/upload", middleware.RequireCapability(authorization.CapabilityDatabaseBackup), controllers.HandleBackupUploadToURL)
-		backup.POST("/storage/restore", middleware.RequireCapability(authorization.CapabilityDatabaseRestore), controllers.HandleBackupRestoreFromURL)
-		backup.POST("/storage/presign/upload", middleware.RequireCapability(authorization.CapabilityDatabaseBackup), controllers.HandleBackupPresignUpload)
-		backup.POST("/storage/presign/download", middleware.RequireCapability(authorization.CapabilityDatabaseRestore), controllers.HandleBackupPresignDownload)
-		backup.POST("/storage/sync-confirm", middleware.RequireCapability(authorization.CapabilityStorageManage), controllers.HandleBackupSyncConfirm)
-		backup.POST("/storage/sync-now", middleware.RequireCapability(authorization.CapabilityStorageManage), controllers.HandleBackupSyncNow)
+		backup.GET("/download", middleware.RequireCapability(authorization.CapabilityBackupDataDownload), controllers.HandleBackupDownload)
+		backup.POST("/restore", middleware.RequireCapability(authorization.CapabilityBackupDataRestore), controllers.HandleBackupRestore)
+		backup.POST("/storage/upload", middleware.RequireCapability(authorization.CapabilityBackupDataDownload), controllers.HandleBackupUploadToURL)
+		backup.POST("/storage/restore", middleware.RequireCapability(authorization.CapabilityBackupDataRestore), controllers.HandleBackupRestoreFromURL)
+		backup.POST("/storage/presign/upload", middleware.RequireCapability(authorization.CapabilityBackupDataDownload), controllers.HandleBackupPresignUpload)
+		backup.POST("/storage/presign/download", middleware.RequireCapability(authorization.CapabilityBackupDataRestore), controllers.HandleBackupPresignDownload)
+		backup.POST("/storage/sync-confirm", middleware.RequireCapability(authorization.CapabilityBackupServerConfigCreate), controllers.HandleBackupSyncConfirm)
+		backup.POST("/storage/sync-now", middleware.RequireCapability(authorization.CapabilityBackupServerConfigCreate), controllers.HandleBackupSyncNow)
 	}
 
 	// 系统设置相关路由
@@ -516,7 +517,7 @@ func SetupRouter(musicService *music.Service) *gin.Engine {
 
 	// 设置路由
 	authRoutes.PUT("/settings/music", middleware.RequireCapability(authorization.CapabilityMusicManage), controllers.UpdateMusicSetting)
-	authRoutes.PUT("/settings", middleware.RequireCapability(authorization.CapabilitySiteSettingsManage), controllers.UpdateSetting)
+	authRoutes.PUT("/settings", controllers.UpdateSetting)
 	authRoutes.POST("/settings/vocechat/health", middleware.RequireCapability(authorization.CapabilityAuthorizationManage), controllers.CheckVoceChatHealth)
 
 	// 显式 /status 返回 SPA 入口，避免目录重定向影响

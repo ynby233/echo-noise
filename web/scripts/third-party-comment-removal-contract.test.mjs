@@ -38,7 +38,7 @@ assert.match(sourceFiles.music, /aplayer.*[\s\S]*meting/i, 'music embeds retain 
 assert.match(sourceFiles.messageList, /<BuiltinComments\b/, 'message comments must keep using BuiltinComments')
 assert.match(sourceFiles.builtinComments, /\.comment-wrapper\b/, 'builtin comments should use a neutral wrapper class')
 assert.match(sourceFiles.notificationCenter, /\.comment-wrapper\b/, 'notification inline replies should use the neutral wrapper class')
-assert.match(sourceFiles.readme, /仅支持内置评论/, 'README should state that comments are internal only')
+assert.match(sourceFiles.readme, /仅(?:支持|提供)内置评论/, 'README should state that comments are internal only')
 
 const generatedHtml = []
 const walk = async (directory) => {

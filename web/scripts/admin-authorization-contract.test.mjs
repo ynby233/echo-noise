@@ -76,3 +76,29 @@ assert.match(
 )
 assert.doesNotMatch(adminStyles, /input\[type="(?:checkbox|radio)"\][^{]*\{[^}]*(?:min-height|height):/)
 assert.doesNotMatch(center + audit, /echo-noise\s*\/\s*说说笔记/i)
+
+for (const [module, label] of Object.entries({ storage: '附件存储与处理', 'cloud-backup': '云备份连接配置', 'backup-data': '数据备份', 'backup-attachments': '附件备份', 'backup-server-config': '服务端配置备份' })) {
+  assert.ok(center.includes(`${module === 'storage' ? module : `'${module}'`}: '${label}'`), `${module} must have a clear authorization module label`)
+}
+assert.match(center, /生成备份会将备份包保存到服务器或云端，不会下载到当前设备/)
+assert.match(center, /生成备份会将附件包保存到服务器或云端，不会下载到当前设备/)
+assert.match(center, /下载和恢复仅限站长/)
+assert.match(center, /整个模块及其全部操作仅限站长/)
+assert.match(center, /云备份连接配置仅站长可查看和修改，不随附件存储权限开放/)
+
+const authorizationSource = await readFile(new URL('../../internal/authorization/authorization.go', import.meta.url), 'utf8')
+const definitions = [...authorizationSource.matchAll(/\{(Capability\w+),\s*"([^"]+)",\s*"([^"]+)",\s*(true|false)\}/g)]
+for (const [prefix, module, label] of [
+  ['CapabilityBackupData', 'backup-data', '数据备份'],
+  ['CapabilityBackupAttachments', 'backup-attachments', '附件备份'],
+  ['CapabilityBackupServerConfig', 'backup-server-config', '服务端配置备份'],
+]) {
+  for (const [suffix, verb] of [['Create', '生成'], ['Download', '下载'], ['Restore', '恢复']]) {
+    const definition = definitions.find(item => item[1] === `${prefix}${suffix}`)
+    assert.ok(definition, `${prefix}${suffix} must be declared in the authorization catalog`)
+    assert.equal(definition[2], module)
+    const primaryOnly = module === 'backup-server-config' || suffix !== 'Create'
+    assert.equal(definition[3], `${verb}${label}${primaryOnly ? '（仅站长）' : ''}`, 'create and download must be labeled as distinct operations')
+    assert.equal(definition[4], primaryOnly ? 'false' : 'true', `${module} ${suffix} delegation must match frontend restrictions`)
+  }
+}

@@ -1917,8 +1917,8 @@ func TestGetStatusCombinedDashboardCardsRequireEveryCapability(t *testing.T) {
 	assertCards([]authorization.Capability{authorization.CapabilityRegistrationView}, false, false)
 	assertCards([]authorization.Capability{authorization.CapabilityUsersView, authorization.CapabilityRegistrationView}, true, false)
 	assertCards([]authorization.Capability{authorization.CapabilityStorageView}, false, false)
-	assertCards([]authorization.Capability{authorization.CapabilityDatabaseView}, false, false)
-	assertCards([]authorization.Capability{authorization.CapabilityStorageView, authorization.CapabilityDatabaseView}, false, true)
+	assertCards([]authorization.Capability{authorization.CapabilityBackupDataView}, false, false)
+	assertCards([]authorization.Capability{authorization.CapabilityStorageView, authorization.CapabilityBackupDataView}, false, false)
 }
 
 func TestGetStatusJSONExposesOperationalMetricsOnlyInsideAuthorizedDashboardCards(t *testing.T) {

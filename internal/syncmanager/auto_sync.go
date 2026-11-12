@@ -1,7 +1,6 @@
-// Package syncmanager owns scheduled and manual cloud archive transfers.
-// Configure controls scheduler lifetime; LockOperation must cover the complete
-// archive/upload/restore operation. Success metadata is persisted only after a
-// 2xx upload and the required remote verification have both completed.
+// Package syncmanager owns typed backup plans and cloud archive transfers.
+// Main owns scheduler lifetime; LockOperation covers complete backup/restore
+// operations. Legacy restore helpers remain for explicitly confirmed imports.
 package syncmanager
 
 import (
@@ -62,188 +61,30 @@ func SetStorageSyncConfirmedLocal() error {
 	return os.WriteFile(storageSyncConfirmFile, []byte("ok"), 0644)
 }
 
+// Configure updates the cloud channel and stops timers from the retired sync
+// scheduler. Main owns Manager.Start/Stop through its worker context.
 func Configure(cfg models.SiteConfig) {
 	mu.Lock()
-	// An explicit disabled setting must stay disabled even when legacy storage
-	// credentials remain present. Enabling it is an administrator decision.
+	defer mu.Unlock()
 	configured = cfg
 	if scheduledStop != nil {
 		close(scheduledStop)
 		scheduledStop = nil
 	}
-	confirmed := cfg.StorageSyncConfirmed && IsStorageSyncConfirmedLocal()
-	instantEnabled := cfg.StorageEnabled && (cfg.StorageSyncRole == "" || cfg.StorageSyncRole == "primary") && cfg.StorageAutoSyncEnabled && cfg.StorageSyncMode == "instant" && confirmed
-	if cfg.StorageEnabled && (cfg.StorageSyncRole == "" || cfg.StorageSyncRole == "primary") && cfg.StorageAutoSyncEnabled && cfg.StorageSyncMode == "scheduled" && cfg.StorageSyncIntervalMinute > 0 && confirmed {
-		scheduledStop = make(chan struct{})
-		interval := time.Duration(cfg.StorageSyncIntervalMinute) * time.Minute
-		go func(stop <-chan struct{}) {
-			defer func() {
-				if r := recover(); r != nil {
-					log.Printf("云端自动同步任务崩溃: %v", r)
-				}
-			}()
-			ticker := time.NewTicker(interval)
-			defer ticker.Stop()
-			log.Printf("云端自动同步任务已启动，间隔: %v", interval)
-			for {
-				select {
-				case <-ticker.C:
-					if err := SyncNow(); err != nil {
-						log.Printf("云端自动同步执行失败: %v", err)
-					} else {
-						log.Printf("云端自动同步执行成功")
-					}
-				case <-stop:
-					log.Printf("云端自动同步任务已停止")
-					return
-				}
-			}
-		}(scheduledStop)
-	} else {
-		if cfg.StorageEnabled && cfg.StorageAutoSyncEnabled && !confirmed {
-			log.Printf("检测到云同步未确认，启动时不启用任何自动同步")
-		} else if instantEnabled {
-			log.Printf("云端即时同步已启用，等待触发")
-		} else {
-			log.Printf(
-				"云端自动同步未启动: enabled=%v role=%s auto=%v mode=%s interval=%d",
-				cfg.StorageEnabled,
-				cfg.StorageSyncRole,
-				cfg.StorageAutoSyncEnabled,
-				cfg.StorageSyncMode,
-				cfg.StorageSyncIntervalMinute,
-			)
-		}
-	}
-	mu.Unlock()
-	if instantEnabled {
-		log.Printf("云端即时同步已启用，启动时不自动同步，等待数据变更触发")
-	}
-}
-
-func Trigger() {
-	mu.Lock()
-	defer mu.Unlock()
-	// 仅主节点在即时模式下触发
-	if !(configured.StorageEnabled && (configured.StorageSyncRole == "" || configured.StorageSyncRole == "primary") && configured.StorageAutoSyncEnabled && configured.StorageSyncMode == "instant") {
-		return
-	}
-	confirmed := configured.StorageSyncConfirmed && IsStorageSyncConfirmedLocal()
-	if !confirmed {
-		return
-	}
 	if debounceTimer != nil {
 		debounceTimer.Stop()
+		debounceTimer = nil
 	}
-	log.Printf("云端即时同步触发（防抖 15s）")
-	debounceTimer = time.AfterFunc(15*time.Second, func() {
-		defer func() {
-			if r := recover(); r != nil {
-				log.Printf("云端即时同步崩溃: %v", r)
-			}
-		}()
-		if err := SyncNow(); err != nil {
-			log.Printf("云端即时同步执行失败: %v", err)
-		} else {
-			log.Printf("云端即时同步执行成功")
-		}
-	})
 }
 
+// Trigger remains for existing mutation hooks. Managed daily plans are the only
+// automatic backup source; data changes must not enqueue legacy backup.zip jobs.
+func Trigger() {}
+
+// SyncNow is deliberately retired rather than silently creating an unbounded
+// legacy archive. Call Manager.Create with an explicit kind and destination.
 func SyncNow() error {
-	releaseOperation := LockOperation()
-	defer releaseOperation()
-	mu.Lock()
-	cfg := configured
-	mu.Unlock()
-	if !cfg.StorageEnabled {
-		return nil
-	}
-	if cfg.StorageSyncRole == "secondary" {
-		return nil
-	}
-	confirmed := cfg.StorageSyncConfirmed && IsStorageSyncConfirmedLocal()
-	if !confirmed {
-		return fmt.Errorf("检测到云同步首次启用/未确认：为避免覆盖，已阻止同步。请在后台先确认同步后再执行")
-	}
-
-	dbType := os.Getenv("DB_TYPE")
-	if dbType == "" {
-		dbType = "sqlite"
-	}
-	if dbType != "sqlite" {
-		// 当前自动同步仅实现了 sqlite 的打包/恢复仲裁。
-		// 非 sqlite 场景保持既有“上传备份”逻辑，避免错误覆盖。
-		return syncUploadLegacy(cfg)
-	}
-	if backupservice.HasPendingRestore(backupservice.DefaultLayout()) {
-		return backupservice.ErrRestartRequired
-	}
-
-	remoteMeta, err := storage.HeadObject(cfg, cfg.StorageBucket, "backup.zip")
-	if err != nil {
-		return err
-	}
-
-	localLatest := localLatestModTime(dbType)
-	lastSync := cfg.StorageLastSyncTime
-	localChanged := false
-	if lastSync == nil {
-		localChanged = !localLatest.IsZero()
-	} else if !localLatest.IsZero() {
-		localChanged = localLatest.After(*lastSync)
-	}
-
-	remoteChanged := false
-	remoteTime := time.Time{}
-	if remoteMeta != nil {
-		if remoteMeta.LastModified != nil {
-			remoteTime = *remoteMeta.LastModified
-		}
-		if cfg.StorageLastRemoteETag != "" {
-			remoteChanged = remoteMeta.ETag != "" && remoteMeta.ETag != cfg.StorageLastRemoteETag
-		} else if cfg.StorageLastRemoteModified != nil {
-			remoteChanged = !remoteTime.IsZero() && remoteTime.After(*cfg.StorageLastRemoteModified)
-		} else {
-			// 第一次观测到云端对象，视为云端有数据
-			remoteChanged = true
-		}
-	}
-
-	// 决策：优先避免“本地旧数据覆盖云端新数据”
-	if remoteMeta == nil {
-		if !localLatest.IsZero() {
-			return syncUpload(cfg)
-		}
-		return nil
-	}
-
-	// 如果本地从未同步过，但云端已有备份：优先拉取云端，避免首次启动就覆盖
-	if cfg.StorageLastSyncTime == nil && cfg.StorageLastRemoteETag == "" && cfg.StorageLastRemoteModified == nil {
-		return syncDownloadAndRestore(cfg, remoteMeta)
-	}
-
-	// 两边都变化时按 Last-Modified 与本地最新 mtime 仲裁
-	if localChanged && remoteChanged {
-		if !remoteTime.IsZero() && !localLatest.IsZero() {
-			if remoteTime.After(localLatest.Add(2 * time.Second)) {
-				return syncDownloadAndRestore(cfg, remoteMeta)
-			}
-			if localLatest.After(remoteTime.Add(2 * time.Second)) {
-				return syncUpload(cfg)
-			}
-		}
-		// 无法可靠仲裁时，不做任何覆盖，由管理员人工处理
-		return fmt.Errorf("检测到云端与本地同时发生变更，无法自动仲裁（local=%v remote=%v）。为避免覆盖，已停止同步，请人工确认后再同步", localLatest, remoteTime)
-	}
-	if remoteChanged && !localChanged {
-		return syncDownloadAndRestore(cfg, remoteMeta)
-	}
-	if localChanged && !remoteChanged {
-		return syncUpload(cfg)
-	}
-	// 都没变：刷新记录（尤其是首次只有 remote meta 的场景）
-	return syncPersistMeta(cfg, remoteMeta, cfg.StorageLastSyncTime)
+	return errors.New("旧版云同步已停用，请使用独立备份计划或手动生成备份")
 }
 
 func syncUpload(cfg models.SiteConfig) error {
@@ -390,47 +231,6 @@ func addDirToZip(zw *zip.Writer, dir, prefix string) error {
 	})
 }
 
-func syncDownloadAndRestore(cfg models.SiteConfig, remoteMeta *storage.ObjectMeta) error {
-	url, err := storage.PresignDownload(cfg, cfg.StorageBucket, "backup.zip", 1*time.Hour)
-	if err != nil {
-		return err
-	}
-	client := &http.Client{Timeout: 180 * time.Second}
-	resp, err := client.Get(url)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		io.Copy(io.Discard, resp.Body)
-		return fmt.Errorf("下载云端备份失败: status=%d", resp.StatusCode)
-	}
-
-	tmpDir, err := os.MkdirTemp("", "echo-noise-sync-restore-*")
-	if err != nil {
-		return err
-	}
-	defer os.RemoveAll(tmpDir)
-	zipPath := filepath.Join(tmpDir, "cloud_backup.zip")
-	out, err := os.Create(zipPath)
-	if err != nil {
-		return err
-	}
-	_, copyErr := io.Copy(out, resp.Body)
-	closeErr := out.Close()
-	if copyErr != nil {
-		return copyErr
-	}
-	if closeErr != nil {
-		return closeErr
-	}
-	result, err := backupservice.StageRestoreWithResult(zipPath, backupservice.DefaultLayout())
-	if err != nil {
-		return fmt.Errorf("暂存云端恢复包失败: %w", err)
-	}
-	return &backupservice.RestartRequiredError{Warning: result.Warning}
-}
-
 func syncPersistMeta(cfg models.SiteConfig, remoteMeta *storage.ObjectMeta, syncTime *time.Time) error {
 	updates := map[string]any{}
 	if syncTime != nil {
@@ -479,110 +279,4 @@ func syncPersistMeta(cfg models.SiteConfig, remoteMeta *storage.ObjectMeta, sync
 	}
 	mu.Unlock()
 	return nil
-}
-
-func localLatestModTime(dbType string) time.Time {
-	latest := time.Time{}
-	if dbType == "sqlite" {
-		dbPath := backupservice.DefaultLayout().DatabasePath
-		latest = maxTime(latest, fileModTime(dbPath))
-		latest = maxTime(latest, fileModTime(dbPath+"-wal"))
-		latest = maxTime(latest, fileModTime(dbPath+"-shm"))
-		for _, root := range backupservice.DefaultLayout().Roots {
-			latest = maxTime(latest, dirLatestModTime(root.Path))
-		}
-	}
-	return latest
-}
-
-func fileModTime(path string) time.Time {
-	fi, err := os.Stat(path)
-	if err != nil || fi.IsDir() {
-		return time.Time{}
-	}
-	return fi.ModTime()
-}
-
-func dirLatestModTime(dir string) time.Time {
-	latest := time.Time{}
-	_ = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info == nil {
-			return nil
-		}
-		if info.IsDir() {
-			return nil
-		}
-		latest = maxTime(latest, info.ModTime())
-		return nil
-	})
-	return latest
-}
-
-func maxTime(a, b time.Time) time.Time {
-	if a.IsZero() {
-		return b
-	}
-	if b.IsZero() {
-		return a
-	}
-	if b.After(a) {
-		return b
-	}
-	return a
-}
-
-func restoreFromBackupZip(zipPath string) error {
-	r, err := zip.OpenReader(zipPath)
-	if err != nil {
-		return err
-	}
-	defer r.Close()
-
-	dbPath := os.Getenv("DB_PATH")
-	if dbPath == "" {
-		dbPath = "/app/data/noise.db"
-	}
-	_ = os.MkdirAll(filepath.Dir(dbPath), 0755)
-	_ = os.MkdirAll("./data/images", 0755)
-	_ = os.MkdirAll("./data/video", 0755)
-
-	for _, f := range r.File {
-		name := filepath.ToSlash(f.Name)
-		if strings.HasSuffix(name, "/") {
-			continue
-		}
-		var target string
-		switch {
-		case name == "database.db":
-			target = dbPath
-		case strings.HasPrefix(name, "images/"):
-			target = filepath.Join("./data/images", strings.TrimPrefix(name, "images/"))
-		case strings.HasPrefix(name, "video/"):
-			target = filepath.Join("./data/video", strings.TrimPrefix(name, "video/"))
-		default:
-			continue
-		}
-		if err := extractZipFileTo(f, target); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func extractZipFileTo(zf *zip.File, dest string) error {
-	rc, err := zf.Open()
-	if err != nil {
-		return err
-	}
-	defer rc.Close()
-	if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
-		return err
-	}
-	out, err := os.Create(dest)
-	if err != nil {
-		return err
-	}
-	defer out.Close()
-	_, err = io.Copy(out, rc)
-	return err
 }

@@ -172,6 +172,8 @@ func TestUpdateTaskHTTPRejectsChangedConfirmedTargetAndPublicMaintenanceIsMinima
 func setupUpdateControllerTest(t *testing.T) (*gorm.DB, *gin.Engine, string) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
+	t.Setenv("UPDATE_EXECUTOR_WAKE_URL", "")
+	t.Setenv("UPDATE_EXECUTOR_WAKE_TOKEN_FILE", "")
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 	if err != nil {
 		t.Fatal(err)
@@ -183,9 +185,16 @@ func setupUpdateControllerTest(t *testing.T) (*gorm.DB, *gin.Engine, string) {
 	if err := db.Create(&users).Error; err != nil {
 		t.Fatal(err)
 	}
+	previousDB, previousModelsDB := database.DB, models.DB
 	database.DB = db
 	models.SetDB(db)
-	t.Cleanup(func() { database.DB = nil; models.SetDB(nil) })
+	t.Cleanup(func() {
+		database.DB = previousDB
+		models.SetDB(previousModelsDB)
+		if sqlDB, err := db.DB(); err == nil {
+			_ = sqlDB.Close()
+		}
+	})
 	_, rawToken, err := updates.NewTaskService(db).CreateCredential(models.PrimaryAdminUserID, "test executor")
 	if err != nil {
 		t.Fatal(err)
@@ -666,7 +675,12 @@ func TestUpdatePreparationCompletedFailureReturns429AndRetriesAfterCooldown(t *t
 	if err != nil || work.CheckRequested {
 		t.Fatalf("completed failed request advertised work: %#v err=%v", work, err)
 	}
-	if err := db.Model(&models.UpdateExecutorCredential{}).Where("id = ?", p.CredentialID).Update("check_requested_at", time.Now().UTC().Add(-31*time.Second)).Error; err != nil {
+	// Age the completed attempt explicitly instead of requiring two requests
+	// within one Windows clock tick to have strictly increasing timestamps.
+	expiredRequest := time.Now().UTC().Add(-31 * time.Second)
+	if err := db.Model(&models.UpdateExecutorCredential{}).Where("id = ?", p.CredentialID).Updates(map[string]interface{}{
+		"check_requested_at": expiredRequest, "checked_at": expiredRequest.Add(time.Second),
+	}).Error; err != nil {
 		t.Fatal(err)
 	}
 	retry := prepareUpdateHTTP(t, router, "primary", `{}`)
@@ -674,8 +688,9 @@ func TestUpdatePreparationCompletedFailureReturns429AndRetriesAfterCooldown(t *t
 		t.Fatalf("cooldown never released: %d %s", retry.Code, retry.Body.String())
 	}
 	next, wake := decodePreparationHTTP(t, retry)
-	if next.RequestedAt == nil || !next.RequestedAt.After(*p.RequestedAt) || wake != "unconfigured" {
-		t.Fatalf("retry did not persist new request: %#v wake=%s", next, wake)
+	persisted, err := service.PreparationStatus(buildinfo.Revision)
+	if err != nil || next.RequestedAt == nil || !next.RequestedAt.After(expiredRequest) || persisted.RequestedAt == nil || !persisted.RequestedAt.Equal(*next.RequestedAt) || wake != "unconfigured" {
+		t.Fatalf("retry did not persist new request: %#v persisted=%#v wake=%s err=%v", next, persisted, wake, err)
 	}
 }
 

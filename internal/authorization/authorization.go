@@ -40,9 +40,24 @@ const (
 	CapabilityAttachmentsPurgeBlob       Capability = "attachments.purge_blob"
 	CapabilityStorageView                Capability = "storage.view"
 	CapabilityStorageManage              Capability = "storage.manage"
-	CapabilityDatabaseView               Capability = "database.view"
-	CapabilityDatabaseBackup             Capability = "database.backup"
-	CapabilityDatabaseRestore            Capability = "database.restore"
+	CapabilityBackupDataView             Capability = "backup.data.view"
+	CapabilityBackupDataHistory          Capability = "backup.data.history"
+	CapabilityBackupDataCreate           Capability = "backup.data.create"
+	CapabilityBackupDataPlan             Capability = "backup.data.plan"
+	CapabilityBackupDataDownload         Capability = "backup.data.download"
+	CapabilityBackupDataRestore          Capability = "backup.data.restore"
+	CapabilityBackupAttachmentsView      Capability = "backup.attachments.view"
+	CapabilityBackupAttachmentsHistory   Capability = "backup.attachments.history"
+	CapabilityBackupAttachmentsCreate    Capability = "backup.attachments.create"
+	CapabilityBackupAttachmentsPlan      Capability = "backup.attachments.plan"
+	CapabilityBackupAttachmentsDownload  Capability = "backup.attachments.download"
+	CapabilityBackupAttachmentsRestore   Capability = "backup.attachments.restore"
+	CapabilityBackupServerConfigView     Capability = "backup.server_config.view"
+	CapabilityBackupServerConfigHistory  Capability = "backup.server_config.history"
+	CapabilityBackupServerConfigCreate   Capability = "backup.server_config.create"
+	CapabilityBackupServerConfigPlan     Capability = "backup.server_config.plan"
+	CapabilityBackupServerConfigDownload Capability = "backup.server_config.download"
+	CapabilityBackupServerConfigRestore  Capability = "backup.server_config.restore"
 	CapabilityVersionView                Capability = "version.view"
 	CapabilityVersionUpdate              Capability = "version.update"
 	CapabilitySecurityView               Capability = "security.view"
@@ -110,7 +125,10 @@ var catalog = []Definition{
 	{CapabilityRegistrationView, "registration", "查看注册申请", true}, {CapabilityRegistrationReview, "registration", "审核注册申请", true},
 	{CapabilityCommentsView, "comments", "查看互动", true}, {CapabilityCommentsViewHidden, "comments", "查看隐藏互动", true}, {CapabilityCommentsEdit, "comments", "编辑互动", true}, {CapabilityCommentsChangeVisibility, "comments", "调整互动可见范围", true}, {CapabilityCommentsTrash, "comments", "移入互动回收站", true}, {CapabilityCommentsRecycleBinView, "comments", "查看评论回收站", true}, {CapabilityCommentsRestore, "comments", "恢复互动", true}, {CapabilityCommentsDeletePermanently, "comments", "永久删除互动", true}, {CapabilityCommentsNotifyDeletion, "comments", "删除互动时通知作者", true},
 	{CapabilityAttachmentsView, "attachments", "查看附件", true}, {CapabilityAttachmentsDownload, "attachments", "下载附件", true}, {CapabilityAttachmentsDeleteReference, "attachments", "删除附件引用", true}, {CapabilityAttachmentsPurgeBlob, "attachments", "彻底删除附件文件", true},
-	{CapabilityStorageView, "storage", "查看存储", true}, {CapabilityStorageManage, "storage", "管理存储", true}, {CapabilityDatabaseView, "database", "查看数据库", true}, {CapabilityDatabaseBackup, "database", "备份数据库", true}, {CapabilityDatabaseRestore, "database", "恢复数据库", true}, {CapabilityVersionView, "version", "查看版本", true}, {CapabilityVersionUpdate, "version", "更新版本（仅站长）", false},
+	{CapabilityStorageView, "storage", "查看附件存储与处理", true}, {CapabilityStorageManage, "storage", "管理附件处理与安全压缩", true}, {CapabilityVersionView, "version", "查看版本", true}, {CapabilityVersionUpdate, "version", "更新版本（仅站长）", false},
+	{CapabilityBackupDataView, "backup-data", "查看数据备份", true}, {CapabilityBackupDataHistory, "backup-data", "查看数据备份记录", true}, {CapabilityBackupDataCreate, "backup-data", "生成数据备份", true}, {CapabilityBackupDataPlan, "backup-data", "管理数据备份计划", true}, {CapabilityBackupDataDownload, "backup-data", "下载数据备份（仅站长）", false}, {CapabilityBackupDataRestore, "backup-data", "恢复数据备份（仅站长）", false},
+	{CapabilityBackupAttachmentsView, "backup-attachments", "查看附件备份", true}, {CapabilityBackupAttachmentsHistory, "backup-attachments", "查看附件备份记录", true}, {CapabilityBackupAttachmentsCreate, "backup-attachments", "生成附件备份", true}, {CapabilityBackupAttachmentsPlan, "backup-attachments", "管理附件备份计划", true}, {CapabilityBackupAttachmentsDownload, "backup-attachments", "下载附件备份（仅站长）", false}, {CapabilityBackupAttachmentsRestore, "backup-attachments", "恢复附件备份（仅站长）", false},
+	{CapabilityBackupServerConfigView, "backup-server-config", "查看服务端配置备份（仅站长）", false}, {CapabilityBackupServerConfigHistory, "backup-server-config", "查看服务端配置备份记录（仅站长）", false}, {CapabilityBackupServerConfigCreate, "backup-server-config", "生成服务端配置备份（仅站长）", false}, {CapabilityBackupServerConfigPlan, "backup-server-config", "管理服务端配置备份计划（仅站长）", false}, {CapabilityBackupServerConfigDownload, "backup-server-config", "下载服务端配置备份（仅站长）", false}, {CapabilityBackupServerConfigRestore, "backup-server-config", "恢复服务端配置备份（仅站长）", false},
 	{CapabilitySecurityView, "security", "查看安全策略", true}, {CapabilitySecurityManage, "security", "管理安全策略", true}, {CapabilitySecurityClearLogs, "security", "清理攻击记录", true}, {CapabilityAccessLogsView, "access_logs", "查看访问日志", true}, {CapabilityAccessLogsClear, "access_logs", "清理访问日志", true}, {CapabilitySiteVisitsView, "site_visits", "查看访客记录", true}, {CapabilitySiteVisitsClear, "site_visits", "清理访客记录", true}, {CapabilityLoginAuditsView, "login_audits", "查看登录审计", true},
 	{CapabilitySiteSettingsView, "site", "查看站点设置", true}, {CapabilitySiteSettingsManage, "site", "管理站点设置", true}, {CapabilityAnnouncementsView, "announcements", "查看公告", true}, {CapabilityAnnouncementsManage, "announcements", "管理公告", true}, {CapabilityAnnouncementsPush, "announcements", "推送公告", true}, {CapabilityFeedView, "feed", "查看信息流", true}, {CapabilityNotificationsView, "notifications", "查看通知设置", true}, {CapabilityNotificationsManage, "notifications", "管理通知设置", true}, {CapabilityMusicView, "music", "查看音乐配置", true}, {CapabilityMusicManage, "music", "设置音乐配置", true}, {CapabilityEmailView, "email", "查看邮件配置", true}, {CapabilityEmailManage, "email", "管理邮件配置", true},
 	{CapabilityNotesView, "notes", "查看笔记", true}, {CapabilityNotesViewHidden, "notes", "查看隐藏笔记", true}, {CapabilityNotesEdit, "notes", "编辑笔记", true}, {CapabilityNotesVisibility, "notes", "调整笔记可见范围", true}, {CapabilityNotesPublishTime, "notes", "调整笔记发布时间", true}, {CapabilityNotesPinGlobal, "notes", "全站置顶笔记", true}, {CapabilityNotesTrash, "notes", "移入笔记回收站", true}, {CapabilityNotesNotifyDeletion, "notes", "删除笔记时通知作者", true}, {CapabilityNotesRecycleBinView, "notes", "查看笔记回收站", true}, {CapabilityNotesRestore, "notes", "恢复笔记", true}, {CapabilityNotesDelete, "notes", "永久删除笔记", true},
@@ -132,8 +150,21 @@ var parentCapabilities = map[Capability]Capability{
 	CapabilityAttachmentsDeleteReference: CapabilityAttachmentsView,
 	CapabilityAttachmentsPurgeBlob:       CapabilityAttachmentsView,
 	CapabilityStorageManage:              CapabilityStorageView,
-	CapabilityDatabaseBackup:             CapabilityDatabaseView,
-	CapabilityDatabaseRestore:            CapabilityDatabaseView,
+	CapabilityBackupDataHistory:          CapabilityBackupDataView,
+	CapabilityBackupDataCreate:           CapabilityBackupDataView,
+	CapabilityBackupDataPlan:             CapabilityBackupDataView,
+	CapabilityBackupDataDownload:         CapabilityBackupDataView,
+	CapabilityBackupDataRestore:          CapabilityBackupDataView,
+	CapabilityBackupAttachmentsHistory:   CapabilityBackupAttachmentsView,
+	CapabilityBackupAttachmentsCreate:    CapabilityBackupAttachmentsView,
+	CapabilityBackupAttachmentsPlan:      CapabilityBackupAttachmentsView,
+	CapabilityBackupAttachmentsDownload:  CapabilityBackupAttachmentsView,
+	CapabilityBackupAttachmentsRestore:   CapabilityBackupAttachmentsView,
+	CapabilityBackupServerConfigHistory:  CapabilityBackupServerConfigView,
+	CapabilityBackupServerConfigCreate:   CapabilityBackupServerConfigView,
+	CapabilityBackupServerConfigPlan:     CapabilityBackupServerConfigView,
+	CapabilityBackupServerConfigDownload: CapabilityBackupServerConfigView,
+	CapabilityBackupServerConfigRestore:  CapabilityBackupServerConfigView,
 	CapabilityVersionUpdate:              CapabilityVersionView,
 	CapabilitySecurityManage:             CapabilitySecurityView,
 	CapabilitySecurityClearLogs:          CapabilitySecurityView,
@@ -226,7 +257,9 @@ func (a *Authorizer) Authorize(actorID uint, capability Capability, targetOwnerU
 
 func isMutation(capability Capability) bool {
 	switch capability {
-	case CapabilityCommentsView, CapabilityCommentsViewHidden, CapabilityAttachmentsView, CapabilityAttachmentsDownload, CapabilityUsersView, CapabilityRegistrationView, CapabilityStorageView, CapabilityDatabaseView, CapabilityVersionView, CapabilitySecurityView, CapabilityAccessLogsView, CapabilitySiteVisitsView, CapabilityLoginAuditsView, CapabilitySiteSettingsView, CapabilityAnnouncementsView, CapabilityFeedView, CapabilityNotificationsView, CapabilityMusicView, CapabilityEmailView, CapabilityNotesView, CapabilityNotesViewHidden, CapabilityAuditView, CapabilityNotesRecycleBinView:
+	case CapabilityBackupDataView, CapabilityBackupDataHistory, CapabilityBackupDataDownload, CapabilityBackupAttachmentsView, CapabilityBackupAttachmentsHistory, CapabilityBackupAttachmentsDownload, CapabilityBackupServerConfigView, CapabilityBackupServerConfigHistory, CapabilityBackupServerConfigDownload:
+		return false
+	case CapabilityCommentsView, CapabilityCommentsViewHidden, CapabilityAttachmentsView, CapabilityAttachmentsDownload, CapabilityUsersView, CapabilityRegistrationView, CapabilityStorageView, CapabilityVersionView, CapabilitySecurityView, CapabilityAccessLogsView, CapabilitySiteVisitsView, CapabilityLoginAuditsView, CapabilitySiteSettingsView, CapabilityAnnouncementsView, CapabilityFeedView, CapabilityNotificationsView, CapabilityMusicView, CapabilityEmailView, CapabilityNotesView, CapabilityNotesViewHidden, CapabilityAuditView, CapabilityNotesRecycleBinView:
 		return false
 	}
 	return true

@@ -1265,8 +1265,7 @@ func GetStatus(currentUserID uint) (models.Status, error) {
 			}
 			dashboard.UsersRegistration = &models.AdminDashboardUsers{UserCount: len(allusers), RegistrationEnabled: registrationEnabled}
 		}
-		if authorizer.Authorize(currentUser.ID, authorization.CapabilityStorageView, nil).Allowed &&
-			authorizer.Authorize(currentUser.ID, authorization.CapabilityDatabaseView, nil).Allowed {
+		if currentUser.ID == models.PrimaryAdminUserID && currentUser.IsAdmin {
 			var config models.SiteConfig
 			if err := database.DB.Table("site_configs").Order("id ASC").First(&config).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 				return status, errors.New(models.GetStatusFailMessage)

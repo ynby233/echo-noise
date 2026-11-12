@@ -3,6 +3,7 @@ package services
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/rcy1314/echo-noise/internal/authorization"
 	"github.com/rcy1314/echo-noise/internal/database"
 	"github.com/rcy1314/echo-noise/internal/models"
 	"github.com/rcy1314/echo-noise/internal/syncmanager"
@@ -22,12 +23,16 @@ func GetFrontendConfig(viewerUserIDs ...uint) (map[string]interface{}, error) {
 
 	db, err := database.GetDB()
 	if err != nil {
-		return getDefaultConfig(), nil
+		defaults := getDefaultConfig()
+		filterStorageConfigForViewer(defaults, false, false)
+		return defaults, nil
 	}
 
 	var config models.SiteConfig
 	if err := db.Table("site_configs").First(&config).Error; err != nil {
-		return getDefaultConfig(), nil
+		defaults := getDefaultConfig()
+		filterStorageConfigForViewer(defaults, false, false)
+		return defaults, nil
 	}
 	scrubLegacySiteConfigValues(&config)
 
@@ -145,6 +150,7 @@ func GetFrontendConfig(viewerUserIDs ...uint) (map[string]interface{}, error) {
 			}
 		}
 	}
+	viewerCanViewStorage := viewerIsPrimaryAdmin || authorization.New(db).Authorize(viewerUserID, authorization.CapabilityStorageView, nil).Allowed
 	effectiveSyncConfirmed := config.StorageSyncConfirmed && syncmanager.IsStorageSyncConfirmedLocal()
 
 	configMap := map[string]interface{}{
@@ -354,7 +360,37 @@ func GetFrontendConfig(viewerUserIDs ...uint) (map[string]interface{}, error) {
 			delete(frontendSettings, "delegatedAdminLoginExpireHours")
 		}
 	}
+	filterStorageConfigForViewer(configMap, viewerIsPrimaryAdmin, viewerCanViewStorage)
 	return configMap, nil
+}
+
+// Keep connection details and credential state private to the owner. Delegated
+// storage viewers receive only the attachment mode and processing status.
+func filterStorageConfigForViewer(config map[string]interface{}, isOwner, canViewStorage bool) {
+	if isOwner {
+		return
+	}
+	delete(config, "storageEnabled")
+	config["storageConfig"] = map[string]interface{}{
+		"accessKey": "", "secretKey": "",
+		"accessKeyConfigured": false, "secretKeyConfigured": false,
+	}
+	attachmentConfig := map[string]interface{}{
+		"accessKey": "", "secretKey": "",
+		"accessKeyConfigured": false, "secretKeyConfigured": false,
+	}
+	if canViewStorage {
+		if original, ok := config["attachmentStorageConfig"].(map[string]interface{}); ok {
+			for _, field := range []string{"enableCompression", "ffmpegInstalled"} {
+				if value, exists := original[field]; exists {
+					attachmentConfig[field] = value
+				}
+			}
+		}
+	} else {
+		delete(config, "attachmentStorageEnabled")
+	}
+	config["attachmentStorageConfig"] = attachmentConfig
 }
 
 // UpdateSetting 更新站点配置

@@ -76,6 +76,7 @@
                   @update:model-value="toggleGroup(group, $event === true)"
                 />
               </div>
+              <p v-if="moduleDescriptions[group.module]" class="px-3 pt-3 text-xs leading-5" :class="theme?.mutedText || 'text-slate-500'">{{ moduleDescriptions[group.module] }}</p>
               <div class="authorization-capability-grid">
                 <div
                   v-for="item in group.rendered"
@@ -168,7 +169,7 @@ const flattenCapabilityTree = (items: Definition[]) => {
 }
 const capabilityDepth = (item: RenderedDefinition) => item.depth
 const groups = computed(() => {
-  const moduleOrder = ['account_security', 'audit', 'users', 'registration', 'attachments', 'storage', 'database', 'version', 'security', 'access_logs', 'site_visits', 'login_audits', 'site', 'announcements', 'feed', 'notifications', 'music', 'email', 'notes', 'comments']
+  const moduleOrder = ['account_security', 'audit', 'users', 'registration', 'attachments', 'storage', 'cloud-backup', 'backup-data', 'backup-attachments', 'backup-server-config', 'version', 'security', 'access_logs', 'site_visits', 'login_audits', 'site', 'announcements', 'feed', 'notifications', 'music', 'email', 'notes', 'comments']
   const map = new Map<string, Definition[]>()
   for (const item of catalog.value) map.set(item.module, [...(map.get(item.module) || []), item])
   return [...map.entries()].map(([module, items]) => ({
@@ -192,8 +193,11 @@ const moduleLabels: Record<string, string> = {
   registration: '注册审核',
   comments: '互动管理',
   attachments: '附件管理',
-  storage: '存储方案',
-  database: '数据库管理',
+  storage: '附件存储与处理',
+  'cloud-backup': '云备份连接配置',
+  'backup-data': '数据备份',
+  'backup-attachments': '附件备份',
+  'backup-server-config': '服务端配置备份',
   version: '版本与更新',
   security: '安全防护',
   access_logs: '访问日志',
@@ -208,6 +212,13 @@ const moduleLabels: Record<string, string> = {
   notes: '笔记管理',
 }
 const moduleLabel = (module: string) => moduleLabels[module] || module
+const moduleDescriptions: Record<string, string> = {
+  storage: '受托管理员可按授权查看和管理附件处理；存储位置、连接配置及凭据仅站长可查看和修改。',
+  'cloud-backup': '云备份连接配置仅站长可查看和修改，不随附件存储权限开放。',
+  'backup-data': '生成备份会将备份包保存到服务器或云端，不会下载到当前设备。查看、生成、计划和记录可分别授权；下载和恢复仅限站长。',
+  'backup-attachments': '生成备份会将附件包保存到服务器或云端，不会下载到当前设备。查看、生成、计划和记录可分别授权；下载和恢复仅限站长。',
+  'backup-server-config': '服务端配置可能包含敏感连接信息；整个模块及其全部操作仅限站长。',
+}
 const responseData = (body: any) => { if (body?.code !== 1) throw new Error(body?.msg || '请求失败'); return body.data }
 const load = async () => {
   loading.value = true

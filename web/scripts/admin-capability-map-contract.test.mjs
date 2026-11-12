@@ -51,3 +51,29 @@ assert.match(registry, /'site-rss': \(\) => import\('\.\/RssSection\.vue'\)/)
 assert.match(panel, /if \(section === 'site-rss'\) return isPrimaryAdmin\.value/)
 assert.match(panel, /'site-rss': \(\) => import\('\.\/RssSection\.vue'\)/)
 assert.match(panel, /'site-music': \(\) => import\('\.\/MusicSection\.vue'\)/)
+
+assert.equal(map.storage, 'storage.view')
+assert.equal(map['cloud-backup'], 'storage.view', 'legacy storage mapping must still have a separate primary-only navigation gate')
+assert.equal(map['backup-data'], 'backup.data.view')
+assert.equal(map['backup-attachments'], 'backup.attachments.view')
+assert.equal(map['backup-server-config'], 'backup.server_config.view')
+assert.equal(map.db, undefined, 'legacy database capabilities must not expose a navigation entry')
+
+const canSectionBody = panel.match(/const canSection = \(section: AdminSectionKey\) => \{([\s\S]*?)\n\}/)?.[1]
+assert.ok(canSectionBody, 'navigation access predicate must be available for behavioral coverage')
+const evaluateSection = new Function('section', 'isAdmin', 'isPrimaryAdmin', 'sectionCapabilities', 'can', canSectionBody)
+const allowed = (section, grants = [], primary = false, admin = true) => evaluateSection(section, { value: admin }, { value: primary }, map, capability => primary || grants.includes(capability))
+for (const section of ['storage', 'backup-data', 'backup-attachments']) {
+  assert.equal(allowed(section), false, `${section} requires its own view capability`)
+  assert.equal(allowed(section, [map[section]]), true, `${section} is accessible with its view capability`)
+  assert.equal(allowed(section, [map[section]], false, false), false, `${section} remains an admin context`)
+}
+for (const section of ['cloud-backup', 'backup-server-config']) {
+  assert.equal(allowed(section, Object.values(map)), false, `${section} must remain hidden even with every delegated grant`)
+  assert.equal(allowed(section, [], true), true, `${section} is available to the primary administrator`)
+}
+for (const section of ['backup-data', 'backup-attachments']) {
+  for (const action of ['create', 'download', 'restore', 'plan', 'history']) {
+    assert.equal(allowed(section, [map[section].replace(/view$/, action)]), false, `${action} cannot bypass the ${section} view prerequisite`)
+  }
+}

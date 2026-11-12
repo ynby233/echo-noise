@@ -71,7 +71,14 @@ func TestOfflineWALArchiveAndActualRestore(t *testing.T) {
 	if !found {
 		t.Fatal("configuration not archived")
 	}
-	restored := Layout{DatabasePath: filepath.Join(root, "restored", "db"), Roots: []Root{{"attachment-blobs", filepath.Join(root, "restored-blobs")}, {"images", filepath.Join(root, "restored-images")}}}
+	targetConfig := filepath.Join(root, "restored-config")
+	if err := os.Mkdir(targetConfig, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(targetConfig, "file"), []byte("keep-target-config"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	restored := Layout{DatabasePath: filepath.Join(root, "restored", "db"), ConfigDir: targetConfig, Roots: []Root{{"attachment-blobs", filepath.Join(root, "restored-blobs")}, {"images", filepath.Join(root, "restored-images")}}}
 	if _, err := StageRestoreWithResult(archive, restored); err != nil {
 		t.Fatal(err)
 	}
@@ -81,6 +88,9 @@ func TestOfflineWALArchiveAndActualRestore(t *testing.T) {
 	}
 	if err := applied.Commit(); err != nil {
 		t.Fatal(err)
+	}
+	if got, err := os.ReadFile(filepath.Join(targetConfig, "file")); err != nil || string(got) != "keep-target-config" {
+		t.Fatalf("legacy restore changed target configuration: %q %v", got, err)
 	}
 	check, err := OpenOffline(restored.DatabasePath, false)
 	if err != nil {
