@@ -81,15 +81,20 @@ const handleHttpStatusError = <T>(status: any, msg?: string, options?: { silent?
     return null
 }
 
+// Read the current store for every request so login/logout takes effect immediately.
+// An absent token must leave authentication to the session or anonymous access.
+const getAuthHeaders = (): Record<string, string> => {
+    const token = useUserStore().token;
+    return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 export const postRequest = async <T>(url: string, body: object | FormData, options?: { credentials?: RequestCredentials; silent?: boolean; signal?: AbortSignal; timeout?: number }) => {
     const BASE_API = useRuntimeConfig().public.baseApi || '/api';
-    const userStore = useUserStore();
-    const token = userStore.token || "null";
 
     try {
         const isFormData = body instanceof FormData;
         const headers: Record<string, string> = {
-            'Authorization': `Bearer ${token}`,
+            ...getAuthHeaders(),
             ...(!isFormData ? { 'Content-Type': 'application/json' } : {})
         };
 
@@ -120,8 +125,6 @@ export const postRequest = async <T>(url: string, body: object | FormData, optio
 
 export const getRequest = async <T>(url: string, params?: any, options?: { credentials?: RequestCredentials; silent?: boolean; signal?: AbortSignal; timeout?: number }) => {
     const BASE_API = useRuntimeConfig().public.baseApi || '/api';
-    const userStore = useUserStore();
-    const token = userStore.token || "null";
 
     try {
         const queryParamString = params ? "?" + Object.keys(params).map(key => key + "=" + params[key]).join("&") : "";
@@ -129,7 +132,7 @@ export const getRequest = async <T>(url: string, params?: any, options?: { crede
         const response: Response<T> = await $fetch(`${BASE_API}/${url}${queryParamString}`, {
             method: 'GET',
             headers: {
-                'Authorization': `Bearer ${token}`,
+                ...getAuthHeaders(),
                 'Cache-Control': 'no-cache',
                 'Pragma': 'no-cache'
             },
@@ -157,15 +160,13 @@ export const getRequest = async <T>(url: string, params?: any, options?: { crede
 export const putRequest = async <T>(url: string, body?: object, options?: { credentials?: RequestCredentials; silent?: boolean; signal?: AbortSignal }) => {
     const BASE_API = useRuntimeConfig().public.baseApi || '/api';
     const toast = useToast();
-    const userStore = useUserStore();
-    const token = userStore.token || "null";
 
     try {
         const response: Response<T> = await $fetch(`${BASE_API}/${url}`, {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`,
+                ...getAuthHeaders(),
             },
             body: JSON.stringify(body),
             credentials: options?.credentials,
@@ -207,8 +208,6 @@ export const putRequest = async <T>(url: string, body?: object, options?: { cred
 
 export const deleteRequest = async <T>(url: string, params?: any, options?: { credentials?: RequestCredentials; silent?: boolean; signal?: AbortSignal }) => {
     const BASE_API = useRuntimeConfig().public.baseApi || '/api';
-    const userStore = useUserStore();
-    const token = userStore.token || "null";
 
     try {
         const queryParamString = params ? "?" + Object.keys(params).map(key => key + "=" + params[key]).join("&") : "";
@@ -216,7 +215,7 @@ export const deleteRequest = async <T>(url: string, params?: any, options?: { cr
         const response: Response<T> = await $fetch(`${BASE_API}/${url}${queryParamString}`, {
             method: 'DELETE',
             headers: {
-                'Authorization': `Bearer ${token}`,
+                ...getAuthHeaders(),
             },
             credentials: options?.credentials,
             signal: options?.signal

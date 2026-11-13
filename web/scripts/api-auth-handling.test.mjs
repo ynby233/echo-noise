@@ -63,6 +63,88 @@ const reset = () => {
 
 try {
   reset()
+  const makeRequestCases = (client) => [
+    ['GET', () => client.getRequest('messages/page', { page: 1 }, requestOptions)],
+    ['POST', () => client.postRequest('messages/page', { page: 1 }, requestOptions)],
+    ['PUT', () => client.putRequest('user/update', { username: 'reader' }, requestOptions)],
+    ['DELETE', () => client.deleteRequest('messages/1', undefined, requestOptions)],
+    ['POST', () => client.postRequest('upload', uploadBody, requestOptions)],
+  ]
+  const requestOptions = { credentials: 'include', silent: true, signal: new AbortController().signal }
+  const uploadBody = new FormData()
+  uploadBody.append('file', new Blob(['test']), 'test.txt')
+  const requestCases = makeRequestCases(api)
+  let sent
+  globalThis.__fetch = async (url, options) => {
+    sent = { url, ...options }
+    return { code: 1, data: {} }
+  }
+  // Reuse one module/store through first visit, login, token rotation and logout.
+  // Session-only logins and bearer-only clients must also keep working.
+  for (const state of [
+    { isLogin: false, token: '' },
+    { isLogin: true, token: 'valid-token' },
+    { isLogin: true, token: 'rotated-token' },
+    { isLogin: true, token: '' },
+    { isLogin: false, token: 'bearer-only-token' },
+    { isLogin: false, token: '' },
+    { isLogin: false, token: null },
+    { isLogin: false, token: undefined },
+  ]) {
+    Object.assign(globalThis.__userStore, state)
+    for (const [method, request] of requestCases) {
+      assert.equal((await request()).code, 1)
+      assert.equal(sent.method, method)
+      const headers = new Headers(sent.headers)
+      assert.equal(headers.get('Authorization'), state.token ? `Bearer ${state.token}` : null,
+        `${method} must send only a current, present token`)
+      assert.equal(sent.credentials, 'include', 'session credentials must be preserved without a bearer')
+      assert.equal(sent.signal, requestOptions.signal)
+      if (sent.body === uploadBody) {
+        assert.equal(headers.has('Content-Type'), false, 'fetch must generate the multipart boundary')
+      } else if (method === 'POST' || method === 'PUT') {
+        assert.equal(headers.get('Content-Type'), 'application/json')
+        assert.doesNotThrow(() => JSON.parse(sent.body))
+      }
+    }
+  }
+  assert.equal(globalThis.__events.cleared, false)
+  assert.equal(globalThis.__events.toasts.length, 0)
+  assert.equal(globalThis.window.location.href, '')
+
+  // Public endpoints still reject actual invalid credentials. Only genuinely
+  // anonymous requests may continue without an authentication recovery redirect.
+  for (const [index, [method]] of requestCases.entries()) {
+    for (const loggedIn of [false, true]) {
+      reset()
+      // Each failure case represents a separate page lifetime, including the
+      // redirect guard; the original module remains isolated for later tests.
+      const client = await import(`${pathToFileURL(outfile).href}?failure=${index}-${loggedIn}`)
+      const request = makeRequestCases(client)[index][1]
+      globalThis.__userStore.isLogin = loggedIn
+      globalThis.__userStore.token = loggedIn ? 'revoked-token' : ''
+      globalThis.__fetch = async (_url, options) => {
+        assert.equal(new Headers(options.headers).get('Authorization'), loggedIn ? 'Bearer revoked-token' : null)
+        const error = new Error('Unauthorized')
+        error.response = { status: 401, _data: { error: 'invalid_credentials', msg: '凭据无效或已撤销' } }
+        throw error
+      }
+      assert.equal((await request()).code, 0, `${method} must preserve HTTP authentication failures`)
+      assert.equal(globalThis.__events.cleared, loggedIn)
+      if (loggedIn) {
+        assert.match(globalThis.window.location.href, /\/auth\/guide\?reason=expired/)
+        globalThis.__fetch = async (_url, options) => {
+          assert.equal(new Headers(options.headers).has('Authorization'), false, 'cleared state must affect the next request')
+          return { code: 1, data: {} }
+        }
+        assert.equal((await request()).code, 1)
+      } else {
+        assert.equal(globalThis.window.location.href, '', 'guest 401 must not cause a login-expiry redirect')
+      }
+    }
+  }
+
+  reset()
   const timeouts = []
   globalThis.__fetch = async (_url, options) => { timeouts.push([options.timeout, options.retry]); return { code: 1, data: {} } }
   await api.getRequest('updates', undefined, { silent: true, timeout: 60000 })
