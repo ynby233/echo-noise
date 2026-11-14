@@ -134,6 +134,43 @@ func (productionManagedCloud) Delete(ctx context.Context, key string) error {
 	return store.Delete(ctx, name)
 }
 
+// activeJob only holds activeMu while reading the map, never across I/O or DB locks.
+func (m *Manager) activeJob(id string) bool {
+	m.activeMu.Lock()
+	defer m.activeMu.Unlock()
+	_, active := m.active[id]
+	return active
+}
+
+func recoverableRecord(record models.ManagedBackupRecord) bool {
+	return record.Status == "running" || record.Status == "interrupted"
+}
+
+// Call with operationMu held, after local validation. Cloud discovery may later
+// recover these rows, but listing metadata alone is never proof of completion.
+func (m *Manager) interruptInactive(ctx context.Context, db *gorm.DB, kind string) error {
+	query := db.WithContext(ctx).Where("status = ?", "running")
+	if kind != "" {
+		query = query.Where("kind = ?", kind)
+	}
+	var records []models.ManagedBackupRecord
+	if err := query.Find(&records).Error; err != nil {
+		return err
+	}
+	for _, record := range records {
+		if m.activeJob(record.ID) {
+			continue
+		}
+		finished := m.now().UTC()
+		if err := db.WithContext(ctx).Model(&record).Where("status = ?", "running").Updates(map[string]interface{}{
+			"status": "interrupted", "error": "备份任务已中断，尚未发现通过校验的完整备份归档", "finished_at": finished, "local": false, "cloud": false,
+		}).Error; err != nil {
+			return err
+		}
+	}
+	return ctx.Err()
+}
+
 // discoverLocal requires operationMu. Callers already creating a backup must
 // not acquire it again. Only validated archives in the dedicated directory are
 // eligible for discovery; unknown or damaged files are left untouched.
@@ -169,7 +206,7 @@ func (m *Manager) discoverLocal(ctx context.Context, kind string) error {
 			}
 			name := entry.Name()
 			id := strings.TrimSuffix(name, ".zip")
-			if name != id+".zip" || !validRecordID(id) {
+			if name != id+".zip" || !validRecordID(id) || m.activeJob(id) {
 				continue
 			}
 			path := filepath.Join(m.Directory(current), name)
@@ -192,7 +229,16 @@ func (m *Manager) discoverLocal(ctx context.Context, kind string) error {
 				if err != nil {
 					return err
 				}
-				if record.Kind != current || record.Status != "success" || record.Size != info.Size() {
+				if record.Kind != current {
+					return nil
+				}
+				if recoverableRecord(record) {
+					finished := info.ModTime().UTC()
+					return tx.Model(&record).Updates(map[string]interface{}{
+						"status": "success", "size": info.Size(), "finished_at": finished, "local": true, "error": "",
+					}).Error
+				}
+				if record.Status != "success" || record.Size != info.Size() {
 					return nil
 				}
 				return tx.Model(&record).Update("local", true).Error
@@ -202,20 +248,28 @@ func (m *Manager) discoverLocal(ctx context.Context, kind string) error {
 			}
 		}
 	}
-	return ctx.Err()
+	return m.interruptInactive(ctx, db, kind)
 }
 
-// Discover rebuilds cloud history on a clean database. It lists only the managed
-// namespaces, never legacy backup.zip or attachment content. A complete listing
-// is required before updating availability; failed listings leave audit rows as-is.
-// No archive is copied locally and discovery never initiates a restore.
-func (m *Manager) Discover(ctx context.Context, kind string) error {
+// Discover reconciles local archives and cloud history under operationMu. Cloud
+// metadata can rediscover unknown IDs, but interrupted jobs require validated
+// archive bytes before promotion. No archive is published locally or restored.
+func (m *Manager) Discover(ctx context.Context, kind string) (resultErr error) {
 	if kind != "" && !validKind(kind) {
 		return errors.New("无效的备份类型")
 	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	// Keep the global operation -> cloud lock order used by execute. In particular,
+	// do not hold cloudMu while waiting for an executing job's operation lock.
+	releaseOperation, err := LockOperationContext(ctx)
+	if err != nil {
+		return err
+	}
+	defer releaseOperation()
+	localErr := m.discoverLocal(ctx, kind)
+	defer func() { resultErr = errors.Join(localErr, resultErr) }()
 	if !m.cloud.Enabled() {
 		return nil
 	}
@@ -242,6 +296,29 @@ func (m *Manager) Discover(ctx context.Context, kind string) error {
 	db, err := m.store()
 	if err != nil {
 		return err
+	}
+	// Cloud I/O must happen before opening a DB transaction: cloud integrations
+	// may themselves consult the store, including with a single connection pool.
+	for _, current := range kinds {
+		for _, object := range byKind[current] {
+			id, ok := managedObjectID(current, object.Key)
+			if !ok || object.Size <= 0 || object.Modified.IsZero() || m.activeJob(id) {
+				continue
+			}
+			var record models.ManagedBackupRecord
+			err := db.WithContext(ctx).First(&record, "id = ?", id).Error
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				continue
+			}
+			if err != nil {
+				return err
+			}
+			if record.Kind == current && recoverableRecord(record) {
+				if err := m.validateRemoteArchive(ctx, current, object); err != nil {
+					return fmt.Errorf("校验中断任务的云备份失败: %w", err)
+				}
+			}
+		}
 	}
 	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		for _, current := range kinds {
@@ -271,7 +348,19 @@ func (m *Manager) Discover(ctx context.Context, kind string) error {
 				if record.Kind != current {
 					return errors.New("云备份 ID 与已有备份类型冲突")
 				}
-				// Do not turn a running or failed upload into a successful backup.
+				if m.activeJob(id) {
+					continue
+				}
+				if recoverableRecord(record) {
+					finished := object.Modified.UTC()
+					if err := tx.Model(&record).Updates(map[string]interface{}{
+						"status": "success", "size": object.Size, "finished_at": finished, "cloud": true, "cloud_key": object.Key, "error": "",
+					}).Error; err != nil {
+						return err
+					}
+					continue
+				}
+				// A failed/canceled upload retains its original outcome even if listed.
 				if record.Status != "success" {
 					continue
 				}
@@ -297,6 +386,39 @@ func (m *Manager) Discover(ctx context.Context, kind string) error {
 		}
 		return ctx.Err()
 	})
+}
+
+// Validate remote bytes rather than trusting an object's key, size or timestamp.
+// The temporary file is never published as a local backup.
+func (m *Manager) validateRemoteArchive(ctx context.Context, kind string, object managedObject) error {
+	reader, err := m.cloud.Open(ctx, object.Key)
+	if err != nil {
+		return err
+	}
+	defer reader.Close()
+	file, err := os.CreateTemp("", "managed-discovery-*.zip")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(file.Name())
+	written, copyErr := io.Copy(file, io.LimitReader(reader, object.Size))
+	var extra [1]byte
+	n, endErr := io.ReadFull(reader, extra[:])
+	closeErr := file.Close()
+	if err := errors.Join(copyErr, closeErr, ctx.Err()); err != nil {
+		return err
+	}
+	if written != object.Size || n != 0 || endErr != io.EOF {
+		return errors.New("云备份实际大小与列表不一致")
+	}
+	inspection, err := backup.InspectTypedArchive(file.Name())
+	if err != nil {
+		return err
+	}
+	if inspection.Legacy || string(inspection.Kind) != kind {
+		return errors.New("云备份归档类型不匹配")
+	}
+	return ctx.Err()
 }
 
 // Retention only prunes a destination replaced by this successful backup. All

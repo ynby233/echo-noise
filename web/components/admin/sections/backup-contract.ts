@@ -6,7 +6,7 @@ export type BackupRecord = { id: string, kind: BackupKind, createdAt: string, tr
 export const backupCapability = (kind: BackupKind, action: string) => `backup.${kind === 'server-config' ? 'server_config' : kind}.${action}`
 export const backupLabels = { data: '数据备份', attachments: '附件备份', 'server-config': '服务端配置备份' }
 export const backupScopes = { data: '当前仅支持 SQLite 数据库快照，包含笔记、互动、账号及业务数据，不包含附件文件和服务端配置。MySQL、PostgreSQL 暂不支持此备份与恢复方式。', attachments: '附件文件及其存储信息，不包含业务数据库和服务端配置。', 'server-config': '备份 config/config.yaml 和 config/runtime.env，可能包含敏感连接信息。范围不含容器编排、宿主机其他文件或独立挂载的密钥。' }
-export const backupRecordStatus = (status: string) => ({ running: '进行中', success: '成功', failed: '失败', canceled: '已取消' } as Record<string, string>)[status] || '未知状态'
+export const backupRecordStatus = (status: string) => ({ running: '进行中', success: '成功', failed: '失败', canceled: '已取消', interrupted: '已中断' } as Record<string, string>)[status] || '未知状态'
 export const backupPlanInput = (plan: BackupPlan) => {
   if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(plan.time) || !plan.timezone.trim() || ![plan.keepLocal, plan.keepCloud].every(value => Number.isInteger(value) && value >= 1 && value <= 1000)) throw new Error('请填写有效时间、时区和 1–1000 的保留数量')
   try { new Intl.DateTimeFormat('zh-CN', { timeZone: plan.timezone.trim() }) } catch { throw new Error('请填写有效时区，例如 Asia/Shanghai') }

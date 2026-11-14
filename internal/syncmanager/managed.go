@@ -237,6 +237,13 @@ func (m *Manager) Start(ctx context.Context) {
 	m.done = make(chan struct{})
 	go func(done chan struct{}) {
 		defer close(done)
+		// A restored data snapshot contains its own unfinished history row.
+		// Reconcile once at startup as well as on explicit history refreshes.
+		discoveryCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+		if err := m.Discover(discoveryCtx, ""); err != nil && ctx.Err() == nil {
+			log.Printf("托管备份中断任务核对失败: %v", err)
+		}
+		cancel()
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
 		for {
@@ -512,16 +519,8 @@ func (m *Manager) HistoryContext(ctx context.Context, kind string) ([]models.Man
 		return nil, errors.New("无效的备份类型")
 	}
 	discoveryCtx, cancelDiscovery := context.WithTimeout(ctx, 15*time.Second)
-	release, err := LockOperationContext(discoveryCtx)
-	var localErr error
-	if err != nil {
-		localErr = err
-	} else {
-		localErr = m.discoverLocal(discoveryCtx, kind)
-		release()
-	}
 	discoveryErr := m.Discover(discoveryCtx, kind)
-	warningErr := errors.Join(localErr, discoveryErr)
+	warningErr := discoveryErr
 	cancelDiscovery()
 	if ctx.Err() != nil {
 		return nil, ctx.Err()

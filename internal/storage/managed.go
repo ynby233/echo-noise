@@ -40,8 +40,14 @@ type ManagedObject struct {
 }
 
 func NewManagedStore(site models.SiteConfig, kind string) (*ManagedStore, error) {
-	if !site.StorageEnabled || (kind != "data" && kind != "attachments" && kind != "server-config") || strings.TrimSpace(site.StorageBucket) == "" || strings.TrimSpace(site.StorageAccessKey) == "" || strings.TrimSpace(site.StorageSecretKey) == "" {
-		return nil, errors.New("managed backup storage configuration or kind is invalid")
+	if kind != "data" && kind != "attachments" && kind != "server-config" {
+		return nil, errors.New("无效的云备份类型")
+	}
+	if !site.StorageEnabled {
+		return nil, errors.New("云备份连接尚未启用，请由站长在“备份与恢复 → 云连接”中配置并启用")
+	}
+	if strings.TrimSpace(site.StorageBucket) == "" || strings.TrimSpace(site.StorageAccessKey) == "" || strings.TrimSpace(site.StorageSecretKey) == "" {
+		return nil, errors.New("云备份连接配置不完整，请由站长补齐 Bucket、Access Key 和 Secret Key 后重试")
 	}
 	client, err := getS3Client(site)
 	if err != nil {

@@ -302,6 +302,7 @@ test('history statuses distinguish running and cancellation and partial copies r
   assert.equal(contract.backupRecordStatus('running'), '进行中')
   assert.equal(contract.backupRecordStatus('canceled'), '已取消')
   assert.equal(contract.backupRecordStatus('failed'), '失败')
+  assert.equal(contract.backupRecordStatus('interrupted'), '已中断')
   assert.match(workbench, /v-if="record.local \|\| record.cloud"/)
   assert.match(workbench, /aria-live="polite"/)
   assert.match(workbench, /type="file"[^>]*class="backup-file-input"/)

@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -11,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
 	"github.com/rcy1314/echo-noise/internal/authorization"
+	backupservice "github.com/rcy1314/echo-noise/internal/backup"
 	"github.com/rcy1314/echo-noise/internal/database"
 	"github.com/rcy1314/echo-noise/internal/models"
 	"gorm.io/gorm"
@@ -117,6 +119,51 @@ func TestManagedBackupJSONRejectsDestinationOverridesAndTrailingObjects(t *testi
 		}
 		if err := managedBackupJSON(c, &input); err == nil {
 			t.Fatalf("accepted unsafe payload %s", body)
+		}
+	}
+}
+
+func TestManagedRestoreReturnsEachWarningOnlyOnce(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	root := t.TempDir()
+	t.Chdir(root)
+	db := managedControllerDatabase(t)
+	if err := db.AutoMigrate(&models.Message{}, &models.SiteConfig{}); err != nil {
+		t.Fatal(err)
+	}
+	archive := filepath.Join(root, "data.zip")
+	layout := backupservice.Layout{DatabasePath: filepath.Join(root, "source.db"), PlainPasswordStorePath: filepath.Join(root, "missing-passwords.db"), ConfigDir: filepath.Join(root, "config")}
+	if err := backupservice.CreateTypedArchive(context.Background(), archive, db, layout, backupservice.KindData, ""); err != nil {
+		t.Fatal(err)
+	}
+	inspection, err := backupservice.InspectTypedArchive(archive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("DB_PATH", filepath.Join(root, "target", "noise.db"))
+	t.Setenv("ATTACHMENT_BLOB_ROOT", filepath.Join(root, "blobs"))
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/restore", nil)
+	c.Set("user_id", uint(1))
+	managedBackupStage(c, archive, "original", "data")
+	if recorder.Code != http.StatusAccepted {
+		t.Fatalf("restore: %d %s", recorder.Code, recorder.Body.String())
+	}
+	var response struct {
+		Data struct {
+			Warnings []string `json:"warnings"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Data.Warnings) != len(inspection.Warnings) || len(response.Data.Warnings) == 0 {
+		t.Fatalf("warnings were duplicated or omitted: %#v", response.Data.Warnings)
+	}
+	for i, warning := range response.Data.Warnings {
+		if warning != inspection.Warnings[i] {
+			t.Fatalf("warning %d: got %q, want %q", i, warning, inspection.Warnings[i])
 		}
 	}
 }

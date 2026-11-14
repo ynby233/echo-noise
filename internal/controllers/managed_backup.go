@@ -434,8 +434,5 @@ func managedBackupStage(c *gin.Context, path, mode, expectedKind string) {
 	if warnings == nil {
 		warnings = []string{}
 	}
-	if result.Warning != "" {
-		warnings = append(warnings, result.Warning)
-	}
 	c.JSON(http.StatusAccepted, gin.H{"code": 1, "data": gin.H{"message": "备份已校验并暂存，请重启服务后完成恢复", "restartRequired": true, "pendingRestart": true, "warnings": warnings}})
 }

@@ -1,7 +1,10 @@
 package syncmanager
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -196,8 +199,10 @@ func TestManagedLocalDiscoveryOnlyUpdatesMatchingSuccessfulRecords(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, status := range []string{"success", "failed", "running", "canceled"} {
+	statuses := make(map[string]string)
+	for _, status := range []string{"success", "failed", "running", "interrupted", "canceled"} {
 		id, path := localDiscoveryArchive(t, m, m.now().Add(-time.Hour))
+		statuses[id] = status
 		info, err := os.Stat(path)
 		if err != nil {
 			t.Fatal(err)
@@ -206,6 +211,10 @@ func TestManagedLocalDiscoveryOnlyUpdatesMatchingSuccessfulRecords(t *testing.T)
 		if err := db.Create(&record).Error; err != nil {
 			t.Fatal(err)
 		}
+	}
+	var running int64
+	if err := db.Model(&models.ManagedBackupRecord{}).Where("status IN ?", []string{"running", "interrupted"}).Count(&running).Error; err != nil || running != 2 {
+		t.Fatalf("recovery fixtures: count=%d err=%v", running, err)
 	}
 	id, path := localDiscoveryArchive(t, m, m.now())
 	info, err := os.Stat(path)
@@ -217,13 +226,232 @@ func TestManagedLocalDiscoveryOnlyUpdatesMatchingSuccessfulRecords(t *testing.T)
 		t.Fatal(err)
 	}
 	history, err := m.History("server-config")
-	if err != nil || len(history) != 5 {
+	if err != nil || len(history) != 6 {
 		t.Fatalf("history=%+v err=%v", history, err)
 	}
 	for _, record := range history {
-		wantLocal := record.Status == "success" && record.ID != mismatch.ID
+		wantLocal := record.ID != mismatch.ID && (statuses[record.ID] == "success" || statuses[record.ID] == "running" || statuses[record.ID] == "interrupted")
+		original := statuses[record.ID]
+		if (original == "running" || original == "interrupted") && (record.Status != "success" || record.FinishedAt == nil || record.Error != "") {
+			t.Fatalf("recovered record missing completion metadata: %+v", record)
+		}
 		if record.Local != wantLocal || record.Trigger == "discovered" {
 			t.Fatalf("existing record overwritten: %+v", record)
 		}
+		if original != "running" && original != "interrupted" && record.ID != mismatch.ID && record.Status != original {
+			t.Fatalf("terminal status overwritten: %+v", record)
+		}
+	}
+}
+
+func TestManagedLocalDiscoveryRecoversRunningSelfFromDataSnapshot(t *testing.T) {
+	t.Setenv("DB_TYPE", "sqlite")
+	m := localDiscoveryManager(t)
+	db, err := m.store()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&models.User{}, &models.Message{}, &models.SiteConfig{}); err != nil {
+		t.Fatal(err)
+	}
+	created, err := m.Create(context.Background(), "data", "local", "", "manual")
+	if err != nil {
+		t.Fatal(err)
+	}
+	path, err := m.recordPath(created)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	z, err := zip.OpenReader(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer z.Close()
+	snapshotPath := filepath.Join(t.TempDir(), "snapshot.db")
+	found := false
+	for _, entry := range z.File {
+		if entry.Name != "database.db" {
+			continue
+		}
+		reader, err := entry.Open()
+		if err != nil {
+			t.Fatal(err)
+		}
+		snapshot, readErr := io.ReadAll(reader)
+		closeErr := reader.Close()
+		if readErr != nil || closeErr != nil {
+			t.Fatalf("extract database: read=%v close=%v", readErr, closeErr)
+		}
+		if err := os.WriteFile(snapshotPath, snapshot, 0600); err != nil {
+			t.Fatal(err)
+		}
+		found = true
+	}
+	if !found {
+		t.Fatal("data archive lacks database.db")
+	}
+	// Close the ZIP before retention removes it, including on Windows.
+	if err := z.Close(); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := backup.OpenOffline(snapshotPath, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sqlDB, err := snapshot.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sqlDB.Close()
+	var self models.ManagedBackupRecord
+	if err := snapshot.First(&self, "id = ?", created.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if self.Status != "running" || self.Local || self.Cloud || self.Size != 0 || self.FinishedAt != nil {
+		t.Fatalf("archive must contain its actual unfinished self row: %+v", self)
+	}
+	// Restore the archived row, rather than synthesizing a running record.
+	if err := db.Delete(&models.ManagedBackupRecord{}, "id = ?", created.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&self).Error; err != nil {
+		t.Fatal(err)
+	}
+	restarted := NewManager()
+	restarted.db, restarted.root, restarted.layout = m.db, m.root, m.layout
+	restarted.cloud, restarted.now = m.cloud, m.now
+	history, err := restarted.History("data")
+	if err != nil || len(history) != 1 {
+		t.Fatalf("restored history=%+v err=%v", history, err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	recovered := history[0]
+	if recovered.ID != self.ID || recovered.Status != "success" || !recovered.Local || recovered.Cloud || recovered.Size != info.Size() || recovered.Error != "" || recovered.FinishedAt == nil || !recovered.FinishedAt.Equal(info.ModTime()) || !recovered.CreatedAt.Equal(self.CreatedAt) || recovered.Trigger != self.Trigger || recovered.Target != self.Target || recovered.Scope != self.Scope {
+		t.Fatalf("recovered self metadata=%+v archived self=%+v", recovered, self)
+	}
+	reader, name, err := restarted.Open(context.Background(), self.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	opened, readErr := io.ReadAll(reader)
+	closeErr := reader.Close()
+	if readErr != nil || closeErr != nil || !bytes.Equal(opened, body) || name != "data-"+self.ID+".zip" {
+		t.Fatalf("open recovered archive: name=%q read=%v close=%v", name, readErr, closeErr)
+	}
+	plan := managedPlan("data", "local")
+	plan.KeepLocal = 1
+	if _, err := restarted.SavePlan(plan); err != nil {
+		t.Fatal(err)
+	}
+	restarted.now = func() time.Time { return self.CreatedAt.Add(time.Hour) }
+	replacement, err := restarted.Create(context.Background(), "data", "local", "", "manual")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if replacement.Status != "success" || !replacement.Local {
+		t.Fatalf("replacement=%+v", replacement)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("restored archive not pruned: %v", err)
+	}
+	var pruned models.ManagedBackupRecord
+	if err := db.First(&pruned, "id = ?", self.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if pruned.Local || pruned.Status != "success" {
+		t.Fatalf("pruned audit record=%+v", pruned)
+	}
+}
+
+func TestManagedLocalDiscoveryRunningWithoutCompleteArchiveIsInterrupted(t *testing.T) {
+	for _, state := range []string{"missing", "invalid", "partial"} {
+		t.Run(state, func(t *testing.T) {
+			m := localDiscoveryManager(t)
+			db, err := m.store()
+			if err != nil {
+				t.Fatal(err)
+			}
+			id, path := localDiscoveryArchive(t, m, m.now().Add(-time.Hour))
+			switch state {
+			case "missing":
+				err = os.Remove(path)
+			case "invalid":
+				err = os.WriteFile(path, []byte("invalid zip"), 0600)
+			case "partial":
+				err = os.Rename(path, path+".partial")
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			record := models.ManagedBackupRecord{ID: id, Kind: "server-config", Status: "running", Target: "local", Trigger: "manual", Scope: "default", CreatedAt: m.now().Add(-2 * time.Hour), Local: true, Cloud: true}
+			if err := db.Create(&record).Error; err != nil {
+				t.Fatal(err)
+			}
+			history, err := m.History("server-config")
+			if err != nil || len(history) != 1 {
+				t.Fatalf("history=%+v err=%v", history, err)
+			}
+			var got models.ManagedBackupRecord
+			if err := db.First(&got, "id = ?", id).Error; err != nil {
+				t.Fatal(err)
+			}
+			if got.Status != "interrupted" || got.Local || got.Cloud || got.Error == "" || got.FinishedAt == nil || !got.FinishedAt.Equal(m.now()) || !got.CreatedAt.Equal(record.CreatedAt) || got.Trigger != record.Trigger || got.Target != record.Target || got.Scope != record.Scope {
+				t.Fatalf("inactive %s record=%+v", state, got)
+			}
+			if state != "missing" {
+				preserved := path
+				if state == "partial" {
+					preserved += ".partial"
+				}
+				if _, err := os.Stat(preserved); err != nil {
+					t.Fatalf("incomplete archive removed: %v", err)
+				}
+			}
+		})
+	}
+}
+
+func TestManagedLocalDiscoveryLeavesActiveRunningRecordsUntouched(t *testing.T) {
+	for _, state := range []string{"valid", "missing"} {
+		t.Run(state, func(t *testing.T) {
+			m := localDiscoveryManager(t)
+			db, err := m.store()
+			if err != nil {
+				t.Fatal(err)
+			}
+			id, path := localDiscoveryArchive(t, m, m.now().Add(-time.Hour))
+			if state == "missing" {
+				if err := os.Remove(path); err != nil {
+					t.Fatal(err)
+				}
+			}
+			record := models.ManagedBackupRecord{ID: id, Kind: "server-config", Status: "running", Target: "local", Trigger: "manual", Scope: "default", CreatedAt: m.now(), Error: "in progress"}
+			if err := db.Create(&record).Error; err != nil {
+				t.Fatal(err)
+			}
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			m.activeMu.Lock()
+			m.active[id] = cancel
+			m.activeMu.Unlock()
+			history, err := m.History("server-config")
+			if err != nil || len(history) != 1 {
+				t.Fatalf("history=%+v err=%v", history, err)
+			}
+			var got models.ManagedBackupRecord
+			if err := db.First(&got, "id = ?", id).Error; err != nil {
+				t.Fatal(err)
+			}
+			if got.ID != record.ID || got.Kind != record.Kind || got.Status != record.Status || got.Target != record.Target || got.Trigger != record.Trigger || got.Scope != record.Scope || !got.CreatedAt.Equal(record.CreatedAt) || got.Error != record.Error || got.FinishedAt != nil || got.Size != record.Size || got.Local != record.Local || got.Cloud != record.Cloud || got.CloudKey != record.CloudKey || ctx.Err() != nil || !m.activeJob(id) {
+				t.Fatalf("active %s record changed: got=%+v want=%+v context=%v", state, got, record, ctx.Err())
+			}
+		})
 	}
 }

@@ -265,3 +265,28 @@ func TestAttachmentS3HTTPUsesIndependentChannelAndPersistedKeyVerbatim(t *testin
 		t.Fatalf("body=%q n=%d error=%v", body.String(), n, err)
 	}
 }
+
+func TestManagedCloudConfigurationErrorsExplainHowToRecover(t *testing.T) {
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { requests.Add(1); w.WriteHeader(500) }))
+	defer server.Close()
+	for _, test := range []struct {
+		name          string
+		site          models.SiteConfig
+		kind, message string
+	}{
+		{"disabled", models.SiteConfig{StorageEndpoint: server.URL}, "data", "云备份连接尚未启用"},
+		{"missing credentials", models.SiteConfig{StorageEnabled: true, StorageEndpoint: server.URL, StorageBucket: "backups"}, "data", "云备份连接配置不完整"},
+		{"invalid kind", managedHTTPSite(server.URL), "unknown", "无效的云备份类型"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := NewManagedStore(test.site, test.kind)
+			if err == nil || !strings.Contains(err.Error(), test.message) {
+				t.Fatalf("unexpected configuration error: %v", err)
+			}
+		})
+	}
+	if requests.Load() != 0 {
+		t.Fatal("invalid configuration contacted remote storage")
+	}
+}

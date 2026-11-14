@@ -674,6 +674,7 @@ func readArchive(source string) (TypedArchiveInspection, *Manifest, error) {
 			}
 		}
 	}
+	inspection.Warnings = uniqueRestoreWarnings(inspection.Warnings)
 	return inspection, m, nil
 }
 
@@ -782,11 +783,26 @@ func StageTypedRestore(ctx context.Context, source string, layout Layout, attach
 		return StageResult{}, err
 	}
 	result := StageResult{Inspection: inspection}
+	warnings := append([]string(nil), inspection.Warnings...)
 	if inspection.Legacy && !hasComponent(inspection, "attachment-blobs") && !hasComponent(inspection, "attachments") {
-		result.Warning = incompleteMigrationWarning
+		warnings = append(warnings, incompleteMigrationWarning)
 	}
-	result.Warning = strings.TrimSpace(strings.Join(append(inspection.Warnings, result.Warning), "；"))
+	result.Inspection.Warnings = uniqueRestoreWarnings(warnings)
+	result.Warning = strings.Join(result.Inspection.Warnings, "；")
 	return result, nil
+}
+
+func uniqueRestoreWarnings(warnings []string) []string {
+	result := make([]string, 0, len(warnings))
+	seen := make(map[string]bool, len(warnings))
+	for _, warning := range warnings {
+		warning = strings.TrimSpace(warning)
+		if warning != "" && !seen[warning] {
+			result = append(result, warning)
+			seen[warning] = true
+		}
+	}
+	return result
 }
 
 func hasComponent(i TypedArchiveInspection, component string) bool {
