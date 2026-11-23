@@ -2,7 +2,14 @@
 media, attachment, table and task enhancers. Every mounted enhancer is disposed
 before the root or content identity is replaced. -->
 <template>
-  <div ref="previewElement" :class="['markdown-preview', { 'markdown-preview--inherit-font': props.inheritFont, 'markdown-preview--bounded': props.boundedRendering }]" :data-task-list-editable="props.taskListEditable ? 'true' : 'false'"></div>
+  <!-- Vditor and the theme handler add classes to this element after mount. -->
+  <div
+    ref="previewElement"
+    class="markdown-preview"
+    :data-inherit-font="props.inheritFont || undefined"
+    :data-bounded-rendering="props.boundedRendering || undefined"
+    :data-task-list-editable="props.taskListEditable ? 'true' : 'false'"
+  ></div>
   <div v-if="previewLoadFailed" role="alert" class="markdown-load-error">
     正文排版加载失败，已显示文本。
     <button type="button" class="nw-action-btn" @click="renderMarkdown(props.content)">重试</button>
@@ -930,7 +937,7 @@ watch(() => props.enableGithubCard, () => {
 </script>
 
 <style>
-.markdown-preview--bounded {
+.markdown-preview[data-bounded-rendering] {
   display: flow-root;
 }
 
@@ -1010,10 +1017,10 @@ watch(() => props.enableGithubCard, () => {
 .note-music-marker[aria-busy="true"] { cursor: wait; }
 .note-music-error { color: #dc2626; font-size: 13px; }
 
-.markdown-preview--inherit-font,
-.markdown-preview--inherit-font.vditor-reset,
-.markdown-preview--inherit-font .vditor-reset,
-.markdown-preview--inherit-font :where(h1, h2, h3, h4, h5, h6, p, li, blockquote, figcaption, caption, td, th, a, span, strong, em, del, mark, small, label, button, input, textarea, select, option) {
+.markdown-preview[data-inherit-font],
+.markdown-preview[data-inherit-font].vditor-reset,
+.markdown-preview[data-inherit-font] .vditor-reset,
+.markdown-preview[data-inherit-font] :where(h1, h2, h3, h4, h5, h6, p, li, blockquote, figcaption, caption, td, th, a, span, strong, em, del, mark, small, label, button, input, textarea, select, option) {
   font-family: inherit !important;
 }
 

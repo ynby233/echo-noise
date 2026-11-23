@@ -150,7 +150,7 @@ assert.match(
 )
 assert.match(
   markdownRenderer,
-  /\.markdown-preview--inherit-font[\s\S]*?font-family:\s*inherit\s*!important;/,
+  /\.markdown-preview\[data-inherit-font\][\s\S]*?font-family:\s*inherit\s*!important;/,
   '正文继承字体契约必须覆盖 Vditor 在渲染根节点上设置的字体'
 )
 

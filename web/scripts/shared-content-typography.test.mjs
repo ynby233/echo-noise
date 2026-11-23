@@ -31,7 +31,7 @@ assert.match(
 
 assert.match(
   renderer,
-  /\.markdown-preview--inherit-font\.vditor-reset/,
+  /\.markdown-preview\[data-inherit-font\]\.vditor-reset/,
   'inherit-font mode must also cover the real same-node Vditor reset structure'
 )
 
