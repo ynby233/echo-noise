@@ -53,7 +53,7 @@ import { createRenderedTaskListEnhancer } from '~/utils/rendered-task-list'
 import { createRenderedTableDialog } from '~/utils/rendered-table-dialog'
 import { applyImageLoadingPlaceholders, applyRenderedMediaLayout } from '~/utils/rendered-media-layout'
 import { applyAttachmentRenders, applyDeletedAttachmentPlaceholders, escapeRenderedHtml, isAudioAttachmentUrl, isVideoAttachmentUrl, replaceNodeWithHtml } from '~/utils/rendered-attachment'
-import { createWindowedMarkdownBody, isMarkdownBodyNearViewport } from '~/utils/windowed-markdown-body'
+import { createWindowedMarkdownBody } from '~/utils/windowed-markdown-body'
 import { NOTE_MUSIC_PLAYER_KEY, noteMusicPlaybackLocation, type NoteMusicPlayer } from '~/utils/note-music'
 import { enhanceNoteMusicLinks } from '~/utils/rendered-note-music'
 import { useAdminCapabilities } from '~/composables/useAdminCapabilities'
@@ -819,8 +819,8 @@ const configureBodyWindow = () => {
   bodyWindow = null
   bodyNearViewport = true
   if (!previewElement.value || !props.boundedRendering) return
-  bodyNearViewport = isMarkdownBodyNearViewport(previewElement.value)
   bodyWindow = createWindowedMarkdownBody(previewElement.value, {
+    scrollRoot: previewElement.value.closest<HTMLElement>('.content-wrapper'),
     canRelease: () => !bodyRendering && !bodyNeedsRender && !previewLoadFailed.value
       && !showRenderedTableExpandDialog.value && !renderedTableExpandClosing.value,
     onRelease: releaseBodyEnhancers,
@@ -834,7 +834,7 @@ const configureBodyWindow = () => {
       if (visible && bodyNeedsRender) void renderMarkdown(props.content)
     },
   })
-  if (!bodyWindow.supported) bodyNearViewport = true
+  bodyNearViewport = bodyWindow.nearViewport
 }
 
 onMounted(() => {

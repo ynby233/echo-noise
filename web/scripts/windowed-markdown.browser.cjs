@@ -12,8 +12,10 @@ const source = fs.readFileSync(path.join(web, 'components/index/MarkdownRenderer
 const { descriptor } = parse(source)
 const css = descriptor.styles.map(style => style.content).join('\n')
 const mocks = {
-  '#imports': 'export const useRuntimeConfig = () => ({ public: { baseApi: "/api" } })',
+  '#imports': 'export const useRuntimeConfig = () => ({ public: { baseApi: "/api" } }); export const useRouter = () => ({ push: async () => {} })',
   '~/store/message': 'export const useMessageStore = () => ({ updateMessage: async () => {} })',
+  '~/composables/useAdminCapabilities': 'export const useAdminCapabilities = () => ({ can: () => false })',
+  '~/utils/note-music': 'export const NOTE_MUSIC_PLAYER_KEY = Symbol(); export const noteMusicPlaybackLocation = () => ({})',
   '~/utils/vditor-preview': `export const loadVditorPreview = async () => ({ preview: async (root, content, options) => {
     const key = root.closest('article').dataset.note;
     window.parses[key] = (window.parses[key] || 0) + 1;
@@ -42,21 +44,34 @@ for (const match of source.matchAll(/import\s*\{([^}]+)\}\s*from\s*['"](~\/[^'"]
   }).join('\n')
 }
 const entry = `
-import { createApp, h, reactive } from 'vue'
+import { createApp, h, reactive, withDirectives } from 'vue'
 import MarkdownRenderer from './components/index/MarkdownRenderer.vue'
+import { vMasonry } from './directives/masonry'
+const masonry = new URLSearchParams(location.search).has('masonry')
+document.body.classList.toggle('masonry-fixture', masonry)
 window.parses = {}
 window.renderEvents = {}
-window.fixture = reactive({ active: true, bounded: true, notes: Array.from({ length: 60 }, (_, i) =>
-  Array.from({ length: 12 }, (_, j) => '<p>note-' + i + '-paragraph-' + j + ' <strong>完整正文</strong> ' + '长正文用于确认返回滚动后的文本与高度。'.repeat(4) + '</p>').join('')
-) })
+window.fixture = reactive({ active: true, bounded: true, notes: masonry
+  ? ['<p>first text body</p>', '<p>tall right column</p>', '<p>next left card</p>']
+  : Array.from({ length: 60 }, (_, i) =>
+      Array.from({ length: 12 }, (_, j) => '<p>note-' + i + '-paragraph-' + j + ' <strong>完整正文</strong> ' + '长正文用于确认返回滚动后的文本与高度。'.repeat(4) + '</p>').join('')
+    ) })
 const state = window.fixture
-window.app = createApp({ setup: () => () => state.active ? state.notes.map((content, index) =>
-  h('article', { class: 'message-item', 'data-note': index }, [
-    h('header', [h('span', '作者 ' + index), h('button', { class: 'subscription' }, '订阅')]),
-    h(MarkdownRenderer, { content, boundedRendering: state.bounded, messageId: index + 1,
-      onRendered: () => { window.renderEvents[index] = (window.renderEvents[index] || 0) + 1 } }),
+window.app = createApp({ setup: () => () => {
+  if (!state.active) return null
+  const cards = state.notes.map((content, index) =>
+    h('article', { class: 'message-item', 'data-note': index }, [
+      h('header', [h('span', '作者 ' + index), h('button', { class: 'subscription' }, '订阅')]),
+      h(MarkdownRenderer, { content, boundedRendering: state.bounded, messageId: index + 1,
+        onRendered: () => { window.renderEvents[index] = (window.renderEvents[index] || 0) + 1 } }),
+    ])
+  )
+  if (!masonry) return cards
+  return h('div', { class: 'content-wrapper' }, [
+    withDirectives(h('div', { class: 'masonry-grid' }, cards), [[vMasonry, true]]),
+    h('footer', '已显示全部内容'),
   ])
-) : null }).mount('#app')
+} }).mount('#app')
 `
 
 async function main() {
@@ -72,6 +87,16 @@ async function main() {
     if (request.url === '/fixture.js') return response.writeHead(200, { 'Content-Type': 'text/javascript' }).end(result.outputFiles[0].text)
     response.writeHead(200, { 'Content-Type': 'text/html' }).end(`<!doctype html><html><head><style>
       body{margin:0;font:16px sans-serif}article{width:600px;max-width:90vw;margin:20px auto;padding:12px;border:1px solid #ccc}p{margin:1em 0}header{display:flex;gap:12px}
+      .masonry-fixture { zoom: 1.1; }
+      .masonry-fixture .content-wrapper { overflow-y: auto; overflow-anchor: none; scrollbar-gutter: stable; width: 652px; height: 580px; }
+      .masonry-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: 1px; grid-auto-flow: row dense; --masonry-gap: 8px; column-gap: 12px; align-items: start; }
+      .masonry-grid article { width: auto; max-width: none; margin: 0; padding: 0; border: 0; min-width: 0; }
+      .masonry-grid header { height: 20px; }
+      .masonry-grid [data-note="0"] p { height: 301.25px; margin: 0; }
+      .masonry-grid [data-note="0"] .markdown-preview { box-sizing: content-box; padding: 4.25px 0; border: 2px solid; }
+      .masonry-grid [data-note="1"] { min-height: 900px; }
+      .masonry-grid [data-note="2"] { min-height: 270px; }
+      .masonry-fixture footer { height: 40px; }
       ${css}
     </style></head><body><div id="app"></div><script src="/fixture.js"></script></body></html>`)
   })
@@ -216,6 +241,47 @@ async function main() {
     assert.deepEqual(await page.evaluate(() => window.observers), { intersection: 0, resize: 0 })
     await page.evaluate(() => { window.fixture.active = false })
     await page.waitForFunction(() => document.querySelectorAll('.markdown-preview').length === 0)
+
+    // A shorter left column can have a body just above the scrollport at the
+    // bottom of the list. Under zoom, its placeholder used to cross that edge.
+    await page.setViewportSize({ width: 2000, height: 1000 })
+    await page.goto(`http://127.0.0.1:${server.address().port}/?masonry`)
+    await page.waitForFunction(() => window.parses[2] && document.querySelector('[data-note="2"]').style.gridRowEnd)
+    const masonryBody = page.locator('[data-note="0"] .markdown-preview')
+    const masonryHeight = await masonryBody.evaluate(root => root.getBoundingClientRect().height)
+    const bottomSamples = await page.evaluate(async () => {
+      window.holdIntersection = false
+      window.heldIntersections.splice(0).forEach(deliver => deliver())
+      const scroller = document.querySelector('.content-wrapper')
+      const body = document.querySelector('[data-note="0"] .markdown-preview')
+      const nextCard = document.querySelector('[data-note="2"]')
+      const top = Math.ceil((body.getBoundingClientRect().bottom - scroller.getBoundingClientRect().top) / 1.1) + 12
+      scroller.style.height = `${scroller.scrollHeight - top}px`
+      scroller.scrollTop = scroller.scrollHeight
+      const samples = []
+      for (let frame = 0; frame < 24; frame++) {
+        await new Promise(requestAnimationFrame)
+        samples.push({
+          atBottom: scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop < 1,
+          dormant: body.hasAttribute('data-markdown-dormant'),
+          top: nextCard.getBoundingClientRect().top,
+        })
+      }
+      return samples
+    })
+    assert.ok(bottomSamples.every(sample => sample.atBottom && !sample.dormant && sample.top === bottomSamples[0].top),
+      'at the bottom, nearby markup stays rendered and the left column holds its position')
+
+    await page.locator('[data-note="1"]').evaluate(card => { card.style.minHeight = '4100px' })
+    const scrollMasonry = top => page.locator('.content-wrapper').evaluate((scroller, top) => { scroller.scrollTop = top }, top)
+    await page.waitForFunction(() => document.querySelector('.content-wrapper').scrollHeight > 4100)
+    await scrollMasonry(3450)
+    await page.waitForFunction(() => document.querySelector('[data-note="0"] [data-markdown-dormant]'))
+    const dormantHeight = await masonryBody.evaluate(root => root.getBoundingClientRect().height)
+    assert.ok(Math.abs(dormantHeight - masonryHeight) < 0.1, 'a distant dormant body preserves its fractional height at 1.1× zoom')
+    await scrollMasonry(1050)
+    await page.waitForFunction(() => !document.querySelector('[data-note="0"] [data-markdown-dormant]'))
+    assert.equal(await masonryBody.locator('p').textContent(), 'first text body', 'body restores before entering the scrollport')
     assert.deepEqual(errors, [])
     console.log('windowed markdown browser behavior passed')
   } finally {

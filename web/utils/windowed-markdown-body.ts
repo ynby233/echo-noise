@@ -38,24 +38,19 @@ export function canReleaseMarkdownBody(root: HTMLElement): boolean {
   return root.hasChildNodes()
 }
 
+const NEAR_MARGIN = 1200
+
 // IO callbacks are asynchronous. Visible bodies must begin normal rendering on
 // mount, without first committing a raw-Markdown placeholder to list layout.
-export function isMarkdownBodyNearViewport(root: HTMLElement): boolean {
-  const win = root.ownerDocument.defaultView
-  if (!win) return true
-  let top = 0
-  let bottom = win.innerHeight
-  for (let parent = root.parentElement; parent; parent = parent.parentElement) {
-    if (!/(auto|scroll)/.test(win.getComputedStyle(parent).overflowY) || !parent.clientHeight) continue
-    const rect = parent.getBoundingClientRect()
-    top = Math.max(top, rect.top + parent.clientTop)
-    bottom = Math.min(bottom, rect.top + parent.clientTop + parent.clientHeight)
-  }
+function isMarkdownBodyNearViewport(root: HTMLElement, scrollRoot: HTMLElement | null): boolean {
+  const bounds = scrollRoot?.getBoundingClientRect()
   const rect = root.getBoundingClientRect()
-  return rect.bottom >= top - 1200 && rect.top <= bottom + 1200
+  return rect.bottom >= (bounds?.top ?? 0) - NEAR_MARGIN
+    && rect.top <= (bounds?.bottom ?? root.ownerDocument.defaultView?.innerHeight ?? 0) + NEAR_MARGIN
 }
 
 type BodyOptions = {
+  scrollRoot: HTMLElement | null
   canRelease: () => boolean
   onRelease: () => void
   onRestore: () => void
@@ -76,10 +71,11 @@ type ObserverHub = {
   canRelease: () => boolean
 }
 
-const hubs = new WeakMap<Document, ObserverHub>()
+const hubs = new WeakMap<Document | HTMLElement, ObserverHub>()
 
-function getObserverHub(doc: Document): ObserverHub | null {
-  const existing = hubs.get(doc)
+function getObserverHub(doc: Document, scrollRoot: HTMLElement | null): ObserverHub | null {
+  const key = scrollRoot ?? doc
+  const existing = hubs.get(key)
   if (existing) return existing
   const win = doc.defaultView
   // Without both observers keep the normal renderer, including on old clients.
@@ -88,10 +84,10 @@ function getObserverHub(doc: Document): ObserverHub | null {
   let printing = false
   const nearObserver = new win.IntersectionObserver(entries => {
     for (const entry of entries) bodies.get(entry.target)?.near(entry.isIntersecting)
-  }, { rootMargin: '1200px 0px' })
+  }, { root: scrollRoot, rootMargin: `${NEAR_MARGIN}px 0px` })
   const farObserver = new win.IntersectionObserver(entries => {
     for (const entry of entries) bodies.get(entry.target)?.far(entry.isIntersecting)
-  }, { rootMargin: '2400px 0px' })
+  }, { root: scrollRoot, rootMargin: '2400px 0px' })
   const resizeObserver = new win.ResizeObserver(entries => {
     for (const entry of entries) bodies.get(entry.target)?.resized()
   })
@@ -133,10 +129,10 @@ function getObserverHub(doc: Document): ObserverHub | null {
       win.removeEventListener('afterprint', afterPrint)
       doc.removeEventListener('keydown', onFind)
       doc.fonts?.removeEventListener('loadingdone', onFontsLoaded)
-      hubs.delete(doc)
+      hubs.delete(key)
     },
   }
-  hubs.set(doc, hub)
+  hubs.set(key, hub)
   return hub
 }
 
@@ -145,8 +141,10 @@ export function createWindowedMarkdownBody(root: HTMLElement, options: BodyOptio
   let near: boolean | null = null
   let far: boolean | null = null
   let snapshot: { html: string; width: number; styles: string[] } | null = null
-  const properties = ['height', 'min-height', 'max-height', 'box-sizing', 'overflow', 'white-space']
-  const hub = getObserverHub(root.ownerDocument)
+  const properties = ['height', 'min-height', 'max-height', 'overflow', 'white-space']
+  // Margins on the window cannot extend past a nested scroll container's clip.
+  const hub = getObserverHub(root.ownerDocument, options.scrollRoot)
+  const nearViewport = !hub || isMarkdownBodyNearViewport(root, options.scrollRoot)
 
   const restore = () => {
     if (disposed || !snapshot) return
@@ -173,6 +171,10 @@ export function createWindowedMarkdownBody(root: HTMLElement, options: BodyOptio
     if (root.checkVisibility && !root.checkVisibility({ contentVisibilityAuto: true })) return
     const rect = root.getBoundingClientRect()
     if (rect.height <= 0 || rect.width <= 0) return
+    // The resolved CSS height includes fractional layout pixels and uses the
+    // body's existing box-sizing. A visual rectangle would apply zoom twice.
+    const height = root.ownerDocument.defaultView?.getComputedStyle(root).height
+    if (!height?.endsWith('px')) return
     const saved = {
       html: root.innerHTML,
       width: rect.width,
@@ -181,9 +183,8 @@ export function createWindowedMarkdownBody(root: HTMLElement, options: BodyOptio
     const text = root.innerText || root.textContent || ''
     options.onRelease()
     snapshot = saved
-    root.style.setProperty('box-sizing', 'border-box', 'important')
     for (const property of ['height', 'min-height', 'max-height']) {
-      root.style.setProperty(property, `${rect.height}px`, 'important')
+      root.style.setProperty(property, height, 'important')
     }
     root.style.setProperty('overflow', 'hidden', 'important')
     root.style.setProperty('white-space', 'pre-wrap', 'important')
@@ -215,7 +216,7 @@ export function createWindowedMarkdownBody(root: HTMLElement, options: BodyOptio
   })
 
   return {
-    supported: !!hub,
+    nearViewport,
     restore,
     refresh,
     dispose(restoreContent = true) {
